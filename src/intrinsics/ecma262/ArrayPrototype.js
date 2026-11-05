@@ -33,6 +33,7 @@ import invariant from "../../invariant.js";
 import { SameValueZeroPartial, AbstractRelationalComparison } from "../../methods/abstract.js";
 import {
   StrictEqualityComparisonPartial,
+  IsArray,
   IsCallable,
   IsConcatSpreadable,
   IsExtensible,
@@ -2740,6 +2741,87 @@ export default function(realm: Realm, obj: ObjectValue): void {
   // ECMA262 22.1.3.30
   obj.defineNativeProperty("values", realm.intrinsics.ArrayProto_values);
 
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    const flattenIntoArray = (
+      target: ObjectValue,
+      source: ObjectValue,
+      sourceLen: number,
+      start: number,
+      depth: number,
+      mapperFunction?: Value,
+      thisArg?: Value
+    ): number => {
+      let targetIndex = start;
+      let sourceIndex = 0;
+      while (sourceIndex < sourceLen) {
+        let P = new StringValue(realm, sourceIndex + "");
+        let exists = HasProperty(realm, source, P);
+        if (exists === true) {
+          let element = Get(realm, source, P);
+          if (mapperFunction !== undefined) {
+            element = Call(realm, mapperFunction, thisArg || realm.intrinsics.undefined, [
+              element,
+              new NumberValue(realm, sourceIndex),
+              source,
+            ]);
+          }
+          let shouldFlatten = false;
+          if (depth > 0) {
+            shouldFlatten = IsArray(realm, element);
+          }
+          if (shouldFlatten === true) {
+            let elemObj = element.throwIfNotConcreteObject();
+            let elementLen = To.ToLength(realm, Get(realm, elemObj, "length"));
+            targetIndex = flattenIntoArray(target, elemObj, elementLen, targetIndex, depth - 1);
+          } else {
+            if (targetIndex >= Math.pow(2, 53) - 1) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "array length overflow");
+            }
+            Create.CreateDataPropertyOrThrow(realm, target, new StringValue(realm, targetIndex + ""), element);
+            targetIndex += 1;
+          }
+        }
+        sourceIndex += 1;
+      }
+      return targetIndex;
+    };
+
+    // ES2019 Array.prototype.flat ( [ depth ] )
+    obj.defineNativeMethod("flat", 0, (context, [depth]) => {
+      let O = To.ToObject(realm, context).throwIfNotConcreteObject();
+      let sourceLen = To.ToLength(realm, Get(realm, O, "length"));
+      let depthNum = 1;
+      if (depth !== undefined && !(depth instanceof UndefinedValue)) {
+        depthNum = To.ToInteger(realm, depth.throwIfNotConcrete());
+      }
+      let A = Create.ArraySpeciesCreate(realm, O, 0);
+      flattenIntoArray(A, O, sourceLen, 0, depthNum);
+      return A;
+    });
+
+    // ES2019 Array.prototype.flatMap ( mapperFunction [ , thisArg ] )
+    obj.defineNativeMethod("flatMap", 1, (context, [mapperFunction, thisArg]) => {
+      let O = To.ToObject(realm, context).throwIfNotConcreteObject();
+      let sourceLen = To.ToLength(realm, Get(realm, O, "length"));
+      if (!IsCallable(realm, mapperFunction)) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "mapperFunction is not callable");
+      }
+      let A = Create.ArraySpeciesCreate(realm, O, 0);
+      flattenIntoArray(A, O, sourceLen, 0, 1, mapperFunction, thisArg || realm.intrinsics.undefined);
+      return A;
+    });
+
+    // ES2022 Array.prototype.at ( index )
+    obj.defineNativeMethod("at", 1, (context, [index]) => {
+      let O = To.ToObject(realm, context);
+      let len = To.ToLength(realm, Get(realm, O, "length"));
+      let relativeIndex = To.ToInteger(realm, index.throwIfNotConcrete());
+      let k = relativeIndex >= 0 ? relativeIndex : len + relativeIndex;
+      if (k < 0 || k >= len) return realm.intrinsics.undefined;
+      return Get(realm, O, new StringValue(realm, k + ""));
+    });
+  }
+
   // ECMA262 22.1.3.32
   {
     // 1. Let unscopableList be ObjectCreate(null).
@@ -2768,6 +2850,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 9. Perform CreateDataProperty(unscopableList, "values", true).
     Create.CreateDataProperty(realm, unscopableList, "values", realm.intrinsics.true);
+    if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+      Create.CreateDataProperty(realm, unscopableList, "flat", realm.intrinsics.true);
+      Create.CreateDataProperty(realm, unscopableList, "flatMap", realm.intrinsics.true);
+      Create.CreateDataProperty(realm, unscopableList, "at", realm.intrinsics.true);
+    }
 
     // 10. Assert: Each of the above calls will return true.
 

@@ -13,7 +13,7 @@ import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import type { PropertyKeyValue } from "../types.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
-import { AbstractValue, ConcreteValue, ObjectValue, StringValue } from "../values/index.js";
+import { AbstractValue, ConcreteValue, NullValue, ObjectValue, StringValue } from "../values/index.js";
 import { IsAnonymousFunctionDefinition, HasOwnProperty } from "../methods/index.js";
 import { Create, Environment, Functions, Properties, To } from "../singletons.js";
 import invariant from "../invariant.js";
@@ -75,6 +75,21 @@ export default function(
   // 2. Let status be the result of performing PropertyDefinitionEvaluation of PropertyDefinitionList with arguments obj and true.
   for (let prop of ast.properties) {
     if (prop.type === "ObjectProperty") {
+      // Annex B.3.1 / ECMA262 13.2.5.5 __proto__ Property Names in Object Initializers
+      let isProtoSetter =
+        !prop.computed &&
+        !prop.shorthand &&
+        ((prop.key.type === "Identifier" && prop.key.name === "__proto__") ||
+          (prop.key.type === "StringLiteral" && prop.key.value === "__proto__"));
+      if (isProtoSetter) {
+        let exprValueRef = env.evaluate(prop.value, strictCode);
+        let propValue = Environment.GetValue(realm, exprValueRef).throwIfNotConcrete();
+        if (propValue instanceof ObjectValue || propValue instanceof NullValue) {
+          obj.$SetPrototypeOf(propValue);
+        }
+        continue;
+      }
+
       // 12.2.6.9 case 3
       // 1. Let propKey be the result of evaluating PropertyName.
       let propKey = EvalPropertyNamePartial(prop, env, realm, strictCode);

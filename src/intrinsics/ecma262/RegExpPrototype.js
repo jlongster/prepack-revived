@@ -102,6 +102,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 3. Let result be the empty String.
     let result = "";
 
+    if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+      let hasIndices = To.ToBooleanPartial(realm, Get(realm, R, "hasIndices"));
+      if (hasIndices) result += "d";
+    }
+
     // 4. Let global be ToBoolean(? Get(R, "global")).
     let global = To.ToBooleanPartial(realm, Get(realm, R, "global"));
 
@@ -120,11 +125,21 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 9. If multiline is true, append "m" as the last code unit of result.
     if (multiline) result += "m";
 
+    if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+      let dotAll = To.ToBooleanPartial(realm, Get(realm, R, "dotAll"));
+      if (dotAll) result += "s";
+    }
+
     // 10. Let unicode be ToBoolean(? Get(R, "unicode")).
     let unicode = To.ToBooleanPartial(realm, Get(realm, R, "unicode"));
 
     // 11. If unicode is true, append "u" as the last code unit of result.
     if (unicode) result += "u";
+
+    if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+      let unicodeSets = To.ToBooleanPartial(realm, Get(realm, R, "unicodeSets"));
+      if (unicodeSets) result += "v";
+    }
 
     // 12. Let sticky be ToBoolean(? Get(R, "sticky")).
     let sticky = To.ToBooleanPartial(realm, Get(realm, R, "sticky"));
@@ -135,6 +150,18 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 14. Return result.
     return new StringValue(realm, result);
   });
+
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    obj.defineNativeGetter("dotAll", context => {
+      return InternalHasFlag(realm, context, "s");
+    });
+    obj.defineNativeGetter("hasIndices", context => {
+      return InternalHasFlag(realm, context, "d");
+    });
+    obj.defineNativeGetter("unicodeSets", context => {
+      return InternalHasFlag(realm, context, "v");
+    });
+  }
 
   // ECMA262 21.2.5.4
   obj.defineNativeGetter("global", context => {

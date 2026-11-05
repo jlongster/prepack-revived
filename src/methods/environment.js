@@ -98,7 +98,7 @@ export class EnvironmentImplementation {
     // 6. ReturnIfAbrupt(lhs).
 
     // 7. If environment is undefined, return PutValue(lhs, restObj).
-    if (environment === undefined) {
+    if (!environment) {
       return Properties.PutValue(realm, lhs, restObj);
     }
 
@@ -1340,7 +1340,7 @@ export class EnvironmentImplementation {
       }
 
       // 3. Return the result of performing BindingInitialization for BindingPattern passing v and environment as arguments.
-      return this.BindingInitialization(realm, node, v, strictCode, env);
+      return this.BindingInitialization(realm, node, v, strictCode, environment);
     }
   }
 }

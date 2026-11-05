@@ -1805,7 +1805,16 @@ export class ResidualHeapSerializer {
 
     // handle class inheritance (including built-ins such as Map, Set, Array, Error, and extends null)
     if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
-      classMethodInstance.classSuperNode = this.serializeValue(classFunc.$Prototype);
+      let superProto = classFunc.$Prototype;
+      bindingsEmittedSemaphore.acquireOne();
+      this.emitter.emitNowOrAfterWaitingForDependencies(
+        [superProto],
+        () => {
+          classMethodInstance.classSuperNode = this.serializeValue(superProto);
+          bindingsEmittedSemaphore.releaseOne();
+        },
+        this.emitter.getBody()
+      );
     } else if (classPrototype.$Prototype === this.realm.intrinsics.null) {
       classMethodInstance.classSuperNode = nullExpression;
     }

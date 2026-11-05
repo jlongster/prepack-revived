@@ -13,7 +13,7 @@ import { TypesDomain, ValuesDomain } from "../../domains/index.js";
 import { FatalError } from "../../errors.js";
 import { Realm } from "../../realm.js";
 import { NativeFunctionValue } from "../../values/index.js";
-//import { AbruptCompletion } from "../../completions.js";
+import { AbruptCompletion } from "../../completions.js";
 import {
   AbstractValue,
   AbstractObjectValue,
@@ -31,6 +31,11 @@ import {
   EnumerableOwnProperties,
   GetOwnPropertyKeys,
   Get,
+  GetIterator,
+  HasOwnProperty,
+  IteratorClose,
+  IteratorStep,
+  IteratorValue,
   RequireObjectCoercible,
   SameValuePartial,
   TestIntegrityLevel,
@@ -663,6 +668,44 @@ export default function(realm: Realm): NativeFunctionValue {
 
       // 3. Return CreateArrayFromList(nameList).
       return Create.CreateArrayFromList(realm, nameList);
+    });
+
+    // ES2019 Object.fromEntries ( iterable )
+    func.defineNativeMethod("fromEntries", 1, (context, [iterable]) => {
+      RequireObjectCoercible(realm, iterable);
+      let obj = Create.ObjectCreate(realm, realm.intrinsics.ObjectPrototype);
+      let iterator = GetIterator(realm, iterable);
+      while (true) {
+        let next = IteratorStep(realm, iterator);
+        if (next === false) return obj;
+        let nextItem = IteratorValue(realm, next);
+        if (!(nextItem instanceof ObjectValue)) {
+          let err = realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Iterator value is not an entry object"
+          );
+          throw IteratorClose(realm, iterator, err);
+        }
+        try {
+          let k = Get(realm, nextItem, "0");
+          let v = Get(realm, nextItem, "1");
+          let propKey = To.ToPropertyKey(realm, k.throwIfNotConcrete());
+          Create.CreateDataPropertyOrThrow(realm, obj, propKey, v);
+        } catch (e) {
+          if (e instanceof AbruptCompletion) {
+            throw IteratorClose(realm, iterator, e);
+          }
+          throw e;
+        }
+      }
+      invariant(false);
+    });
+
+    // ES2022 Object.hasOwn ( O, P )
+    func.defineNativeMethod("hasOwn", 2, (context, [O, P]) => {
+      let obj = To.ToObject(realm, O);
+      let key = To.ToPropertyKey(realm, P.throwIfNotConcrete());
+      return new BooleanValue(realm, HasOwnProperty(realm, obj, key));
     });
   }
 

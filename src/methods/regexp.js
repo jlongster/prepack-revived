@@ -78,9 +78,9 @@ export function RegExpInitialize(realm: Realm, obj: ObjectValue, pattern: ?Value
     F = To.ToStringPartial(realm, flags);
   }
 
-  // 5. If F contains any code unit other than "g", "i", "m", "u", or "y" or if it contains the same code unit more than once, throw a SyntaxError exception.
+  // 5. Validate RegExp flags ("dgimsuvy", no duplicates, and not both "u" and "v").
   for (let i = 0; i < F.length; ++i) {
-    if ("gimuy".indexOf(F.charAt(i)) < 0) {
+    if ("dgimsuvy".indexOf(F.charAt(i)) < 0) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, "invalid RegExp flag");
     }
     for (let j = i + 1; j < F.length; ++j) {
@@ -88,6 +88,9 @@ export function RegExpInitialize(realm: Realm, obj: ObjectValue, pattern: ?Value
         throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, "duplicate RegExp flag");
       }
     }
+  }
+  if (F.indexOf("u") >= 0 && F.indexOf("v") >= 0) {
+    throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, "invalid RegExp flag");
   }
 
   // 6. If F contains "u", let BMP be false; else let BMP be true.
@@ -121,9 +124,12 @@ export function RegExpInitialize(realm: Realm, obj: ObjectValue, pattern: ?Value
   //     SourceCharacter values and F as the flag parameters.
   try {
     let computedFlags = "y";
+    if (F.indexOf("d") >= 0) computedFlags += "d";
     if (F.indexOf("i") >= 0) computedFlags += "i";
-    if (F.indexOf("u") >= 0) computedFlags += "u";
     if (F.indexOf("m") >= 0) computedFlags += "m";
+    if (F.indexOf("s") >= 0) computedFlags += "s";
+    if (F.indexOf("u") >= 0) computedFlags += "u";
+    if (F.indexOf("v") >= 0) computedFlags += "v";
     let matcher = new RegExp(P, (computedFlags: any));
 
     obj.$RegExpMatcher = (S: string, lastIndex: number) => {
@@ -221,8 +227,8 @@ export function RegExpBuiltinExec(realm: Realm, R: ObjectValue, S: string): Obje
   let matcher = R.$RegExpMatcher;
   invariant(matcher !== undefined);
 
-  // 10. If flags contains "u", let fullUnicode be true, else let fullUnicode be false.
-  let fullUnicode = flags.indexOf("u") >= 0 ? true : false;
+  // 10. If flags contains "u" or "v", let fullUnicode be true, else let fullUnicode be false.
+  let fullUnicode = flags.indexOf("u") >= 0 || flags.indexOf("v") >= 0 ? true : false;
 
   // 11. Let matchSucceeded be false.
   let matchSucceeded = false;
@@ -317,22 +323,30 @@ export function RegExpBuiltinExec(realm: Realm, R: ObjectValue, S: string): Obje
     // b. If captureI is undefined, let capturedValue be undefined.
     if (captureI === undefined) {
       capturedValue = realm.intrinsics.undefined;
-    } else if (fullUnicode) {
-      // c. Else if fullUnicode is true, then
-      // TODO #1018: i. Assert: captureI is a List of code points.
-      // ii. Let capturedValue be a string whose code units are the UTF16Encoding of the code points of captureI.
-      capturedValue = realm.intrinsics.undefined;
     } else {
-      // d. Else, fullUnicode is false,
-      // i. Assert: captureI is a List of code units.
       invariant(typeof captureI === "string");
-
-      // ii. Let capturedValue be a string consisting of the code units of captureI.
       capturedValue = new StringValue(realm, captureI);
     }
 
     // e. Perform ! CreateDataProperty(A, ! ToString(i), capturedValue).
     Create.CreateDataProperty(realm, A, To.ToString(realm, new NumberValue(realm, i)), capturedValue);
+  }
+
+  let rawGroups = (r.captures: any).groups;
+  if (rawGroups !== undefined && rawGroups !== null && typeof rawGroups === "object") {
+    let groupsObj = Create.ObjectCreate(realm, realm.intrinsics.null);
+    for (let gKey of Object.keys(rawGroups)) {
+      let gVal = rawGroups[gKey];
+      Create.CreateDataProperty(
+        realm,
+        groupsObj,
+        gKey,
+        gVal === undefined ? realm.intrinsics.undefined : new StringValue(realm, gVal)
+      );
+    }
+    Create.CreateDataProperty(realm, A, "groups", groupsObj);
+  } else {
+    Create.CreateDataProperty(realm, A, "groups", realm.intrinsics.undefined);
   }
 
   // 25. Return A.

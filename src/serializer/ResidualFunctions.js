@@ -1242,24 +1242,40 @@ export class ResidualFunctions {
       if (functionBodies.has(instance)) bodyInstanceSet.add(instance);
     }
     let visitedBodyInstances = new Set();
+    const visitSameIndexDep = (depVal: Value, ownerFv: FunctionValue, ip: BodyReference): void => {
+      if (!(depVal instanceof FunctionValue) || depVal === ownerFv) return;
+      let depInst = this.residualFunctionInstances.get(depVal);
+      if (
+        depInst !== undefined &&
+        bodyInstanceSet.has(depInst) &&
+        depInst.insertionPoint instanceof BodyReference &&
+        depInst.insertionPoint.body === ip.body &&
+        depInst.insertionPoint.index === ip.index
+      ) {
+        visitBodyInstance(depInst);
+      }
+    };
     const visitBodyInstance = (instance: FunctionInstance): void => {
       if (visitedBodyInstances.has(instance)) return;
       visitedBodyInstances.add(instance);
       let ip = instance.insertionPoint;
       if (ip instanceof BodyReference) {
-        for (let rb of instance.residualFunctionBindings.values()) {
-          if (rb.value instanceof FunctionValue && rb.value !== instance.functionValue) {
-            let depInst = this.residualFunctionInstances.get(rb.value);
-            if (
-              depInst !== undefined &&
-              bodyInstanceSet.has(depInst) &&
-              depInst.insertionPoint instanceof BodyReference &&
-              depInst.insertionPoint.body === ip.body &&
-              depInst.insertionPoint.index === ip.index
-            ) {
-              visitBodyInstance(depInst);
+        let fv = instance.functionValue;
+        if (this.residualClassMethodInstances.has(fv)) {
+          visitSameIndexDep(fv.$Prototype, fv, ip);
+          for (let [memberFn, cmi] of this.residualClassMethodInstances) {
+            if (cmi.classConstructor === fv && memberFn !== fv) {
+              let memberInst = this.residualFunctionInstances.get(memberFn);
+              if (memberInst !== undefined) {
+                for (let rb of memberInst.residualFunctionBindings.values()) {
+                  if (rb.value !== undefined) visitSameIndexDep(rb.value, fv, ip);
+                }
+              }
             }
           }
+        }
+        for (let rb of instance.residualFunctionBindings.values()) {
+          if (rb.value !== undefined) visitSameIndexDep(rb.value, fv, ip);
         }
       }
       orderedBodyInstances.push(instance);
