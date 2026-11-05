@@ -153,13 +153,7 @@ export const BuiltinSummaries: { [string]: BuiltinSummary } = {
   // ECMA262 19.1.3.6: primitives are pure; objects may read @@toStringTag or throw on revoked proxies.
   "Object.prototype.toString": { receiver: "to-string-tag", args: [], rest: "none", result: StringValue },
 
-  // ECMA262 19.3.1.1 called as a function: ToBoolean(value), which never throws or runs user code.
-  Boolean: {
-    args: ["none"],
-    rest: "none",
-    result: BooleanValue,
-    applies: args => args.length > 0 && args[0].mightBeTrue() && args[0].mightBeFalse(),
-  },
+  // ECMA262 19.3.3: Boolean.prototype methods.
   "Boolean.prototype.toString": { receiver: "boolean", args: [], rest: "none", result: StringValue },
   "Boolean.prototype.valueOf": { receiver: "boolean", args: [], rest: "none", result: BooleanValue },
 
@@ -322,6 +316,7 @@ export const BuiltinSummaries: { [string]: BuiltinSummary } = {
 };
 
 export const CustomSummaries: { [string]: CustomSummary } = {
+  Boolean: booleanCall,
   "Object.is": objectIs,
   "Object.prototype.hasOwnProperty": objectHasOwnProperty,
   "Array.isArray": arrayIsArray,
@@ -385,15 +380,57 @@ export function installBuiltinSummaries(i: Intrinsics, realm: Realm): void {
   }
 }
 
+function lookupRootIntrinsic(i: Intrinsics, root: string): void | Value {
+  switch (root) {
+    case "parseInt":
+      return i.parseInt;
+    case "parseFloat":
+      return i.parseFloat;
+    case "isNaN":
+      return i.isNaN;
+    case "isFinite":
+      return i.isFinite;
+    case "encodeURIComponent":
+      return i.encodeURIComponent;
+    case "encodeURI":
+      return i.encodeURI;
+    case "decodeURIComponent":
+      return i.decodeURIComponent;
+    case "decodeURI":
+      return i.decodeURI;
+    case "Object":
+      return i.Object;
+    case "Boolean":
+      return i.Boolean;
+    case "Number":
+      return i.Number;
+    case "String":
+      return i.String;
+    case "Math":
+      return i.Math;
+    case "Array":
+      return i.Array;
+    case "JSON":
+      return i.JSON;
+    case "RegExp":
+      return i.RegExp;
+    default:
+      return undefined;
+  }
+}
+
 function lookupIntrinsic(i: Intrinsics, name: string): void | NativeFunctionValue {
   let [root, ...path] = name.split(".");
-  let value = (i: any)[root];
+  let value = lookupRootIntrinsic(i, root);
   for (let key of path) {
     if (!(value instanceof ObjectValue)) return undefined;
     value = value._SafeGetDataPropertyValue(key);
   }
   if (!(value instanceof NativeFunctionValue)) return undefined;
-  invariant(value.intrinsicName === name, `summary ${name} attached to ${value.intrinsicName || "?"}`);
+  invariant(
+    value.intrinsicName === name,
+    `summary ${name} attached to ${value.intrinsicName !== undefined ? value.intrinsicName : "?"}`
+  );
   return value;
 }
 
@@ -578,6 +615,25 @@ function classifyArrayLikeReceiver(realm: Realm, context: Value): Classification
   return "throws";
 }
 
+// ECMA262 19.3.1.1 Boolean(value): ToBoolean never throws or runs user code.
+function booleanCall(realm: Realm, context: Value, args: Array<Value>): void | Value {
+  let arg = args.length > 0 ? args[0] : realm.intrinsics.undefined;
+  if (!(arg instanceof AbstractValue) || !arg.mightBeTrue() || !arg.mightBeFalse()) return undefined;
+  if (arg.kind === "conditional") {
+    let [cond, left, right] = arg.args;
+    if (!left.mightNotBeTrue() && !right.mightNotBeFalse()) {
+      return booleanCall(realm, context, [cond]) || new BooleanValue(realm, To.ToBooleanPartial(realm, cond));
+    }
+    if (!left.mightNotBeFalse() && !right.mightNotBeTrue()) {
+      let b = booleanCall(realm, context, [cond]);
+      return b instanceof AbstractValue
+        ? AbstractValue.createFromUnaryOp(realm, "!", b, true)
+        : new BooleanValue(realm, !To.ToBooleanPartial(realm, cond));
+    }
+  }
+  return residualize(realm, "global.Boolean(A)", BooleanValue, [arg], ["pure"], false);
+}
+
 // ECMA262 19.1.2.10 Object.is(value1, value2): SameValue never throws or invokes user code.
 function objectIs(realm: Realm, context: Value, args: Array<Value>): void | Value {
   let x = args.length > 0 ? args[0] : realm.intrinsics.undefined;
@@ -612,12 +668,13 @@ function objectHasOwnProperty(realm: Realm, context: Value, args: Array<Value>):
     let ownKeys = [];
     let allConcrete = true;
     for (let [name, binding] of context.properties) {
-      if (binding.descriptor === undefined) continue;
-      if (!(binding.descriptor instanceof PropertyDescriptor)) {
+      let desc = binding.descriptor;
+      if (desc === undefined) continue;
+      if (!(desc instanceof PropertyDescriptor)) {
         allConcrete = false;
         break;
       }
-      let val = binding.descriptor.value;
+      let val = desc.value;
       if (val instanceof EmptyValue) continue;
       if (val instanceof AbstractValue && val.mightHaveBeenDeleted()) {
         allConcrete = false;
@@ -630,11 +687,9 @@ function objectHasOwnProperty(realm: Realm, context: Value, args: Array<Value>):
       for (let i = ownKeys.length - 1; i >= 0; i--) {
         result = or(realm, strictEquals(realm, key, new StringValue(realm, ownKeys[i])), result);
       }
-      return AbstractValue.convertToTemporalIfArgsAreTemporal(
-        realm,
-        result instanceof AbstractValue ? result : result,
-        [key]
-      );
+      return result instanceof AbstractValue
+        ? AbstractValue.convertToTemporalIfArgsAreTemporal(realm, result, [key])
+        : result;
     }
   }
 
@@ -665,17 +720,27 @@ function objectHasOwnProperty(realm: Realm, context: Value, args: Array<Value>):
   );
 }
 
+function cannotBeArray(value: Value): boolean {
+  if (!value.mightBeObject()) return true;
+  if (value instanceof ObjectValue) return !(value instanceof ArrayValue) && !(value instanceof ProxyValue);
+  if (value instanceof AbstractObjectValue && !value.values.isTop() && value.isSimpleObject()) {
+    return Array.from(value.values.getElements()).every(e => !(e instanceof ArrayValue) && !(e instanceof ProxyValue));
+  }
+  if (value instanceof AbstractValue && value.kind === "conditional") {
+    return cannotBeArray(value.args[1]) && cannotBeArray(value.args[2]);
+  }
+  return false;
+}
+
 // ECMA262 22.1.2.2 Array.isArray(arg): inspects internal slots only; throws TypeError only on revoked proxies.
 function arrayIsArray(realm: Realm, context: Value, args: Array<Value>): void | Value {
   let arg = args.length > 0 ? args[0] : realm.intrinsics.undefined;
   if (!(arg instanceof AbstractValue) || !arg.mightBeObject()) return undefined;
+  if (cannotBeArray(arg)) return realm.intrinsics.false;
   if (arg instanceof AbstractObjectValue && !arg.values.isTop()) {
     let elements = Array.from(arg.values.getElements());
     if (elements.length > 0 && elements.every(e => e instanceof ArrayValue)) {
       return realm.intrinsics.true;
-    }
-    if (arg.isSimpleObject() && elements.every(e => !(e instanceof ArrayValue) && !(e instanceof ProxyValue))) {
-      return undefined;
     }
   }
   let classification: Classification = isCoercionPureSimpleObject(realm, arg) ? "pure" : "throws";
@@ -937,7 +1002,7 @@ function joinPiece(realm: Realm, element: Value): void | Value {
   if (element instanceof UndefinedValue || element instanceof NullValue) return realm.intrinsics.emptyString;
   if (element instanceof StringValue) return element;
   if (element instanceof NumberValue || element instanceof BooleanValue)
-    return new StringValue(realm, element.value + "");
+    return new StringValue(realm, String(element.value));
   if (!(element instanceof AbstractValue)) return undefined;
   let type = element.getType();
   if (type === StringValue) return element;

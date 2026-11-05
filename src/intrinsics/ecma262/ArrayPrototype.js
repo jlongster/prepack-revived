@@ -168,7 +168,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
         }
         AbstractValue.createTemporalFromBuildFunction(
           realm,
-          BooleanValue,
+          Value,
           args,
           createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
         );
@@ -646,7 +646,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }
       AbstractValue.createTemporalFromBuildFunction(
         realm,
-        BooleanValue,
+        UndefinedValue,
         args,
         createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
       );
