@@ -56,6 +56,7 @@ import { concretize, Join, Utils } from "../singletons.js";
 import type { SerializerOptions } from "../options.js";
 import type { PathConditions, ShapeInformationInterface } from "../types.js";
 import { PreludeGenerator } from "./PreludeGenerator.js";
+import { voidExpression } from "./babelhelpers.js";
 import { PropertyDescriptor } from "../descriptors.js";
 
 export type OperationDescriptorType =
@@ -395,10 +396,14 @@ export class TemporalOperationEntry extends GeneratorEntry {
       }
     }
     if (!omit) {
-      let nodes = this.args.map((boundArg, i) => context.serializeValue(boundArg));
+      let opType = this.operationDescriptor.type;
+      let nodes = this.args.map((boundArg, i) =>
+        opType === "EMIT_PROPERTY_ASSIGNMENT" && i === 1 && boundArg.mightHaveBeenDeleted()
+          ? voidExpression
+          : context.serializeValue(boundArg)
+      );
       let valuesToProcess = new Set();
       let declaredId = this.declared !== undefined ? this.declared.intrinsicName : undefined;
-      let opType = this.operationDescriptor.type;
       if (
         declaredId !== undefined &&
         this.declared instanceof AbstractValue &&

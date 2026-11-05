@@ -76,7 +76,8 @@ import {
 } from "./utils.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { canHoistFunction } from "../react/hoisting.js";
-import { To } from "../singletons.js";
+import { Path, To } from "../singletons.js";
+import traverseFast from "../utils/traverse-fast.js";
 import { ResidualReactElementSerializer } from "./ResidualReactElementSerializer.js";
 import type { Binding } from "../environment.js";
 import { GlobalEnvironmentRecord, DeclarativeEnvironmentRecord } from "../environment.js";
@@ -282,6 +283,7 @@ export class ResidualHeapSerializer {
   generatorTree: GeneratorTree;
   conditionalFeasibility: Map<AbstractValue, { t: boolean, f: boolean }>;
   additionalGeneratorRoots: Map<Generator, Set<ObjectValue>>;
+  _currentGenerator: void | Generator;
 
   declaredGlobalLets: Map<string, Value>;
   globalEnvironmentRecord: GlobalEnvironmentRecord;
@@ -1224,6 +1226,14 @@ export class ResidualHeapSerializer {
     );
   }
 
+  _markIgnoredTree(val: Value): void {
+    if (this._ignoredSerializedValues.has(val)) return;
+    this._ignoredSerializedValues.add(val);
+    if (val instanceof AbstractValue) {
+      for (let arg of val.args) this._markIgnoredTree(arg);
+    }
+  }
+
   _tryEmbedFunctionName(fn: ECMAScriptSourceFunctionValue, desc: Descriptor): boolean {
     if (this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) || this.realm.isCompatibleWith("mobile"))
       return false;
@@ -1265,13 +1275,48 @@ export class ResidualHeapSerializer {
       while (value instanceof AbstractValue && value.kind === "conditional") {
         let cf = this.conditionalFeasibility.get(value);
         invariant(cf !== undefined);
-        if (cf.t && cf.f) break;
-        this._ignoredSerializedValues.add(value);
-        if (cf.t) value = value.args[1];
-        else {
-          invariant(cf.f);
-          value = value.args[2];
+        if (cf.t && !cf.f) {
+          this._ignoredSerializedValues.add(value);
+          value = value.args[1];
+          continue;
         }
+        if (!cf.t && cf.f) {
+          this._ignoredSerializedValues.add(value);
+          value = value.args[2];
+          continue;
+        }
+        let cond = value.args[0];
+        if (
+          cond instanceof AbstractValue &&
+          this._currentGenerator !== undefined &&
+          !this._currentGenerator.pathConditions.isEmpty()
+        ) {
+          let savedPath = this.realm.pathConditions;
+          let impliesT = false;
+          let impliesF = false;
+          try {
+            this.realm.pathConditions = this._currentGenerator.pathConditions;
+            impliesT = Path.implies(cond);
+            if (!impliesT) impliesF = Path.impliesNot(cond);
+          } finally {
+            this.realm.pathConditions = savedPath;
+          }
+          if (impliesT) {
+            this._ignoredSerializedValues.add(value);
+            this._ignoredSerializedValues.add(cond);
+            this._markIgnoredTree(value.args[2]);
+            value = value.args[1];
+            continue;
+          }
+          if (impliesF) {
+            this._ignoredSerializedValues.add(value);
+            this._ignoredSerializedValues.add(cond);
+            this._markIgnoredTree(value.args[1]);
+            value = value.args[2];
+            continue;
+          }
+        }
+        break;
       }
       if (value instanceof EmptyValue) {
         this._ignoredSerializedValues.add(origValue);
@@ -2398,7 +2443,13 @@ export class ResidualHeapSerializer {
     let oldBody = this.emitter.beginEmitting(generator, newBody, /*isChild*/ isChild);
     invariant(!this.activeGeneratorBodies.has(generator));
     this.activeGeneratorBodies.set(generator, newBody);
-    callback(newBody);
+    let savedGenerator = this._currentGenerator;
+    this._currentGenerator = generator;
+    try {
+      callback(newBody);
+    } finally {
+      this._currentGenerator = savedGenerator;
+    }
     invariant(this.activeGeneratorBodies.has(generator));
     this.activeGeneratorBodies.delete(generator);
     const statements = this.emitter.endEmitting(generator, oldBody, valuesToProcess, /*isChild*/ isChild).entries;
@@ -2710,6 +2761,9 @@ export class ResidualHeapSerializer {
 
     let body = this.prelude.concat(this.emitter.getBody().entries);
     factorifyObjects(body, this.factoryNameGenerator);
+    if (this._options.inlineExpressions && !this.residualHeapValueIdentifiers.collectValToRefCountOnly) {
+      this._inlineSingleUseTopLevelFunctions(body);
+    }
 
     let ast_body = [];
     if (this.preludeGenerator.declaredGlobals.size > 0)
@@ -2776,6 +2830,115 @@ export class ResidualHeapSerializer {
     let program_directives = [];
     if (this.realm.isStrict) program_directives.push(strictDirective);
     return t.file(t.program(ast_body, program_directives));
+  }
+
+  _inlineSingleUseTopLevelFunctions(body: Array<BabelNodeStatement>): void {
+    let candidates: Map<string, { stmtIdx: number, funcNode: BabelNodeExpression }> = new Map();
+    for (let i = 0; i < body.length; i++) {
+      let stmt = body[i];
+      if (
+        stmt.type === "VariableDeclaration" &&
+        stmt.kind === "var" &&
+        stmt.declarations.length === 1 &&
+        stmt.declarations[0].id.type === "Identifier" &&
+        stmt.declarations[0].init != null &&
+        (stmt.declarations[0].init.type === "FunctionExpression" ||
+          stmt.declarations[0].init.type === "ArrowFunctionExpression")
+      ) {
+        candidates.set(stmt.declarations[0].id.name, { stmtIdx: i, funcNode: stmt.declarations[0].init });
+      }
+    }
+    if (candidates.size === 0) return;
+
+    let counts: Map<string, number> = new Map();
+    let wrapper = t.program(body);
+    traverseFast(wrapper, node => {
+      if (node.type === "Identifier" && candidates.has(node.name)) {
+        counts.set(node.name, (counts.get(node.name) || 0) + 1);
+      }
+      return false;
+    });
+    for (let name of Array.from(candidates.keys())) {
+      if (counts.get(name) !== 2) candidates.delete(name);
+    }
+    if (candidates.size === 0) return;
+
+    let removedStmtIndices: Set<number> = new Set();
+    const tryReplaceInTopExpr = (holder: Object, prop: string | number, currentStmtIdx: number): void => {
+      let expr = holder[prop];
+      if (!expr || typeof expr !== "object") return;
+      if (
+        expr.type === "FunctionExpression" ||
+        expr.type === "ArrowFunctionExpression" ||
+        expr.type === "ClassExpression"
+      ) {
+        return;
+      }
+      if (expr.type === "Identifier") {
+        let cand = candidates.get(expr.name);
+        if (cand !== undefined && cand.stmtIdx < currentStmtIdx) {
+          holder[prop] = cand.funcNode;
+          removedStmtIndices.add(cand.stmtIdx);
+          candidates.delete(expr.name);
+        }
+        return;
+      }
+      if (expr.type === "AssignmentExpression") {
+        if (expr.left.type === "MemberExpression") {
+          tryReplaceInTopExpr(expr.left, "object", currentStmtIdx);
+          if (expr.left.computed) tryReplaceInTopExpr(expr.left, "property", currentStmtIdx);
+        }
+        tryReplaceInTopExpr(expr, "right", currentStmtIdx);
+        return;
+      }
+      if (expr.type === "SequenceExpression") {
+        for (let k = 0; k < expr.expressions.length; k++) {
+          tryReplaceInTopExpr(expr.expressions, k, currentStmtIdx);
+        }
+        return;
+      }
+      if (expr.type === "CallExpression" || expr.type === "NewExpression") {
+        tryReplaceInTopExpr(expr, "callee", currentStmtIdx);
+        for (let k = 0; k < expr.arguments.length; k++) {
+          tryReplaceInTopExpr(expr.arguments, k, currentStmtIdx);
+        }
+        return;
+      }
+      if (expr.type === "ObjectExpression") {
+        for (let p of expr.properties) {
+          if (p.type === "ObjectProperty") {
+            if (p.computed) tryReplaceInTopExpr(p, "key", currentStmtIdx);
+            tryReplaceInTopExpr(p, "value", currentStmtIdx);
+          }
+        }
+        return;
+      }
+      if (expr.type === "ArrayExpression") {
+        for (let k = 0; k < expr.elements.length; k++) {
+          if (expr.elements[k]) tryReplaceInTopExpr(expr.elements, k, currentStmtIdx);
+        }
+      }
+    };
+
+    for (let i = 0; i < body.length && candidates.size > 0; i++) {
+      if (removedStmtIndices.has(i)) continue;
+      let stmt = body[i];
+      if (stmt.type === "ExpressionStatement") {
+        tryReplaceInTopExpr(stmt, "expression", i);
+      } else if (stmt.type === "VariableDeclaration") {
+        for (let decl of stmt.declarations) {
+          if (decl.init) tryReplaceInTopExpr(decl, "init", i);
+        }
+      }
+    }
+
+    if (removedStmtIndices.size > 0) {
+      let writeIdx = 0;
+      for (let i = 0; i < body.length; i++) {
+        if (!removedStmtIndices.has(i)) body[writeIdx++] = body[i];
+      }
+      body.length = writeIdx;
+    }
   }
 
   _logScopes(scopes: Set<Scope>): void {
