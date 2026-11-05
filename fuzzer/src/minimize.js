@@ -209,7 +209,9 @@ async function minimize(pool, code, target, opts = {}) {
       }
       const results = await Promise.all(candidates.map(c => pool.run({ code: c.code })));
       tests += candidates.length;
-      const hit = candidates.findIndex((c, j) => failureKey(results[j]) === key);
+      const hit = candidates.findIndex(
+        (c, j) => failureKey(results[j]) === key && !introducesReferenceError(results[j])
+      );
       if (hit >= 0) {
         current = candidates[hit].code;
         index = candidates[hit].i;
@@ -222,6 +224,14 @@ async function minimize(pool, code, target, opts = {}) {
   }
   const final = await pool.run({ code: current, full: true });
   return { code: current, tests, result: final, key, complete: !progress };
+
+  // Deleting a declaration makes later reads of that name undeclared. Prepack's open-world default assumes
+  // undeclared globals exist, so such a reduction turns into an unrelated (by-design) mismatch.
+  function introducesReferenceError(result) {
+    return (
+      /ReferenceError/.test(String(result.expected || "")) && !/ReferenceError/.test(String(target.expected || ""))
+    );
+  }
 }
 
 module.exports = { minimize, failureKey, normalizeDetail };

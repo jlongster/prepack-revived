@@ -21,14 +21,15 @@ import { Logger } from "../utils/logger.js";
 import { isReactElement } from "../react/utils.js";
 import { Reachability } from "../singletons.js";
 import { AbstractJoinedDescriptor, PropertyDescriptor } from "../descriptors.js";
-import type { Descriptor } from "../types.js";
+import type { Descriptor, PropertyBinding } from "../types.js";
 import { Generator } from "../utils/generator.js";
 
 function emitUnknownPropertyValueToGenerator(
   realm: Realm,
   gen: Generator,
   object: ObjectValue,
-  absVal: AbstractValue
+  absVal: AbstractValue,
+  onWrite?: AbstractValue => void
 ): void {
   if (absVal.kind === "widened property" || absVal.kind === "template for prototype member expression") return;
   if (absVal.args.length !== 3) return;
@@ -39,8 +40,9 @@ function emitUnknownPropertyValueToGenerator(
     invariant(P instanceof AbstractValue);
     let V = absVal.args[1];
     let earlier = absVal.args[2];
-    if (earlier instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, gen, object, earlier);
+    if (earlier instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, gen, object, earlier, onWrite);
     gen.emitPropertyAssignment(object, P, V);
+    if (onWrite !== undefined) onWrite(absVal);
   } else {
     let consequent = absVal.args[1];
     let alternate = absVal.args[2];
@@ -49,6 +51,7 @@ function emitUnknownPropertyValueToGenerator(
     if (consequent instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, g1, object, consequent);
     if (alternate instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, g2, object, alternate);
     if (!g1.empty() || !g2.empty()) gen.joinGenerators(cond, g1, g2);
+    if (onWrite !== undefined) onWrite(absVal);
   }
 }
 
@@ -56,12 +59,13 @@ function emitUnknownPropertyDescriptorToGenerator(
   realm: Realm,
   gen: Generator,
   object: ObjectValue,
-  desc: void | Descriptor
+  desc: void | Descriptor,
+  onWrite?: AbstractValue => void
 ): void {
   if (desc === undefined) return;
   if (desc instanceof PropertyDescriptor) {
     if (desc.value instanceof AbstractValue) {
-      emitUnknownPropertyValueToGenerator(realm, gen, object, desc.value);
+      emitUnknownPropertyValueToGenerator(realm, gen, object, desc.value, onWrite);
     }
   } else if (desc instanceof AbstractJoinedDescriptor) {
     let g1 = new Generator(realm, "leakUnknownPropertyDesc1", gen.pathConditions);
@@ -90,11 +94,58 @@ function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInsp
   let isArray = IsArray(realm, object);
   let maxAssignedArrayIndex = -1;
 
+  let unknownDesc = object.unknownProperty !== undefined ? object.unknownProperty.descriptor : undefined;
+  if (
+    unknownDesc instanceof PropertyDescriptor &&
+    unknownDesc.value instanceof AbstractValue &&
+    unknownDesc.value.kind === "widened property"
+  ) {
+    unknownDesc = undefined;
+  }
+  // Properties created after a write with an unknown name are emitted after that write, preserving enumeration order.
+  let createdAfterUnknownWrite = new Map();
+
   // TODO: We should emit current value and then reset value for all *internal slots*; this will require deep serializer support; or throw FatalError when we detect any non-initial values in internal slots.
   for (let [name, propertyBinding] of object.properties) {
     // ignore properties with their correct default values
     if (getHeapInspector().canIgnoreProperty(object, name)) continue;
+    if (
+      unknownDesc !== undefined &&
+      propertyBinding.createdAfterUnknownWrite !== undefined &&
+      propertyBinding.descriptor !== undefined
+    ) {
+      createdAfterUnknownWrite.set(name, propertyBinding);
+      continue;
+    }
+    emitProperty(name, propertyBinding);
+  }
 
+  if (unknownDesc !== undefined && generator !== undefined) {
+    emitUnknownPropertyDescriptorToGenerator(realm, generator, object, unknownDesc, value => {
+      for (let [name, propertyBinding] of createdAfterUnknownWrite) {
+        if (propertyBinding.createdAfterUnknownWrite !== value) continue;
+        createdAfterUnknownWrite.delete(name);
+        emitProperty(name, propertyBinding);
+      }
+    });
+  }
+  for (let [name, propertyBinding] of createdAfterUnknownWrite) emitProperty(name, propertyBinding);
+
+  if (isArray && generator !== undefined) {
+    let lenBinding = object.properties.get("length");
+    if (lenBinding !== undefined && lenBinding.descriptor instanceof PropertyDescriptor) {
+      let lenVal = lenBinding.descriptor.value;
+      if (
+        lenVal instanceof Value &&
+        !(lenVal instanceof AbstractValue && lenVal.kind === "widened property") &&
+        (!(lenVal instanceof NumberValue) || lenVal.value !== maxAssignedArrayIndex + 1)
+      ) {
+        generator.emitPropertyAssignment(object, "length", lenVal);
+      }
+    }
+  }
+
+  function emitProperty(name: string, propertyBinding: PropertyBinding): void {
     let descriptor = propertyBinding.descriptor;
     if (descriptor === undefined) {
       // TODO: This happens, e.g. test/serializer/pure-functions/ObjectAssign2.js
@@ -132,35 +183,6 @@ function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInsp
             }
           }
         }
-      }
-    }
-  }
-
-  if (object.unknownProperty !== undefined && object.unknownProperty.descriptor !== undefined) {
-    let unknownDesc = object.unknownProperty.descriptor;
-    if (
-      !(
-        unknownDesc instanceof PropertyDescriptor &&
-        unknownDesc.value instanceof AbstractValue &&
-        unknownDesc.value.kind === "widened property"
-      )
-    ) {
-      if (generator !== undefined) {
-        emitUnknownPropertyDescriptorToGenerator(realm, generator, object, unknownDesc);
-      }
-    }
-  }
-
-  if (isArray && generator !== undefined) {
-    let lenBinding = object.properties.get("length");
-    if (lenBinding !== undefined && lenBinding.descriptor instanceof PropertyDescriptor) {
-      let lenVal = lenBinding.descriptor.value;
-      if (
-        lenVal instanceof Value &&
-        !(lenVal instanceof AbstractValue && lenVal.kind === "widened property") &&
-        (!(lenVal instanceof NumberValue) || lenVal.value !== maxAssignedArrayIndex + 1)
-      ) {
-        generator.emitPropertyAssignment(object, "length", lenVal);
       }
     }
   }

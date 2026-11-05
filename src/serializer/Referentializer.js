@@ -319,6 +319,7 @@ export class Referentializer {
     instance.initializationStatements = [];
     for (let b of ((instance: any): FunctionInstance).residualFunctionBindings.values()) {
       let binding = ((b: any): ResidualFunctionBinding);
+      if (binding.hasLeaked) continue;
       if (binding.referentialized && binding.declarativeEnvironmentRecord) {
         let declarativeEnvironmentRecord = binding.declarativeEnvironmentRecord;
         let referentializationScope = this._getReferentializationScope(binding);
@@ -328,7 +329,6 @@ export class Referentializer {
           let scope = refState.serializedScopes.get(declarativeEnvironmentRecord);
           if (scope) {
             scope.initializationValues = [];
-            scope.leakedIds = [];
           }
         }
       }

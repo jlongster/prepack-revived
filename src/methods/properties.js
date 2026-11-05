@@ -100,10 +100,22 @@ function InternalSetProperty(realm: Realm, O: ObjectValue, P: PropertyKeyValue, 
   let key = InternalGetPropertiesKey(P);
   let propertyBinding = map.get(key);
   if (propertyBinding === undefined) {
-    propertyBinding = { descriptor: undefined, object: O, key: key };
+    propertyBinding = ({ descriptor: undefined, object: O, key: key }: PropertyBinding);
     map.set(key, propertyBinding);
   }
   realm.recordModifiedProperty(propertyBinding);
+  if (propertyBinding.descriptor === undefined && typeof key === "string") {
+    // Remember whether this property was created after a write with an unknown property name, so that the
+    // serializer can preserve the property enumeration order. (Array indices always enumerate first.)
+    let unknownDesc = O.unknownProperty !== undefined ? O.unknownProperty.descriptor : undefined;
+    let isIndex = String(+key >>> 0) === key && +key !== 4294967295;
+    propertyBinding.createdAfterUnknownWrite =
+      unknownDesc === undefined || isIndex
+        ? undefined
+        : unknownDesc instanceof PropertyDescriptor && unknownDesc.value !== undefined
+        ? unknownDesc.value
+        : unknownDesc;
+  }
   propertyBinding.descriptor = desc;
 }
 
