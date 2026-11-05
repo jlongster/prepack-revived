@@ -28,8 +28,11 @@ import {
   Value,
 } from "./values/index.js";
 import invariant from "./invariant.js";
+import { PropertyDescriptor } from "./descriptors.js";
 import { ShapeInformation } from "./utils/ShapeInformation.js";
-import type { ArgModel } from "./types.js";
+import { createShapedValue } from "./utils/ShapedValues.js";
+import { createOperationDescriptor } from "./utils/generator.js";
+import type { ArgModel, ShapeInformationInterface } from "./types.js";
 import { CompilerDiagnostic, FatalError } from "./errors.js";
 import type { Binding } from "./environment.js";
 import * as t from "@babel/types";
@@ -156,31 +159,67 @@ export function createModelledFunctionCall(
   realm: Realm,
   funcValue: FunctionValue,
   argModelInput: void | string | ArgModel,
-  thisValue: void | Value
+  thisValue: void | Value,
+  argShapes?: void | Array<void | ShapeInformationInterface>,
+  uniqueParameterNames?: boolean
 ): void => Value {
   let call = funcValue.$Call;
   invariant(call);
   let numArgs = funcValue.getLength();
   let args = [];
+  let deferredArgs = [];
   let argModel = typeof argModelInput === "string" ? (JSON.parse(argModelInput): ArgModel) : argModelInput;
   invariant(funcValue instanceof ECMAScriptSourceFunctionValue);
   let params = funcValue.$FormalParameters;
+  let residualNames = [];
   if (numArgs !== undefined && numArgs > 0 && params) {
-    for (let parameterId of params) {
+    for (let i = 0; i < params.length; i++) {
+      let parameterId = params[i];
       if (t.isIdentifier(parameterId)) {
         // $FlowFixMe: Flow strict file does not allow for casting
-        let paramName = ((parameterId: any): BabelNodeIdentifier).name;
-        let shape = ShapeInformation.createForArgument(argModel, paramName);
+        let sourceName = ((parameterId: any): BabelNodeIdentifier).name;
+        let shape =
+          argShapes !== undefined && argShapes !== null
+            ? argShapes[i]
+            : ShapeInformation.createForArgument(argModel, sourceName);
+        let paramName = sourceName;
+        if (uniqueParameterNames === true) {
+          let preludeGenerator = realm.preludeGenerator;
+          invariant(preludeGenerator !== undefined);
+          paramName = preludeGenerator.nameGenerator.generate(sourceName);
+        }
+        residualNames.push(paramName);
         // Create an AbstractValue similar to __abstract being called
-        args.push(
-          AbstractValue.createAbstractArgument(
-            realm,
-            paramName,
-            funcValue.expressionLocation,
-            shape !== undefined ? shape.getAbstractType() : Value,
-            shape
-          )
-        );
+        if (shape === undefined) {
+          args.push(
+            AbstractValue.createAbstractArgument(realm, paramName, funcValue.expressionLocation, Value, undefined)
+          );
+        } else {
+          let paramShape = shape;
+          // Shaped arguments may need temporal entries (arrays with widened numeric properties),
+          // so they are created inside the evaluation of the call.
+          args.push(realm.intrinsics.undefined);
+          let index = args.length - 1;
+          deferredArgs.push(() => {
+            args[index] = createShapedValue(realm, paramShape, (type, readShape) => {
+              let argument = AbstractValue.createAbstractArgument(
+                realm,
+                paramName,
+                funcValue.expressionLocation,
+                type === ArrayValue ? Value : type,
+                readShape
+              );
+              if (type !== ArrayValue) return argument;
+              let array = ArrayValue.createTemporalWithWidenedNumericProperty(
+                realm,
+                [argument],
+                createOperationDescriptor("SINGLE_ARG")
+              );
+              array.shape = readShape;
+              return array;
+            });
+          });
+        }
       } else {
         realm.handleError(
           new CompilerDiagnostic(
@@ -194,6 +233,7 @@ export function createModelledFunctionCall(
       }
     }
   }
+  if (uniqueParameterNames === true) funcValue.residualParameterNames = residualNames;
   let thisArg =
     thisValue !== undefined
       ? thisValue
@@ -203,6 +243,7 @@ export function createModelledFunctionCall(
     let newPathConditions = funcValue.pathConditionDuringDeclaration || savedPathConditions;
     realm.pathConditions = newPathConditions;
     try {
+      for (let createArg of deferredArgs) createArg();
       let result = call(thisArg, args);
       return result;
     } finally {
@@ -258,6 +299,53 @@ export function areEffectsPure(realm: Realm, effects: Effects, F: FunctionValue)
     }
   }
   return true;
+}
+
+// A function invocation that temporarily changes an outer binding or property but restores the
+// exact same value (and attributes) before it returns has no net effect on the outer state, so
+// running it any number of times is equivalent to running it once (each invocation starts from
+// the same state). Such modifications are dropped from the callback's effects instead of being
+// treated as side effects. The values are compared by identity: a value recomputed to something
+// equal but not identical still counts as a modification.
+export function dropNetZeroModifications(effects: Effects, func: FunctionValue): void {
+  for (let [binding, entry] of effects.modifiedBindings) {
+    if (
+      isBindingMutationOutsideFunction(binding, entry, func) &&
+      sameValue(entry.value, binding.value) &&
+      entry.hasLeaked === binding.hasLeaked
+    ) {
+      effects.modifiedBindings.delete(binding);
+    }
+  }
+  for (let [propertyBinding, descriptor] of effects.modifiedProperties) {
+    if (effects.createdObjects.has(propertyBinding.object)) continue;
+    let previous = propertyBinding.descriptor;
+    if (previous === descriptor) {
+      effects.modifiedProperties.delete(propertyBinding);
+      continue;
+    }
+    if (
+      previous instanceof PropertyDescriptor &&
+      descriptor instanceof PropertyDescriptor &&
+      sameValue(previous.value, descriptor.value) &&
+      previous.writable === descriptor.writable &&
+      previous.enumerable === descriptor.enumerable &&
+      previous.configurable === descriptor.configurable &&
+      previous.get === descriptor.get &&
+      previous.set === descriptor.set
+    ) {
+      effects.modifiedProperties.delete(propertyBinding);
+    }
+  }
+}
+
+function sameValue(a: void | Value, b: void | Value): boolean {
+  if (a === b) return a !== undefined;
+  return (
+    (a instanceof NumberValue && b instanceof NumberValue && Object.is(a.value, b.value)) ||
+    (a instanceof StringValue && b instanceof StringValue && a.value === b.value) ||
+    (a instanceof BooleanValue && b instanceof BooleanValue && a.value === b.value)
+  );
 }
 
 export function reportSideEffectsFromEffects(

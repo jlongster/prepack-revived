@@ -262,16 +262,21 @@ export class Functions {
         realm.persistentReadTracker = tracker;
         try {
           const runPure = () =>
-            realm.evaluateFunctionForPureEffectsInGlobalEnv(
-              functionValue,
-              invokeCall,
-              reportSideEffects
-                ? (sideEffectType, binding, expressionLocation) =>
-                    handleReportedSideEffect(logCompilerDiagnostic, sideEffectType, binding, expressionLocation)
-                : () => {},
-              undefined,
-              "additional function"
-            );
+            realm.wrapInGlobalEnv(() => {
+              let functionEffects = realm.evaluateForEffects(invokeCall, undefined, "additional function");
+              // Temporary changes that are undone before the function returns are not side effects.
+              Utils.dropNetZeroModifications(functionEffects, functionValue);
+              if (reportSideEffects) {
+                Utils.reportSideEffectsFromEffects(
+                  realm,
+                  functionEffects,
+                  functionValue,
+                  (sideEffectType, binding, loc) =>
+                    handleReportedSideEffect(logCompilerDiagnostic, sideEffectType, binding, loc)
+                );
+              }
+              return functionEffects;
+            });
           let eff = realm.isInPureScope() ? runPure() : realm.evaluateWithPureScope(runPure);
           return [eff, tracker];
         } finally {

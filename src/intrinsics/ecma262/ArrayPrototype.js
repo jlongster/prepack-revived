@@ -49,6 +49,17 @@ import { PropertyDescriptor } from "../../descriptors.js";
 import { createOperationDescriptor } from "../../utils/generator.js";
 import { IntervalDomain } from "../../domains/index.js";
 import { mapCases } from "../../utils/cases.js";
+import { ShapeInformation } from "../../utils/ShapeInformation.js";
+import type { ShapeInformationInterface } from "../../types.js";
+
+const indexShape = new ShapeInformation({ kind: "scalar", jsType: "integral" }, undefined, undefined, {});
+
+// Shapes of the (element, index) arguments of a callback invoked on the elements of an abstract
+// input array whose shape is known.
+function callbackArgShapes(O: ObjectValue | AbstractObjectValue): void | Array<void | ShapeInformationInterface> {
+  if (!(O instanceof ArrayValue) || O.shape === undefined) return undefined;
+  return [O.shape.getPropertyShape("0"), indexShape];
+}
 
 // The maximum number of distinct values an abstract array length may have for array methods to
 // evaluate once per possible length and join the results.
@@ -527,12 +538,19 @@ export default function(realm: Realm, obj: ObjectValue): void {
         Leak.value(realm, callbackfn);
         if (thisArg) Leak.value(realm, thisArg);
       }
-      return ArrayValue.createTemporalWithWidenedNumericProperty(
+      let filtered = ArrayValue.createTemporalWithWidenedNumericProperty(
         realm,
         args,
         createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
-        possibleNestedOptimizedFunctions
+        possibleNestedOptimizedFunctions,
+        Value,
+        true,
+        false,
+        callbackArgShapes(O)
       );
+      // The elements of the filtered array are elements of O.
+      if (O instanceof ArrayValue) filtered.shape = O.shape;
+      return filtered;
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
@@ -1397,7 +1415,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
         realm,
         args,
         createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
-        possibleNestedOptimizedFunctions
+        possibleNestedOptimizedFunctions,
+        Value,
+        true,
+        false,
+        callbackArgShapes(O)
       );
     }
 

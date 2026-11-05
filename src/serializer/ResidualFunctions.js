@@ -646,6 +646,12 @@ export class ResidualFunctions {
       let isGenerator = fKind === "generator" || fKind === "asyncGenerator";
       let isAsync = fKind === "async" || fKind === "asyncGenerator";
       invariant(params !== undefined);
+      let residualParameterNames = functionValue.residualParameterNames;
+      if (residualParameterNames !== undefined) {
+        params = params.map((p, i) =>
+          t.isIdentifier(p) && residualParameterNames[i] !== undefined ? t.identifier(residualParameterNames[i]) : p
+        );
+      }
 
       let rewrittenBody = rewrittenAdditionalFunctions.get(funcValue);
       invariant(rewrittenBody);

@@ -93,7 +93,8 @@ type AbstractValueKindPrefix =
   | "abstractCounted"
   | "magicGlobalObject"
   | "envGlobal"
-  | "typeofGlobal";
+  | "typeofGlobal"
+  | "shape view";
 
 export default class AbstractValue extends Value {
   constructor(
@@ -1237,6 +1238,30 @@ export default class AbstractValue extends Value {
     }
     invariant(value instanceof AbstractObjectValue);
     return value;
+  }
+
+  // A view of `raw` that claims a more precise type (and shape). It serializes to `raw` itself, and
+  // must only be used on paths where a runtime test established that `raw` has that type.
+  static createShapeView(
+    realm: Realm,
+    raw: AbstractValue,
+    type: typeof Value,
+    shape: void | ShapeInformationInterface
+  ): AbstractValue {
+    let kind = AbstractValue.makeKind("shape view", type.name);
+    let [hash, args] = hashCall(kind, raw);
+    let Constructor = Value.isTypeCompatibleWith(type, ObjectValue) ? AbstractObjectValue : AbstractValue;
+    let result = new Constructor(
+      realm,
+      new TypesDomain(type),
+      ValuesDomain.topVal,
+      hash,
+      args,
+      createOperationDescriptor("SINGLE_ARG"),
+      { kind, shape }
+    );
+    result.expressionLocation = raw.expressionLocation;
+    return result;
   }
 
   static makeKind(prefix: AbstractValueKindPrefix, suffix: string): AbstractValueKind {
