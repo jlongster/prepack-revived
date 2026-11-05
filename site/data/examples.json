@@ -27,28 +27,28 @@
   ]
  },
  "intro-partial": {
-  "input": "var config = { debug: false, retries: 3, tags: [\"a\", \"b\"] };\nvar started = Date.now();\nglobal.banner = \"retries=\" + config.retries + (config.debug ? \" DEBUG\" : \"\")\n  + \" tags=\" + config.tags.join(\"+\");\nglobal.uptime = function () { return Date.now() - started; };\n",
+  "input": "// Build a lookup table when the app starts.\nconst units = [\"B\", \"KB\", \"MB\", \"GB\", \"TB\"];\nconst bytesPer = {};\nfor (let i = 0; i < units.length; i++) {\n  bytesPer[units[i]] = Math.pow(1024, i);\n}\n\n// Only known when the app actually runs.\nconst startedAt = Date.now();\n\nglobal.app = { bytesPer, startedAt };\n",
   "inputName": "intro-partial.js",
   "tools": {
    "orig": {
     "label": "Prepack 0.2.54",
     "command": "prepack-cli.js intro-partial.js",
     "exitCode": 0,
-    "ms": 300,
-    "stdout": "var started, config;\n(function () {\n  var _$1 = this;\n  var _C = function () {\n    return Date.now() - started;\n  };\n  var _3 = [\"a\", \"b\"];\n  var _0 = {\n    debug: false,\n    retries: 3,\n    tags: _3\n  };\n  _$1.config = _0;\n  var _$0 = _$1.Date.now();\n  _$1.started = _$0;\n  _$1.banner = \"retries=3 tags=a+b\";\n  _$1.uptime = _C;\n}).call(this);\n",
+    "ms": 338,
+    "stdout": "(function () {\n  var _$1 = this;\n  var _$0 = _$1.Date.now();\n  var _1 = {\n    B: 1,\n    KB: 1024,\n    MB: 1048576,\n    GB: 1073741824,\n    TB: 1099511627776\n  };\n  var _0 = {\n    bytesPer: _1,\n    startedAt: _$0\n  };\n  _$1.app = _0;\n}).call(this);\n",
     "stderr": ""
    }
   },
   "probes": [
    {
-    "label": "banner",
+    "label": "app.bytesPer.TB, typeof app.startedAt",
     "original": {
      "ok": true,
-     "value": "retries=3 tags=a+b"
+     "value": "1099511627776,number"
     },
     "orig": {
      "ok": true,
-     "value": "retries=3 tags=a+b"
+     "value": "1099511627776,number"
     }
    }
   ]

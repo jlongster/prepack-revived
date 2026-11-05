@@ -14,7 +14,7 @@ module.exports = [
     id: "intro-partial",
     input: "intro-partial.js",
     tools: ["orig"],
-    probes: [P("banner", "", "banner")],
+    probes: [P("app.bytesPer.TB, typeof app.startedAt", "", "[app.bytesPer.TB, typeof app.startedAt].join()")],
   },
   {
     id: "loops-1174",

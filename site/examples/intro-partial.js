@@ -1,5 +1,11 @@
-var config = { debug: false, retries: 3, tags: ["a", "b"] };
-var started = Date.now();
-global.banner = "retries=" + config.retries + (config.debug ? " DEBUG" : "")
-  + " tags=" + config.tags.join("+");
-global.uptime = function () { return Date.now() - started; };
+// Build a lookup table when the app starts.
+const units = ["B", "KB", "MB", "GB", "TB"];
+const bytesPer = {};
+for (let i = 0; i < units.length; i++) {
+  bytesPer[units[i]] = Math.pow(1024, i);
+}
+
+// Only known when the app actually runs.
+const startedAt = Date.now();
+
+global.app = { bytesPer, startedAt };

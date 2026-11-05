@@ -12,7 +12,7 @@ know at build time (the clock, the user, the DOM) it tracks as an <em>abstract v
 its lead <a href="${ISSUE(2639)}#issuecomment-585997029">answered</a> that “no one currently at Facebook seems to have
 a scenario in mind where they believe that Prepack can be of use.”</p>
 
-${example("intro-partial", { caption: "Partial evaluation in one example: the known values are folded (<code>banner</code> becomes a constant), the unknown one (<code>Date.now()</code>) stays as residual code. Every output on this page is the verbatim output of the tool named in its header, produced by <code>site/scripts/run-examples.js</code>; the table under each comparison runs the original program and each output and compares the results." })}
+${example("intro-partial", { caption: "Partial evaluation in one example: the loop runs at build time, so the output contains only the finished table; <code>Date.now()</code> can’t be known until the app runs, so it stays in the output as code. Every output on this page is the verbatim output of the tool named in its header, produced by <code>site/scripts/run-examples.js</code>; the table under each comparison runs the original program and each output and compares the results." })}
 
 <p>Prepack also has a second mode: <code>__optimize(fn)</code> specializes a function for <em>abstract
 arguments</em>, running its body with every parameter unknown. Most examples below use it, because it is where the
