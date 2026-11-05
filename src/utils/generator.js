@@ -226,6 +226,7 @@ export type VisitEntryCallbacks = {|
   visitModifiedProperty: PropertyBinding => void,
   visitModifiedBinding: Binding => void,
   visitBindingAssignment: (Binding, Value) => Value,
+  visitLeakedBinding: Binding => void,
 |};
 
 export type CustomGeneratorEntryType = "MODIFIED_PROPERTY" | "MODIFIED_BINDING" | "RETURN" | "BINDING_ASSIGNMENT";
@@ -337,6 +338,11 @@ export class TemporalOperationEntry extends GeneratorEntry {
       return false;
     } else {
       if (this.declared) callbacks.recordDeclaration(this.declared);
+      if (this.operationDescriptor.type === "GET_BINDING") {
+        let binding = this.operationDescriptor.data.binding;
+        invariant(binding !== undefined);
+        callbacks.visitLeakedBinding(binding);
+      }
       for (let i = 0, n = this.args.length; i < n; i++) {
         let originalArg = this.args[i];
         let visitedArg = callbacks.visitEquivalentValue(originalArg);

@@ -33,10 +33,11 @@ import {
   ReturnCompletion,
   ThrowCompletion,
 } from "../completions.js";
+import { InfeasiblePathError } from "../errors.js";
 import { IsDataDescriptor, StrictEqualityComparison } from "../methods/index.js";
 import { Leak, Path } from "../singletons.js";
 import { Generator } from "../utils/generator.js";
-import { AbstractValue, ConcreteValue, EmptyValue, ObjectValue, Value } from "../values/index.js";
+import { AbstractValue, ConcreteValue, EmptyValue, NumberValue, ObjectValue, Value } from "../values/index.js";
 
 import invariant from "../invariant.js";
 
@@ -599,22 +600,56 @@ export class JoinImplementation {
     functionToMap: ConcreteValue => Completion | Value
   ): Value {
     invariant(values.size > 1);
-    let joinedEffects;
+    let nanValue;
+    let entries: Array<[ConcreteValue, Value]> = [];
     for (let val of values) {
-      let condition = joinConditionFactory(val);
-      let effects = realm.evaluateForEffects(
-        () => {
-          invariant(condition instanceof AbstractValue);
-          return Path.withCondition(condition, () => {
-            return functionToMap(val);
-          });
-        },
-        undefined,
-        "mapAndJoin"
-      );
+      if (val instanceof NumberValue && Number.isNaN(val.value)) {
+        nanValue = val;
+      } else {
+        entries.push([val, joinConditionFactory(val)]);
+      }
+    }
+    if (nanValue !== undefined) {
+      // `x === NaN` is always false; NaN is the complement of all non-NaN elements in `values`.
+      // Put it first so it serves as the fallback arm of the joined effects.
+      let nanCondition: Value = realm.intrinsics.true;
+      for (let [, cond] of entries) {
+        let notCond =
+          cond instanceof AbstractValue
+            ? AbstractValue.createFromUnaryOp(realm, "!", cond, true, undefined, true)
+            : cond.mightNotBeFalse()
+            ? realm.intrinsics.false
+            : realm.intrinsics.true;
+        nanCondition = !nanCondition.mightNotBeTrue()
+          ? notCond
+          : !nanCondition.mightNotBeFalse() || !notCond.mightNotBeFalse()
+          ? realm.intrinsics.false
+          : !notCond.mightNotBeTrue()
+          ? nanCondition
+          : AbstractValue.createFromLogicalOp(realm, "&&", nanCondition, notCond, undefined, true);
+      }
+      entries.unshift([nanValue, nanCondition]);
+    }
+    let joinedEffects;
+    for (let [val, condition] of entries) {
+      if (!condition.mightNotBeFalse()) continue;
+      if (!condition.mightNotBeTrue()) {
+        joinedEffects = realm.evaluateForEffects(() => functionToMap(val), undefined, "mapAndJoin");
+        break;
+      }
+      invariant(condition instanceof AbstractValue);
+      let effects;
+      try {
+        effects = Path.withCondition(condition, () =>
+          realm.evaluateForEffects(() => functionToMap(val), undefined, "mapAndJoin")
+        );
+      } catch (e) {
+        if (!(e instanceof InfeasiblePathError)) throw e;
+        continue;
+      }
       joinedEffects = joinedEffects === undefined ? effects : this.joinEffects(condition, effects, joinedEffects);
     }
-    invariant(joinedEffects !== undefined);
+    if (joinedEffects === undefined) throw new InfeasiblePathError();
     realm.applyEffects(joinedEffects);
     return realm.returnOrThrowCompletion(joinedEffects.result);
   }
