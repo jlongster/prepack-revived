@@ -109,6 +109,7 @@ export type FactoryFunctionInfo = {
   factoryId: BabelNodeIdentifier,
   functionInfo: FunctionInfo,
   anyContainingAdditionalFunction: boolean,
+  isCurried?: boolean,
 };
 
 export type ResidualFunctionBinding = {
