@@ -41,8 +41,8 @@ export class PathConditionsImplementation extends PathConditions {
   _impliedNegatives: void | Set<AbstractValue>;
   _failedImplications: void | Set<AbstractValue>;
   _failedNegativeImplications: void | Set<AbstractValue>;
-  _smtFailedImplications: void | Set<AbstractValue>;
-  _smtFailedNegatives: void | Set<AbstractValue>;
+  _smtFailedImplications: void | Map<number, Array<AbstractValue>>;
+  _smtFailedNegatives: void | Map<number, Array<AbstractValue>>;
 
   add(c: AbstractValue): void {
     invariant(!this._readonly);
@@ -273,12 +273,12 @@ export class PathImplementation {
     }
     if (!smtEnabled(realm)) return false;
     // The hand-written rules don't know: ask the solver.
-    if (pathConditions._smtFailedImplications !== undefined && pathConditions._smtFailedImplications.has(condition))
-      return false;
-    if (smtImplies(pathConditions.getAllConditions(), condition))
-      return pathConditions.cacheImplicationSuccess(condition);
-    if (pathConditions._smtFailedImplications === undefined) pathConditions._smtFailedImplications = new Set();
-    pathConditions._smtFailedImplications.add(condition);
+    if (hasEquivalent(pathConditions._smtFailedImplications, condition)) return false;
+    let allConditions = pathConditions.getAllConditions();
+    if (allConditions.length === 0 && isAtomicAbstractValue(condition)) return false;
+    if (smtImplies(allConditions, condition)) return pathConditions.cacheImplicationSuccess(condition);
+    if (pathConditions._smtFailedImplications === undefined) pathConditions._smtFailedImplications = new Map();
+    addEquivalent(pathConditions._smtFailedImplications, condition);
     return false;
   }
 
@@ -295,12 +295,12 @@ export class PathImplementation {
       return true;
     }
     if (!smtEnabled(realm)) return false;
-    if (pathConditions._smtFailedNegatives !== undefined && pathConditions._smtFailedNegatives.has(condition))
-      return false;
-    if (smtImpliesNot(pathConditions.getAllConditions(), condition))
-      return pathConditions.cacheNegativeImplicationSuccess(condition);
-    if (pathConditions._smtFailedNegatives === undefined) pathConditions._smtFailedNegatives = new Set();
-    pathConditions._smtFailedNegatives.add(condition);
+    if (hasEquivalent(pathConditions._smtFailedNegatives, condition)) return false;
+    let allConditions = pathConditions.getAllConditions();
+    if (allConditions.length === 0 && isAtomicAbstractValue(condition)) return false;
+    if (smtImpliesNot(allConditions, condition)) return pathConditions.cacheNegativeImplicationSuccess(condition);
+    if (pathConditions._smtFailedNegatives === undefined) pathConditions._smtFailedNegatives = new Map();
+    addEquivalent(pathConditions._smtFailedNegatives, condition);
     return false;
   }
 
@@ -384,7 +384,29 @@ function smtProvesInfeasible(base: PathConditions, condition: Value, inverse: bo
   if (!smtEnabled(realm)) return false;
   invariant(base instanceof PathConditionsImplementation);
   let conditions = base.getAllConditions();
+  if (conditions.length === 0 && isAtomicAbstractValue(condition)) return false;
   return inverse ? smtImplies(conditions, condition) : smtImpliesNot(conditions, condition);
+}
+
+function hasEquivalent(map: void | Map<number, Array<AbstractValue>>, c: AbstractValue): boolean {
+  if (map === undefined) return false;
+  let bucket = map.get(c.hashValue);
+  if (bucket === undefined) return false;
+  return bucket.some(x => x === c || x.equals(c));
+}
+
+function addEquivalent(map: Map<number, Array<AbstractValue>>, c: AbstractValue): void {
+  let bucket = map.get(c.hashValue);
+  if (bucket === undefined) map.set(c.hashValue, [c]);
+  else bucket.push(c);
+}
+
+function isAtomicAbstractValue(v: AbstractValue): boolean {
+  if (v.intrinsicName !== undefined) {
+    let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
+    return entry === undefined || entry.isPure !== true;
+  }
+  return v.operationDescriptor === undefined || v.operationDescriptor.type === "IDENTIFIER";
 }
 
 // Audit: every condition that pushing `condition` added to the path must follow from the base path and `condition`.

@@ -19,19 +19,14 @@ import { Path, To } from "../singletons.js";
 import EmptyValue from "../values/EmptyValue.js";
 import { createOperationDescriptor } from "./generator.js";
 import { NullValue, NumberValue, ObjectValue, PrimitiveValue, UndefinedValue } from "../values/index.js";
-import { auditRewrite, smtAuditing, smtEnabled } from "./smt/index.js";
+import { auditRewrite, smtAuditing } from "./smt/index.js";
 
 export default function simplifyAndRefineAbstractValue(
   realm: Realm,
   isCondition: boolean, // The value is only used after converting it to a Boolean
   value: AbstractValue
 ): Value {
-  if (
-    value.intrinsicName !== undefined &&
-    (realm.pathConditions.isEmpty() || (!isCondition && value.getType() !== BooleanValue))
-  ) {
-    return value;
-  }
+  if (value.intrinsicName !== undefined) return value;
   let savedHandler = realm.errorHandler;
   let savedIsReadOnly = realm.isReadOnly;
   realm.isReadOnly = true;
@@ -101,27 +96,14 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     case "&&": {
       let [x0, y0] = value.args;
       let x = simplify(realm, x0, isCondition, depth + 1);
+      let y = simplify(realm, y0, isCondition, depth + 1);
+      if (x instanceof AbstractValue && x.equals(y)) return x;
       // true && y <=> y
       // true || y <=> true
-      if (!x.mightNotBeTrue()) return op === "&&" ? simplify(realm, y0, isCondition, depth + 1) : x;
+      if (!x.mightNotBeTrue()) return op === "&&" ? y : x;
       // (x == false) && y <=> x
       // false || y <=> y
-      if (!x.mightNotBeFalse()) return op === "||" ? simplify(realm, y0, isCondition, depth + 1) : x;
-      let y;
-      if (smtEnabled(realm) && depth <= 2 && x instanceof AbstractValue) {
-        try {
-          y =
-            op === "&&"
-              ? Path.withCondition(x, () => simplify(realm, y0, isCondition, depth + 1))
-              : Path.withInverseCondition(x, () => simplify(realm, y0, isCondition, depth + 1));
-        } catch (e) {
-          if (e instanceof InfeasiblePathError) return x;
-          throw e;
-        }
-      } else {
-        y = simplify(realm, y0, isCondition, depth + 1);
-      }
-      if (x instanceof AbstractValue && x.equals(y)) return x;
+      if (!x.mightNotBeFalse()) return op === "||" ? y : x;
       if (isCondition || (x.getType() === BooleanValue && y.getType() === BooleanValue)) {
         // (x: boolean) && true <=> x
         // x || true <=> true
@@ -129,19 +111,6 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         // (x: boolean) && false <=> false
         // (x: boolean) || false <=> x
         if (!y.mightNotBeFalse()) return op === "||" ? x : realm.intrinsics.false;
-        if (smtEnabled(realm) && depth <= 2 && x instanceof AbstractValue && y instanceof AbstractValue) {
-          try {
-            x =
-              op === "&&"
-                ? Path.withCondition(y, () => simplify(realm, x, isCondition, depth + 1))
-                : Path.withInverseCondition(y, () => simplify(realm, x, isCondition, depth + 1));
-          } catch (e) {
-            if (e instanceof InfeasiblePathError) return op === "&&" ? realm.intrinsics.false : x;
-            throw e;
-          }
-          if (!x.mightNotBeTrue()) return op === "&&" ? y : realm.intrinsics.true;
-          if (!x.mightNotBeFalse()) return op === "||" ? y : realm.intrinsics.false;
-        }
       }
       if (op === "||") {
         if (y instanceof AbstractValue && y.kind === "||") {
@@ -659,13 +628,10 @@ function strictlyAlwaysEqual(realm: Realm, u: Value, v: Value, depth: number): b
   if (u instanceof ConcreteValue && v instanceof ConcreteValue) {
     return u instanceof NumberValue && v instanceof NumberValue ? u.value === v.value : u.equals(v);
   }
-  if (u.equals(v)) {
-    if (cannotBeNaN(v)) return true;
-    let selfEq = AbstractValue.createFromBinaryOp(realm, "===", v, v, undefined, undefined, true, true);
-    return Path.implies(selfEq, depth + 1);
-  }
-  let eq = AbstractValue.createFromBinaryOp(realm, "===", u, v, undefined, undefined, true, true);
-  return Path.implies(eq, depth + 1);
+  if (!u.equals(v)) return false;
+  if (cannotBeNaN(v)) return true;
+  let selfEq = AbstractValue.createFromBinaryOp(realm, "===", v, v, undefined, undefined, true, true);
+  return Path.implies(selfEq, depth + 1);
 }
 
 function strictlyAlwaysNotEqual(realm: Realm, u: Value, v: Value, depth: number): boolean {

@@ -88,7 +88,7 @@ function run(
     --warnAsError            Turns all warnings into errors.
     --diagnosticAsError      A comma-separated list of non-fatal-error PPxxxx diagnostic codes that should get turned into (recoverable) errors.
     --noDiagnostic           A comma-separated list of non-fatal-error PPxxxx diagnostic codes that should get suppressed.
-    --smt                    Z3 path-condition solver mode: off | fallback | audit (default = off, or $PREPACK_SMT).
+    --smt                    Z3 path-condition solver mode: off | fallback | audit (default = fallback when z3 is available, or $PREPACK_SMT).
   `;
   let args = Array.from(process.argv);
   args.splice(0, 2);

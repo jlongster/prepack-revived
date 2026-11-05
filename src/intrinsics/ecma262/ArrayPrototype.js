@@ -22,6 +22,7 @@ import {
   NumberValue,
   ObjectValue,
   StringValue,
+  SymbolValue,
   UndefinedValue,
   Value,
 } from "../../values/index.js";
@@ -859,16 +860,32 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 5. If len is zero, return the empty String.
     if (len === 0) return realm.intrinsics.emptyString;
 
+    let elemToStringVal = (el: Value): Value => {
+      if (
+        el instanceof AbstractValue &&
+        !el.mightBeNull() &&
+        !el.mightBeUndefined() &&
+        el.getType() !== SymbolValue &&
+        To.IsToPrimitivePure(realm, el)
+      ) {
+        return el.getType() === StringValue
+          ? el
+          : AbstractValue.createFromBinaryOp(realm, "+", realm.intrinsics.emptyString, el);
+      }
+      if (HasSomeCompatibleType(el, UndefinedValue, NullValue)) return realm.intrinsics.emptyString;
+      return new StringValue(realm, To.ToStringPartial(realm, el));
+    };
+    let concat = (a: Value, b: Value): Value =>
+      a instanceof StringValue && b instanceof StringValue
+        ? new StringValue(realm, a.value + b.value)
+        : AbstractValue.createFromBinaryOp(realm, "+", a, b);
+    let sepVal = new StringValue(realm, sep);
+
     // 6. Let element0 be Get(O, "0").
     let element0 = Get(realm, O, "0");
 
     // 7. If element0 is undefined or null, let R be the empty String; otherwise, let R be ? ToString(element0).
-    let R: ?string;
-    if (HasSomeCompatibleType(element0, UndefinedValue, NullValue)) {
-      R = "";
-    } else {
-      R = To.ToStringPartial(realm, element0);
-    }
+    let R: Value = elemToStringVal(element0);
 
     // 8. Let k be 1.
     let k = 1;
@@ -876,28 +893,23 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 9. Repeat, while k < len
     while (k < len) {
       // a. Let S be the String value produced by concatenating R and sep.
-      let S: string = R + sep;
+      let S: Value = sep === "" ? R : concat(R, sepVal);
 
       // b. Let element be ? Get(O, ! To.ToString(k)).
       let element = Get(realm, O, new StringValue(realm, k + ""));
 
       // c. If element is undefined or null, let next be the empty String; otherwise, let next be ? ToString(element).
-      let next: ?string;
-      if (HasSomeCompatibleType(element, UndefinedValue, NullValue)) {
-        next = "";
-      } else {
-        next = To.ToStringPartial(realm, element);
-      }
+      let next: Value = elemToStringVal(element);
 
       // d. Let R be a String value produced by concatenating S and next.
-      R = S + next;
+      R = concat(S, next);
 
       // e. Increase k by 1.
       k++;
     }
 
     // 10. Return R.
-    return new StringValue(realm, R + "");
+    return R;
   });
 
   // ECMA262 22.1.3.14

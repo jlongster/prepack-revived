@@ -1,6 +1,7 @@
 // does not contain:z = 5;
-// does contain:16:11
-// Copies of x = 25: 1
+// does contain:13:11
+// does not contain:16:11
+// Copies of x = 25: 0
 // add at runtime: global.x = 3;
 var x;
 if (global.__abstract) x = __abstract("number", "(3)");

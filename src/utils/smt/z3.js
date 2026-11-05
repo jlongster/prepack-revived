@@ -21,15 +21,6 @@ export type Z3Answer = "sat" | "unsat" | "unknown";
 const MARKER = "@@PREPACK_Z3_END@@";
 const MAX_RESTARTS = 3;
 
-let sleepCell: void | Int32Array;
-function sleep(ms: number): void {
-  const SAB = (global: any).SharedArrayBuffer; // eslint-disable-line no-undef
-  const A = (global: any).Atomics; // eslint-disable-line no-undef
-  if (SAB === undefined || A === undefined) return;
-  if (sleepCell === undefined) sleepCell = new Int32Array(new SAB(4));
-  A.wait(sleepCell, 0, 0, ms);
-}
-
 export class Z3Process {
   constructor(binary: string, timeoutMs: number, prelude: string) {
     this.binary = binary;
@@ -86,8 +77,6 @@ export class Z3Process {
       let outPath = path.join(dir, "out");
       let mk = cp.spawnSync("mkfifo", [inPath, outPath]);
       if (mk.status !== 0) throw new Error("mkfifo failed");
-      // Opening the read side O_RDWR keeps a writer around, so reads never see EOF and never block.
-      this.outFd = fs.openSync(outPath, fs.constants.O_RDWR | fs.constants.O_NONBLOCK);
       let quote = s => "'" + s.replace(/'/g, "'\\''") + "'";
       let child = cp.spawn(
         "sh",
@@ -103,16 +92,8 @@ export class Z3Process {
       });
       this.child = child;
       registerExitHook(this);
-      let deadline = Date.now() + 5000;
-      for (;;) {
-        try {
-          this.inFd = fs.openSync(inPath, fs.constants.O_WRONLY | fs.constants.O_NONBLOCK);
-          break;
-        } catch (e) {
-          if (e.code !== "ENXIO" || Date.now() > deadline) throw e;
-          sleep(1);
-        }
-      }
+      this.inFd = fs.openSync(inPath, "w");
+      this.outFd = fs.openSync(outPath, "r");
       this.pending = "";
       let out = this.run(this.prelude);
       if (out === undefined || out.includes("(error")) {
@@ -130,34 +111,23 @@ export class Z3Process {
     }
   }
 
-  _write(text: string, deadline: number): void {
+  _write(text: string, _deadline: number): void {
     let fs = require("fs");
     let fd = this.inFd;
     if (fd === undefined) throw new Error("z3 not running");
     let data = Buffer.from(text, "utf8");
     let offset = 0;
-    let spins = 0;
     while (offset < data.length) {
-      let n = 0;
-      try {
-        n = fs.writeSync(fd, data, offset, data.length - offset);
-      } catch (e) {
-        if (e.code !== "EAGAIN") throw e;
-      }
-      if (n > 0) {
-        offset += n;
-        continue;
-      }
-      if (Date.now() > deadline) throw new Error("z3 write timeout");
-      if (++spins > 100) sleep(1);
+      let n = fs.writeSync(fd, data, offset, data.length - offset);
+      if (n <= 0) throw new Error("z3 pipe closed");
+      offset += n;
     }
   }
 
-  _readUntilMarker(deadline: number): string {
+  _readUntilMarker(_deadline: number): string {
     let fs = require("fs");
     let fd = this.outFd;
     if (fd === undefined) throw new Error("z3 not running");
-    let spins = 0;
     for (;;) {
       let i = this.pending.indexOf(MARKER);
       if (i >= 0) {
@@ -165,20 +135,9 @@ export class Z3Process {
         this.pending = this.pending.slice(i + MARKER.length).replace(/^\r?\n/, "");
         return result;
       }
-      let n = 0;
-      try {
-        n = fs.readSync(fd, this.buffer, 0, this.buffer.length, (null: any));
-      } catch (e) {
-        if (e.code !== "EAGAIN") throw e;
-      }
-      if (n > 0) {
-        this.pending += this.buffer.toString("utf8", 0, n);
-        spins = 0;
-        continue;
-      }
-      if (Date.now() > deadline) throw new Error("z3 read timeout");
-      // Spin briefly (answers usually arrive within tens of microseconds), then back off.
-      if (++spins > 2000) sleep(spins > 4000 ? 2 : 0.2);
+      let n = fs.readSync(fd, this.buffer, 0, this.buffer.length, (null: any));
+      if (n === 0) throw new Error("z3 exited unexpectedly");
+      this.pending += this.buffer.toString("utf8", 0, n);
     }
     // eslint-disable-next-line no-unreachable
     return "";

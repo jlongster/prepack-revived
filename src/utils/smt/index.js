@@ -12,24 +12,25 @@
 // Z3-backed answers to the yes/no questions Prepack asks about path conditions, plus an audit of simplifier rewrites.
 //
 // Modes (PrepackOptions.smt, or the PREPACK_SMT environment variable):
-//   off      - never call the solver (default when z3 is not installed).
-//   fallback - when the hand-written rules cannot decide an implication, ask z3; detect infeasible branches.
+//   off      - never call the solver (also automatic when z3 is not installed).
+//   fallback - default when z3 is installed: when the hand-written rules cannot decide an implication, ask z3; detect
+//              infeasible branches.
 //   audit    - fallback, plus check every simplifier rewrite and every positive answer of the hand-written rules.
 //              Unsound steps are reported with a counterexample (PREPACK_SMT_AUDIT_LOG=<file> appends JSON lines,
 //              PREPACK_SMT_AUDIT_THROW=1 throws instead).
 // Any solver failure (not installed, timeout, crash, untranslatable value) is "don't know", which is always safe.
 
 import type { Realm } from "../../realm.js";
-import { AbstractValue, Value } from "../../values/index.js";
+import { AbstractValue, EmptyValue, Value } from "../../values/index.js";
 import { SmtTranslator, SMT_PRELUDE, TranslationError, describe } from "./translate.js";
 import { Z3Process, findZ3, type Z3Answer } from "./z3.js";
 
 export type SmtMode = "off" | "fallback" | "audit";
 export const SmtModeValues = ["off", "fallback", "audit"];
 
-// z3's resource limit per check-sat (roughly 1M units per second). Unlike :timeout it needs no timer thread,
-// which costs ~2.5ms per query.
-const DEFAULT_RLIMIT = 2000000;
+// z3's resource limit per check-sat. Normal Prepack queries take <10k units (<1ms); capping at 200k prevents blowups on
+// huge unrolled expressions.
+const DEFAULT_RLIMIT = 200000;
 // Hard limit for one round trip; beyond it the z3 process is killed and the answer is "unknown".
 const HARD_TIMEOUT_MS = 5000;
 const CACHE_LIMIT = 100000;
@@ -94,7 +95,7 @@ export function resolveSmtMode(option: void | SmtMode): SmtMode {
     let env = process.env.PREPACK_SMT;
     if (env === "off" || env === "fallback" || env === "audit") mode = env;
   }
-  return mode || "off";
+  return mode || "fallback";
 }
 
 export function smtEnabled(realm: Realm): boolean {
@@ -172,19 +173,82 @@ function provenUnsat(assumptions: $ReadOnlyArray<Value>, goal: SmtTranslator => 
   return check(q.script)[0] === "unsat";
 }
 
+// Collects the hashValues of opaque leaves reachable inside `v` so unrelated path conditions can be sliced away.
+function collectLeafHashes(v: Value, out: Set<number>, seen: Set<AbstractValue>): void {
+  if (!(v instanceof AbstractValue) || seen.has(v)) return;
+  seen.add(v);
+  let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
+  if (entry !== undefined && entry.isPure === true) {
+    if (entry.args.length === 0) out.add(v.hashValue);
+    else for (let a of entry.args) collectLeafHashes(a, out, seen);
+    return;
+  }
+  if (v.intrinsicName !== undefined || v.args.length === 0) {
+    out.add(v.hashValue);
+  }
+  for (let a of v.args) collectLeafHashes(a, out, seen);
+}
+
+// Keeps only assumptions transitively sharing at least one leaf hash with `target` (sound by monotonicity: dropping
+// assumptions can never fabricate an `unsat` proof).
+function sliceRelevantAssumptions(assumptions: $ReadOnlyArray<Value>, target: Value): Array<Value> {
+  if (assumptions.length === 0) return [];
+  let relevant = new Set();
+  collectLeafHashes(target, relevant, new Set());
+  if (relevant.size === 0) return [];
+  let perAssumption = assumptions.map(a => {
+    let s = new Set();
+    collectLeafHashes(a, s, new Set());
+    return s;
+  });
+  let kept = new Array(assumptions.length).fill(false);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < assumptions.length; i++) {
+      if (kept[i]) continue;
+      let s = perAssumption[i];
+      let hits = false;
+      for (let h of s) {
+        if (relevant.has(h)) {
+          hits = true;
+          break;
+        }
+      }
+      if (hits) {
+        kept[i] = true;
+        for (let h of s) relevant.add(h);
+        changed = true;
+      }
+    }
+  }
+  let result = [];
+  for (let i = 0; i < assumptions.length && result.length < 32; i++) {
+    if (kept[i]) result.push(assumptions[i]);
+  }
+  return result;
+}
+
 // conditions => condition (truthy)
 export function smtImplies(conditions: $ReadOnlyArray<Value>, condition: Value): boolean {
-  return provenUnsat(conditions, t => `(not ${t.truthy(condition)})`);
+  return provenUnsat(sliceRelevantAssumptions(conditions, condition), t => `(not ${t.truthy(condition)})`);
 }
 
 // conditions => !condition
 export function smtImpliesNot(conditions: $ReadOnlyArray<Value>, condition: Value): boolean {
-  return provenUnsat(conditions, t => t.truthy(condition));
+  return provenUnsat(sliceRelevantAssumptions(conditions, condition), t => t.truthy(condition));
 }
 
 // The path conditions themselves are contradictory.
 export function smtInfeasible(conditions: $ReadOnlyArray<Value>): boolean {
   return provenUnsat(conditions, () => "true");
+}
+
+// conditions => value is a JS object (typeof === "object" && !== null, or typeof === "function")
+export function smtIsObject(conditions: $ReadOnlyArray<Value>, value: Value): boolean {
+  let relevant = sliceRelevantAssumptions(conditions, value);
+  if (relevant.length === 0) return false;
+  return provenUnsat(relevant, t => `(not ((_ is Obj) ${t.term(value)}))`);
 }
 
 export type Counterexample = { [string]: string };
@@ -210,16 +274,13 @@ export function auditRewrite(
   to: Value,
   isCondition: boolean
 ): void {
+  // Prepack's internal EmptyValue sentinel promotes to `undefined` on value reads while comparing !== undefined on
+  // raw descriptors; skip JS-value equivalence checks on trees containing it.
+  if (containsEmptySentinel(from) || containsEmptySentinel(to)) return;
   stats.auditChecks++;
-  let cex = findCounterexample(conditions, t => {
-    if (isCondition) return `(not (= ${t.truthy(from)} ${t.truthy(to)}))`;
-    let a = t.term(from);
-    let b = t.term(to);
-    if (!to.mightHaveBeenDeleted()) {
-      a = `(ite ((_ is Empty) ${a}) Undef ${a})`;
-    }
-    return `(not (same ${a} ${b}))`;
-  });
+  let cex = findCounterexample(conditions, t =>
+    isCondition ? `(not (= ${t.truthy(from)} ${t.truthy(to)}))` : `(not (same ${t.term(from)} ${t.term(to)}))`
+  );
   if (cex === undefined) return;
   report(realm, {
     kind: isCondition ? "rewrite (as condition)" : "rewrite",
@@ -228,6 +289,14 @@ export function auditRewrite(
     pathConditions: conditions.map(c => describe(c)),
     counterexample: cex,
   });
+}
+
+function containsEmptySentinel(v: Value, depth: number = 0): boolean {
+  if (v instanceof EmptyValue) return true;
+  if (!(v instanceof AbstractValue) || depth > 6) return false;
+  if (v.mightBeEmpty) return true;
+  for (let a of v.args) if (containsEmptySentinel(a, depth + 1)) return true;
+  return false;
 }
 
 // Audit: the hand-written rules claimed conditions => (negated ? !condition : condition).

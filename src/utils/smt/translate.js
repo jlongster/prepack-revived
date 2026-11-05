@@ -148,7 +148,7 @@ export class TranslationError extends Error {}
 export type Leaf = { name: string, label: string };
 
 export class SmtTranslator {
-  constructor(maxNodes: number = 4000) {
+  constructor(maxNodes: number = 250) {
     this.decls = [];
     this.buckets = new Map();
     this.pureLeaves = [];
@@ -194,7 +194,7 @@ export class SmtTranslator {
     if (pureSpec !== undefined) {
       let [od, args] = pureSpec;
       for (let [od2, args2, name] of this.pureLeaves) {
-        if (od === od2 && sameArgs(args, args2)) {
+        if (samePureDescriptor(od, od2) && this.sameArgs(args, args2)) {
           bucket.push([v, name]);
           return name;
         }
@@ -420,21 +420,35 @@ export class SmtTranslator {
     }
     return facts;
   }
+
+  sameArgs(a: Array<Value>, b: Array<Value>): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!a[i].equals(b[i]) && this.term(a[i]) !== this.term(b[i])) return false;
+    }
+    return true;
+  }
 }
 
 // Identifies pure operations that dischargeValuesFromUnion may duplicate into a temporal `_$...`.
 function pureOperationSpec(v: AbstractValue): void | [OperationDescriptor, Array<Value>] {
-  if (v.intrinsicName !== undefined) {
-    let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
-    if (entry !== undefined && entry.isPure === true) {
-      return [entry.operationDescriptor, entry.args];
-    }
-    return undefined;
+  let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
+  if (entry !== undefined) {
+    return entry.isPure === true ? [entry.operationDescriptor, entry.args] : undefined;
   }
-  if (v.operationDescriptor !== undefined && v.operationDescriptor.type !== "IDENTIFIER") {
+  if (v.operationDescriptor !== undefined) {
     return [v.operationDescriptor, v.args];
   }
   return undefined;
+}
+
+function samePureDescriptor(a: OperationDescriptor, b: OperationDescriptor): boolean {
+  if (a === b) return true;
+  if (a.type !== b.type) return false;
+  if (a.type === "ABSTRACT_PROPERTY") return true;
+  if (a.type === "ABSTRACT_FROM_TEMPLATE") return a.data.templateSource === b.data.templateSource;
+  if (a.type === "IDENTIFIER") return a.data.id === b.data.id;
+  return false;
 }
 
 function operatorKindOf(od: OperationDescriptor): void | any {
@@ -443,12 +457,6 @@ function operatorKindOf(od: OperationDescriptor): void | any {
   if (od.type === "UNARY_EXPRESSION") return od.data.unaryOperator;
   if (od.type === "CONDITIONAL_EXPRESSION") return "conditional";
   return undefined;
-}
-
-function sameArgs(a: Array<Value>, b: Array<Value>): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (!a[i].equals(b[i])) return false;
-  return true;
 }
 
 // Multiplication of a symbolic `N` term by a concrete JS number `k` (keeps multiplication linear for Z3).
