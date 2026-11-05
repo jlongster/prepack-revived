@@ -12,6 +12,7 @@
 import { Realm } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
 import { IsArray, Get } from "../methods/index.js";
+import { ArrayElementSize } from "../methods/typedarray.js";
 import {
   AbstractValue,
   BooleanValue,
@@ -1495,12 +1496,35 @@ export class ResidualHeapSerializer {
     invariant(buf !== undefined);
     let outlinedArrayBuffer = this.serializeValue(buf, true);
     this._emitObjectProperties(val);
-    return t.newExpression(this.preludeGenerator.memoizeReference(val.getKind()), [outlinedArrayBuffer]);
+    let bufByteLen = buf.$ArrayBufferByteLength;
+    invariant(typeof bufByteLen === "number");
+    let byteOffset = val.$ByteOffset || 0;
+    let ctorArgs: Array<BabelNodeExpression> = [outlinedArrayBuffer];
+    let kind = val.getKind();
+    if (kind === "DataView") {
+      let byteLen = val.$ByteLength;
+      invariant(typeof byteLen === "number");
+      if (byteOffset !== 0 || byteLen !== bufByteLen) {
+        ctorArgs.push(t.numericLiteral(byteOffset));
+        if (byteOffset + byteLen !== bufByteLen) {
+          ctorArgs.push(t.numericLiteral(byteLen));
+        }
+      }
+    } else {
+      let elemSize = ArrayElementSize[(kind: any)];
+      let arrLen = val.$ArrayLength;
+      invariant(typeof elemSize === "number" && typeof arrLen === "number");
+      if (byteOffset !== 0 || arrLen * elemSize !== bufByteLen) {
+        ctorArgs.push(t.numericLiteral(byteOffset));
+        if (byteOffset + arrLen * elemSize !== bufByteLen) {
+          ctorArgs.push(t.numericLiteral(arrLen));
+        }
+      }
+    }
+    return t.newExpression(this.preludeGenerator.memoizeReference(kind), ctorArgs);
   }
 
   _serializeValueArrayBuffer(val: ObjectValue): BabelNodeExpression {
-    let elems = [];
-
     let len = val.$ArrayBufferByteLength;
     let db = val.$ArrayBufferData;
     invariant(len !== undefined);
@@ -1509,16 +1533,32 @@ export class ResidualHeapSerializer {
     for (let i = 0; i < len; i++) {
       if (db[i] !== 0) {
         allzero = false;
+        break;
       }
-      let elem = t.numericLiteral(db[i]);
-      elems.push(elem);
     }
 
     this._emitObjectProperties(val);
     if (allzero) {
       // if they're all zero, just emit the array buffer constructor
       return t.newExpression(this.preludeGenerator.memoizeReference(val.getKind()), [t.numericLiteral(len)]);
+    } else if (len >= 64 && len % 4 === 0) {
+      // Pack 4 little-endian bytes per Uint32 literal (matching SetValueInBuffer's little-endian layout)
+      // so large TypedArray lookup tables emit 4x fewer AST nodes.
+      let view = new DataView(db.buffer, db.byteOffset, len);
+      let wordCount = len >> 2;
+      let words = new Array(wordCount);
+      for (let i = 0; i < wordCount; i++) {
+        words[i] = t.numericLiteral(view.getUint32(i << 2, true));
+      }
+      let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint32Array"), [
+        t.arrayExpression(words),
+      ]);
+      return t.memberExpression(consExpr, t.identifier("buffer"));
     } else {
+      let elems = new Array(len);
+      for (let i = 0; i < len; i++) {
+        elems[i] = t.numericLiteral(db[i]);
+      }
       // initialize from a byte array otherwise
       let arrayValue = t.arrayExpression(elems);
       let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint8Array"), [arrayValue]);

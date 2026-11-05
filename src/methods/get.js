@@ -422,6 +422,7 @@ export function OrdinaryGetPartial(
     }
   }
 
+  let originalP = P;
   P = To.ToStringAbstract(realm, P);
 
   // If all else fails, use this expression
@@ -472,7 +473,13 @@ export function OrdinaryGetPartial(
       if (val.kind === "widened numeric property") {
         invariant(O instanceof ArrayValue && ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O));
         invariant(Receiver instanceof ObjectValue || Receiver instanceof AbstractObjectValue);
-        return GetFromArrayWithWidenedNumericProperty(realm, Receiver, P instanceof StringValue ? P.value : P);
+        let indexOrProp =
+          originalP instanceof AbstractValue && !originalP.mightNotBeNumber()
+            ? originalP
+            : P instanceof StringValue
+            ? P.value
+            : P;
+        return GetFromArrayWithWidenedNumericProperty(realm, Receiver, indexOrProp);
       }
       result = specializeJoin(realm, val, P);
     }

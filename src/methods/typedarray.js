@@ -26,7 +26,9 @@ import { AllocateArrayBuffer } from "./arraybuffer.js";
 import { IsDetachedBuffer, IsInteger } from "./is.js";
 import { GetValueFromBuffer, SetValueInBuffer } from "./arraybuffer.js";
 import { Construct, SpeciesConstructor } from "./construct.js";
-import { To } from "../singletons.js";
+import { Leak, To } from "../singletons.js";
+import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { createOperationDescriptor } from "../utils/generator.js";
 import invariant from "../invariant.js";
 
 export const ArrayElementSize = {
@@ -124,6 +126,16 @@ export function IntegerIndexedElementGet(realm: Realm, O: ObjectValue, index: nu
   // 8. If index < 0 or index ≥ length, return undefined.
   if (index < 0 || index >= length) return realm.intrinsics.undefined;
 
+  if (buffer.mightBeLeakedObject()) {
+    return (AbstractValue.createTemporalFromBuildFunction(
+      realm,
+      NumberValue,
+      [O, new NumberValue(realm, index)],
+      createOperationDescriptor("OBJECT_GET_PARTIAL"),
+      { skipInvariant: true, isPure: true }
+    ): any);
+  }
+
   // 9. Let offset be O.[[ByteOffset]].
   let offset = O.$ByteOffset;
   invariant(typeof offset === "number");
@@ -159,12 +171,55 @@ export function IntegerIndexedElementSet(realm: Realm, O: ObjectValue, index: nu
       O.$TypedArrayName
   );
 
-  // 3. Let numValue be ? ToNumber(value).
-  let numValue = To.ToNumber(realm, value);
-
-  // 4. Let buffer be O.[[ViewedArrayBuffer]].
   let buffer = O.$ViewedArrayBuffer;
   invariant(buffer);
+
+  if (buffer.mightBeLeakedObject()) {
+    let coerced: Value;
+    if (value instanceof AbstractValue) {
+      if (To.IsToNumberPure(realm, value)) {
+        coerced = To.ToNumberAbstract(realm, value);
+      } else if (realm.isInPureScope() && !realm.instantRender.enabled) {
+        realm.evaluateWithPossibleThrowCompletion(
+          () => {
+            if (value.mightBeObject()) Leak.value(realm, value);
+            if (IsDetachedBuffer(realm, buffer) === true) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "IsDetachedBuffer(buffer) is true");
+            }
+            if (
+              IsInteger(realm, index) !== false &&
+              !Object.is(index, -0) &&
+              index >= 0 &&
+              index < (O.$ArrayLength: any)
+            ) {
+              invariant(realm.generator !== undefined);
+              realm.generator.emitPropertyAssignment(O, index + "", value);
+            }
+            return realm.intrinsics.undefined;
+          },
+          TypesDomain.topVal,
+          ValuesDomain.topVal
+        );
+        return true;
+      } else {
+        coerced = new NumberValue(realm, To.ToNumber(realm, value));
+      }
+    } else {
+      coerced = new NumberValue(realm, To.ToNumber(realm, value));
+    }
+    if (IsDetachedBuffer(realm, buffer) === true) {
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "IsDetachedBuffer(buffer) is true");
+    }
+    if (IsInteger(realm, index) === false || Object.is(index, -0) || index < 0 || index >= (O.$ArrayLength: any)) {
+      return false;
+    }
+    invariant(realm.generator !== undefined);
+    realm.generator.emitPropertyAssignment(O, index + "", coerced);
+    return true;
+  }
+
+  // 3. Let numValue be ? ToNumber(value).
+  let numValue = To.ToNumber(realm, value);
 
   // 5. If IsDetachedBuffer(buffer) is true, throw a TypeError exception.
   if (IsDetachedBuffer(realm, buffer) === true) {

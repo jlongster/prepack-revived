@@ -11,7 +11,14 @@
 
 import type { Realm } from "../../realm.js";
 import { ObjectValue, StringValue, NumberValue, UndefinedValue } from "../../values/index.js";
-import { Construct, CopyDataBlockBytes, IsDetachedBuffer, SameValue, SpeciesConstructor } from "../../methods/index.js";
+import {
+  Construct,
+  CopyDataBlockBytes,
+  IsDetachedBuffer,
+  SameValue,
+  SpeciesConstructor,
+  recordArrayBufferDataModification,
+} from "../../methods/index.js";
 import { To } from "../../singletons.js";
 import invariant from "../../invariant.js";
 
@@ -130,6 +137,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
     invariant(fromBuf);
 
     // 20. Let toBuf be New.[[ArrayBufferData]].
+    recordArrayBufferDataModification(realm, New);
     let toBuf = New.$ArrayBufferData;
     invariant(toBuf);
 

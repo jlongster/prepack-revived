@@ -527,6 +527,22 @@ export class PropertiesImplementation {
       }
     }
 
+    if (
+      O.isSimpleObject() &&
+      !realm.ignoreLeakLogic &&
+      !O.mightNotBeLeakedObject() &&
+      !realm.isInPureScope() &&
+      (!P.mightNotBeString() || !P.mightNotBeNumber()) &&
+      realm.generator !== undefined
+    ) {
+      if (realm.createdObjectsTrackedForLeaks !== undefined) {
+        Leak.value(realm, V);
+      }
+      invariant(P instanceof AbstractValue);
+      realm.generator.emitPropertyAssignment(Receiver, P, V);
+      return true;
+    }
+
     // We assume that simple objects have no getter/setter properties and
     // that all properties are writable.
     if (!O.isSimpleObject() || (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && realm.isInPureScope())) {
