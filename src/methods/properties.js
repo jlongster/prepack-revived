@@ -532,6 +532,26 @@ export class PropertiesImplementation {
       }
     }
 
+    // On a simple object, neither O nor its prototype chain has setters, so [[Set]] with a
+    // primitive Receiver always fails at ECMA262 9.1.9.1 step 4.b after ToPropertyKey(P).
+    if (O.isSimpleObject() && !Receiver.mightBeObject()) {
+      if (P.mightBeObject() && realm.isInPureScope()) {
+        realm.evaluateWithPossibleThrowCompletion(
+          () =>
+            AbstractValue.createTemporalFromBuildFunction(
+              realm,
+              Value,
+              [realm.intrinsics.zero, P],
+              createOperationDescriptor("OBJECT_GET_PARTIAL"),
+              { skipInvariant: true }
+            ),
+          TypesDomain.topVal,
+          ValuesDomain.topVal
+        );
+      }
+      return false;
+    }
+
     // We assume that simple objects have no getter/setter properties and
     // that all properties are writable.
     if (!O.isSimpleObject() || (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && realm.isInPureScope())) {

@@ -11,7 +11,7 @@
 
 import type { Realm } from "../../realm.js";
 import { Create, To } from "../../singletons.js";
-import { NumberValue, ObjectValue, UndefinedValue, StringValue } from "../../values/index.js";
+import { AbstractValue, NumberValue, ObjectValue, UndefinedValue, StringValue } from "../../values/index.js";
 import { Get } from "../../methods/get.js";
 import invariant from "../../invariant.js";
 
@@ -37,6 +37,8 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 4. Let a be the value of the [[IteratedObject]] internal slot of O.
     let a = O.$IteratedObject;
+    if (a instanceof AbstractValue) a = realm.simplifyAndRefineAbstractValue(a);
+    a = a.throwIfNotConcrete();
     invariant(a instanceof ObjectValue || a instanceof UndefinedValue);
 
     // 5. If a is undefined, return CreateIterResultObject(undefined, true).
@@ -45,7 +47,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 6. Let index be the value of the [[ArrayIteratorNextIndex]] internal slot of O.
-    let index = O.$ArrayIteratorNextIndex.value;
+    let nextIdx = O.$ArrayIteratorNextIndex;
+    if (nextIdx instanceof AbstractValue) nextIdx = realm.simplifyAndRefineAbstractValue(nextIdx);
+    let index = nextIdx.throwIfNotConcreteNumber().value;
 
     // 7. Let itemKind be the value of the [[ArrayIterationKind]] internal slot of O.
     let itemKind = O.$ArrayIterationKind;

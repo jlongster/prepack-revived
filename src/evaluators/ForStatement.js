@@ -109,6 +109,33 @@ function ForBodyEvaluation(
   initialV?: Value,
   initialTestValue?: Value
 ): Value {
+  let loopCompletion = realm.evaluateCompletionInSavedCompletionScope(() =>
+    ForBodyEvaluationInner(
+      realm,
+      test,
+      increment,
+      stmt,
+      perIterationBindings,
+      labelSet,
+      strictCode,
+      initialV,
+      initialTestValue
+    )
+  );
+  return realm.returnOrThrowCompletion(loopCompletion);
+}
+
+function ForBodyEvaluationInner(
+  realm: Realm,
+  test,
+  increment,
+  stmt,
+  perIterationBindings: Array<string>,
+  labelSet: ?Array<string>,
+  strictCode: boolean,
+  initialV?: Value,
+  initialTestValue?: Value
+): Value {
   // 1. Let V be undefined.
   let V: Value = initialV !== undefined ? initialV : realm.intrinsics.undefined;
   let pendingTestValue: void | Value = initialTestValue;
@@ -154,13 +181,17 @@ function ForBodyEvaluation(
 
       // iii. If ToBoolean(testValue) is false, return NormalCompletion(V).
       if (!To.ToBooleanPartial(realm, testValue)) {
-        result = Functions.incorporateSavedCompletion(realm, V);
-        if (result instanceof JoinedNormalAndAbruptCompletions) {
-          let selector = c => c instanceof BreakCompletion && !c.target;
-          result = Completion.normalizeSelectedCompletions(selector, result);
-          result = realm.composeWithSavedCompletion(result);
+        let exitCompletion = Functions.incorporateSavedCompletion(realm, V);
+        let matchesUnlabeledBreak = c => c instanceof BreakCompletion && !c.target;
+        if (
+          (exitCompletion instanceof JoinedNormalAndAbruptCompletions ||
+            exitCompletion instanceof JoinedAbruptCompletions) &&
+          exitCompletion.containsSelectedCompletion(matchesUnlabeledBreak)
+        ) {
+          exitCompletion = Completion.normalizeSelectedCompletions(matchesUnlabeledBreak, exitCompletion);
         }
-        return V;
+        invariant(exitCompletion instanceof Completion || exitCompletion instanceof Value);
+        return realm.returnOrThrowCompletion(exitCompletion);
       }
     }
 

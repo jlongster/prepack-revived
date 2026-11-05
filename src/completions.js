@@ -100,9 +100,14 @@ export class Completion {
     if (completion instanceof JoinedNormalAndAbruptCompletions || completion instanceof JoinedAbruptCompletions) {
       let nc = Completion.normalizeSelectedCompletions(selector, completion.consequent);
       let na = Completion.normalizeSelectedCompletions(selector, completion.alternate);
-      if (normalizedComposedWith === undefined) {
-        if (nc === completion.consequent && na === completion.alternate) return completion;
-        if (nc instanceof AbruptCompletion && na instanceof AbruptCompletion) return completion;
+      if (!(normalizedComposedWith instanceof JoinedNormalAndAbruptCompletions)) {
+        if (normalizedComposedWith === undefined && nc === completion.consequent && na === completion.alternate)
+          return completion;
+        if (nc instanceof AbruptCompletion && na instanceof AbruptCompletion) {
+          return normalizedComposedWith === undefined
+            ? completion
+            : new JoinedAbruptCompletions(completion.joinCondition, nc, na);
+        }
         if (nc instanceof SimpleNormalCompletion && na instanceof SimpleNormalCompletion)
           return new SimpleNormalCompletion(
             AbstractValue.createFromConditionalOp(completion.value.$Realm, completion.joinCondition, nc.value, na.value)
@@ -114,8 +119,7 @@ export class Completion {
       invariant(nc instanceof AbruptCompletion || nc instanceof NormalCompletion);
       invariant(na instanceof AbruptCompletion || na instanceof NormalCompletion);
       let result = new JoinedNormalAndAbruptCompletions(completion.joinCondition, nc, na);
-      if (normalizedComposedWith instanceof JoinedNormalAndAbruptCompletions)
-        result.composedWith = normalizedComposedWith;
+      result.composedWith = normalizedComposedWith;
       return result;
     }
     return completion;
@@ -236,7 +240,10 @@ export class JoinedNormalAndAbruptCompletions extends NormalCompletion {
     consequent: AbruptCompletion | NormalCompletion,
     alternate: AbruptCompletion | NormalCompletion
   ) {
-    super(consequent instanceof NormalCompletion ? consequent.value : alternate.value, consequent.location);
+    let bottom = joinCondition.$Realm.intrinsics.__bottomValue;
+    let normalVal =
+      consequent instanceof NormalCompletion && consequent.value !== bottom ? consequent.value : alternate.value;
+    super(normalVal, consequent.location);
     this.joinCondition = joinCondition;
     this.consequent = consequent;
     this.alternate = alternate;

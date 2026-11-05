@@ -1199,9 +1199,9 @@ export class FunctionImplementation {
       if (savedCompletion instanceof JoinedNormalAndAbruptCompletions) {
         let subsequentEffects = realm.getCapturedEffects(c);
         realm.stopEffectCaptureAndUndoEffects(savedCompletion);
+        realm.savedCompletion = savedCompletion.composedWith;
         let joinedEffects = Join.composeWithEffects(savedCompletion, subsequentEffects);
         realm.applyEffects(joinedEffects);
-        realm.savedCompletion = savedCompletion.composedWith;
         if (realm.savedCompletion !== undefined) return this.incorporateSavedCompletion(realm, joinedEffects.result);
         return joinedEffects.result;
       }

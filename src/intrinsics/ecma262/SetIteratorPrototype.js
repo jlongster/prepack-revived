@@ -10,7 +10,7 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { StringValue, ObjectValue, UndefinedValue } from "../../values/index.js";
+import { AbstractValue, NumberValue, StringValue, ObjectValue, UndefinedValue } from "../../values/index.js";
 import { Create } from "../../singletons.js";
 import invariant from "../../invariant.js";
 
@@ -32,10 +32,14 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 4. Let s be O.[[IteratedSet]].
     let s = O.$IteratedSet;
+    if (s instanceof AbstractValue) s = realm.simplifyAndRefineAbstractValue(s);
+    if (s !== undefined) s = s.throwIfNotConcrete();
 
     // 5. Let index be O.[[SetNextIndex]].
-    let index = O.$SetNextIndex;
-    invariant(typeof index === "number");
+    let nextIdx = O.$SetNextIndex;
+    invariant(nextIdx !== undefined);
+    if (nextIdx instanceof AbstractValue) nextIdx = realm.simplifyAndRefineAbstractValue(nextIdx);
+    let index = nextIdx.throwIfNotConcreteNumber().value;
 
     // 6. Let itemKind be O.[[SetIterationKind]].
     let itemKind = O.$SetIterationKind;
@@ -61,7 +65,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
       index = index + 1;
 
       // c. Set O.[[SetNextIndex]] to index.
-      O.$SetNextIndex = index;
+      O.$SetNextIndex = new NumberValue(realm, index);
 
       // d. If e is not empty, then
       if (e) {
