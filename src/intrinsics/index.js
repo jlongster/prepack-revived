@@ -25,7 +25,7 @@ import {
   UndefinedValue,
   Value,
 } from "../values/index.js";
-import { Functions } from "../singletons.js";
+import { Create, Functions } from "../singletons.js";
 import { installBuiltinSummaries } from "./summaries.js";
 
 import initializeObject from "./ecma262/Object.js";
@@ -436,9 +436,13 @@ export function initialize(i: Intrinsics, realm: Realm): Intrinsics {
   }
 
   //
-  i.GeneratorPrototype = new ObjectValue(realm, i.FunctionPrototype, "Generator.prototype");
+  i.GeneratorPrototype = new ObjectValue(
+    realm,
+    i.IteratorPrototype,
+    "(Object.getPrototypeOf(function* () {}).prototype)"
+  );
   initializeGeneratorPrototype(realm, i.GeneratorPrototype);
-  i.Generator = new ObjectValue(realm, i.FunctionPrototype, "Generator");
+  i.Generator = new ObjectValue(realm, i.FunctionPrototype, "(Object.getPrototypeOf(function* () {}))");
   initializeGenerator(realm, i.Generator);
   i.GeneratorFunction = initializeGeneratorFunction(realm);
 
@@ -474,6 +478,109 @@ export function initialize(i: Intrinsics, realm: Realm): Intrinsics {
     "constructor",
     new PropertyDescriptor({
       value: i.GeneratorFunction,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
+  i.AsyncFunctionPrototype = new ObjectValue(
+    realm,
+    i.FunctionPrototype,
+    "(Object.getPrototypeOf(async function () {}))"
+  );
+  i.AsyncFunctionPrototype.defineNativeProperty(i.SymbolToStringTag, new StringValue(realm, "AsyncFunction"), {
+    writable: false,
+  });
+  let asyncFunction = new NativeFunctionValue(
+    realm,
+    "(async function () {}.constructor)",
+    "AsyncFunction",
+    1,
+    (context, _args, argCount, NewTarget) => {
+      let args = argCount > 0 ? _args : [];
+      return Create.CreateDynamicFunction(realm, asyncFunction, NewTarget, "async", args);
+    }
+  );
+  i.AsyncFunction = asyncFunction;
+  i.AsyncFunction.$DefineOwnProperty(
+    "prototype",
+    new PropertyDescriptor({
+      value: i.AsyncFunctionPrototype,
+      writable: false,
+      enumerable: false,
+      configurable: false,
+    })
+  );
+  i.AsyncFunctionPrototype.$DefineOwnProperty(
+    "constructor",
+    new PropertyDescriptor({
+      value: i.AsyncFunction,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
+  i.AsyncIteratorPrototype = new ObjectValue(
+    realm,
+    i.ObjectPrototype,
+    "(Object.getPrototypeOf(Object.getPrototypeOf(async function* () {}).prototype))"
+  );
+  i.AsyncGeneratorPrototype = new ObjectValue(
+    realm,
+    i.AsyncIteratorPrototype,
+    "(Object.getPrototypeOf(async function* () {}).prototype)"
+  );
+  i.AsyncGeneratorPrototype.defineNativeProperty(i.SymbolToStringTag, new StringValue(realm, "AsyncGenerator"), {
+    writable: false,
+  });
+  i.AsyncGenerator = new ObjectValue(realm, i.FunctionPrototype, "(Object.getPrototypeOf(async function* () {}))");
+  i.AsyncGenerator.defineNativeProperty(i.SymbolToStringTag, new StringValue(realm, "AsyncGeneratorFunction"), {
+    writable: false,
+  });
+  let asyncGeneratorFunction = new NativeFunctionValue(
+    realm,
+    "(async function* () {}.constructor)",
+    "AsyncGeneratorFunction",
+    1,
+    (context, _args, argCount, NewTarget) => {
+      let args = argCount > 0 ? _args : [];
+      return Create.CreateDynamicFunction(realm, asyncGeneratorFunction, NewTarget, "asyncGenerator", args);
+    }
+  );
+  i.AsyncGeneratorFunction = asyncGeneratorFunction;
+  i.AsyncGenerator.$DefineOwnProperty(
+    "prototype",
+    new PropertyDescriptor({
+      value: i.AsyncGeneratorPrototype,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+  i.AsyncGeneratorPrototype.$DefineOwnProperty(
+    "constructor",
+    new PropertyDescriptor({
+      value: i.AsyncGenerator,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+  i.AsyncGeneratorFunction.$DefineOwnProperty(
+    "prototype",
+    new PropertyDescriptor({
+      value: i.AsyncGenerator,
+      writable: false,
+      enumerable: false,
+      configurable: false,
+    })
+  );
+  i.AsyncGenerator.$DefineOwnProperty(
+    "constructor",
+    new PropertyDescriptor({
+      value: i.AsyncGeneratorFunction,
       writable: false,
       enumerable: false,
       configurable: true,

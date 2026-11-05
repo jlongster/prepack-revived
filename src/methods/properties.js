@@ -41,7 +41,6 @@ import {
   IsDataDescriptor,
   IsGenericDescriptor,
   IsPropertyKey,
-  MakeConstructor,
   SameValue,
   SameValuePartial,
 } from "./index.js";
@@ -1863,7 +1862,83 @@ export class PropertiesImplementation {
     enumerable: boolean
   ): boolean {
     // MethodDefinition : PropertyName ( StrictFormalParameters ) { FunctionBody }
-    if (MethodDefinition.kind === "method") {
+    if (MethodDefinition.kind === "method" || MethodDefinition.kind === "generator") {
+      let isGenerator = MethodDefinition.generator === true || MethodDefinition.kind === "generator";
+      let isAsync = MethodDefinition.async === true;
+      if (isGenerator || isAsync) {
+        let propKey = EvalPropertyName(MethodDefinition, env, realm, strictCode);
+        let strict = strictCode || IsStrict(MethodDefinition.body);
+        let scope = env;
+        let closure;
+        if (isGenerator && isAsync) {
+          closure = Functions.AsyncGeneratorFunctionCreate(
+            realm,
+            "method",
+            MethodDefinition.params,
+            MethodDefinition.body,
+            scope,
+            strict
+          );
+          Functions.MakeMethod(realm, closure, object);
+          let prototype = Create.ObjectCreate(realm, realm.intrinsics.AsyncGeneratorPrototype);
+          prototype.originalConstructor = closure;
+          this.DefinePropertyOrThrow(
+            realm,
+            closure,
+            "prototype",
+            new PropertyDescriptor({
+              value: prototype,
+              writable: true,
+              enumerable: false,
+              configurable: false,
+            })
+          );
+        } else if (isGenerator) {
+          closure = Functions.GeneratorFunctionCreate(
+            realm,
+            "method",
+            MethodDefinition.params,
+            MethodDefinition.body,
+            scope,
+            strict
+          );
+          Functions.MakeMethod(realm, closure, object);
+          let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
+          prototype.originalConstructor = closure;
+          this.DefinePropertyOrThrow(
+            realm,
+            closure,
+            "prototype",
+            new PropertyDescriptor({
+              value: prototype,
+              writable: true,
+              enumerable: false,
+              configurable: false,
+            })
+          );
+        } else {
+          closure = Functions.AsyncFunctionCreate(
+            realm,
+            "method",
+            MethodDefinition.params,
+            MethodDefinition.body,
+            scope,
+            strict
+          );
+          Functions.MakeMethod(realm, closure, object);
+        }
+        closure.loc = MethodDefinition.loc;
+        closure.$HasComputedName = !!MethodDefinition.computed;
+        Functions.SetFunctionName(realm, closure, propKey);
+        let desc: Descriptor = new PropertyDescriptor({
+          value: closure,
+          writable: true,
+          enumerable: enumerable,
+          configurable: true,
+        });
+        return this.DefinePropertyOrThrow(realm, object, propKey, desc);
+      }
+
       // 1. Let methodDef be DefineMethod of MethodDefinition with argument object.
       let methodDef = Functions.DefineMethod(realm, MethodDefinition, object, env, strictCode);
 
@@ -1885,53 +1960,6 @@ export class PropertiesImplementation {
 
       // 5. Return DefinePropertyOrThrow(object, methodDef.[[key]], desc).
       return this.DefinePropertyOrThrow(realm, object, methodDef.$Key, desc);
-    } else if (MethodDefinition.kind === "generator") {
-      // MethodDefinition : GeneratorMethod
-      // See 14.4.
-      // ECMA 14.4.13
-      // 1. Let propKey be the result of evaluating PropertyName.
-      let propKey = EvalPropertyName(MethodDefinition, env, realm, strictCode);
-
-      // 2. ReturnIfAbrupt(propKey).
-      // 3. If the function code for this GeneratorMethod is strict mode code, let strict be true. Otherwise let strict be false.
-      let strict = strictCode || IsStrict(MethodDefinition.body);
-
-      // 4. Let scope be the running execution context’s LexicalEnvironment.
-      let scope = env;
-
-      // 5. Let closure be GeneratorFunctionCreate(Method, StrictFormalParameters, GeneratorBody, scope, strict).
-      let closure = Functions.GeneratorFunctionCreate(
-        realm,
-        "method",
-        MethodDefinition.params,
-        MethodDefinition.body,
-        scope,
-        strict
-      );
-
-      // 6. Perform MakeMethod(closure, object).
-      Functions.MakeMethod(realm, closure, object);
-
-      // 7. Let prototype be ObjectCreate(%GeneratorPrototype%).
-      let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
-      prototype.originalConstructor = closure;
-
-      // 8. Perform MakeConstructor(closure, true, prototype).
-      MakeConstructor(realm, closure, true, prototype);
-
-      // 9. Perform SetFunctionName(closure, propKey).
-      Functions.SetFunctionName(realm, closure, propKey);
-
-      // 10. Let desc be the Property Descriptor{[[Value]]: closure, [[Writable]]: true, [[Enumerable]]: enumerable, [[Configurable]]: true}.
-      let desc: Descriptor = new PropertyDescriptor({
-        value: closure,
-        writable: true,
-        enumerable: enumerable,
-        configurable: true,
-      });
-
-      // 11. Return DefinePropertyOrThrow(object, propKey, desc).
-      return this.DefinePropertyOrThrow(realm, object, propKey, desc);
     } else if (MethodDefinition.kind === "get") {
       // 1. Let propKey be the result of evaluating PropertyName.
       let propKey = EvalPropertyName(MethodDefinition, env, realm, strictCode);

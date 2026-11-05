@@ -18,7 +18,7 @@ import {
   mightBecomeAnObject,
   Reference,
 } from "../environment.js";
-import { FatalError } from "../errors.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { Realm, ExecutionContext } from "../realm.js";
 import Value from "../values/Value.js";
 import {
@@ -31,8 +31,15 @@ import {
   ObjectValue,
   UndefinedValue,
 } from "../values/index.js";
-import { GetIterator, HasSomeCompatibleType, IsCallable, IsPropertyKey, IteratorStep, IteratorValue } from "./index.js";
-import { GeneratorStart } from "./generator.js";
+import {
+  GetIterator,
+  HasSomeCompatibleType,
+  IsCallable,
+  IsPropertyKey,
+  IteratorStep,
+  IteratorValue,
+  NewPromiseCapability,
+} from "./index.js";
 import {
   AbruptCompletion,
   Completion,
@@ -43,7 +50,7 @@ import {
   ThrowCompletion,
 } from "../completions.js";
 import { GetTemplateObject, GetV, GetThisValue } from "./get.js";
-import { Create, Environment, Functions, Leak, Join, To } from "../singletons.js";
+import { Environment, Functions, Leak, Join, To } from "../singletons.js";
 import invariant from "../invariant.js";
 import { createOperationDescriptor } from "../utils/generator.js";
 import type { BabelNodeExpression, BabelNodeSpreadElement, BabelNodeTemplateLiteral } from "@babel/types";
@@ -379,23 +386,67 @@ export function OrdinaryCallEvaluateBody(
   } else {
     invariant(f instanceof ECMAScriptSourceFunctionValue);
     let F = f;
-    if (F.$FunctionKind === "generator") {
-      // 1. Perform ? FunctionDeclarationInstantiation(functionObject, argumentsList).
-      Functions.FunctionDeclarationInstantiation(realm, F, argumentsList);
-
-      // 2. Let G be ? OrdinaryCreateFromConstructor(functionObject, "%GeneratorPrototype%", « [[GeneratorState]], [[GeneratorContext]] »).
-      let G = Create.OrdinaryCreateFromConstructor(realm, F, "GeneratorPrototype", {
-        $GeneratorState: undefined,
-        $GeneratorContext: undefined,
-      });
-
-      // 3. Perform GeneratorStart(G, FunctionBody).
-      let code = F.$ECMAScriptCode;
-      invariant(code !== undefined);
-      GeneratorStart(realm, G, code);
-
-      // 4. Return Completion{[[Type]]: return, [[Value]]: G, [[Target]]: empty}.
-      return new ReturnCompletion(G, realm.currentLocation);
+    if (F.$FunctionKind === "generator" || F.$FunctionKind === "asyncGenerator") {
+      let diag = new CompilerDiagnostic(
+        "Calling a generator function during initialization is not yet supported",
+        realm.currentLocation,
+        "PP0001",
+        "FatalError"
+      );
+      realm.handleError(diag);
+      throw new FatalError();
+    } else if (F.$FunctionKind === "async") {
+      if (realm.isInPureScope()) {
+        let diag = new CompilerDiagnostic(
+          "Calling an async function in pure scope is residualized",
+          realm.currentLocation,
+          "PP0001",
+          "FatalError"
+        );
+        realm.handleError(diag);
+        throw new FatalError();
+      }
+      let promiseCapability = NewPromiseCapability(realm, realm.intrinsics.Promise);
+      let priorSavedCompletion = realm.savedCompletion;
+      realm.savedCompletion = undefined;
+      let c;
+      try {
+        Functions.FunctionDeclarationInstantiation(realm, F, argumentsList);
+        let code = F.$ECMAScriptCode;
+        invariant(code !== undefined);
+        let context = realm.getRunningContext();
+        let evalRes = context.lexicalEnvironment.evaluateCompletionDeref(code, F.$Strict);
+        if (evalRes instanceof AbruptCompletion || evalRes instanceof JoinedNormalAndAbruptCompletions) {
+          c = evalRes;
+        }
+      } catch (e) {
+        realm.savedCompletion = priorSavedCompletion;
+        if (e instanceof ThrowCompletion) {
+          Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [e.value]);
+          return new ReturnCompletion(promiseCapability.promise, realm.currentLocation);
+        }
+        throw e;
+      }
+      c = Functions.incorporateSavedCompletion(realm, c);
+      realm.savedCompletion = priorSavedCompletion;
+      if (c === undefined) {
+        Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [realm.intrinsics.undefined]);
+      } else if (c instanceof ReturnCompletion) {
+        Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [c.value]);
+      } else if (c instanceof ThrowCompletion) {
+        Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [c.value]);
+      } else {
+        let diag = new CompilerDiagnostic(
+          "Async function with conditional abrupt completion during initialization is not yet supported",
+          realm.currentLocation,
+          "PP0001",
+          "FatalError"
+        );
+        realm.handleError(diag);
+        throw new FatalError();
+      }
+      invariant(promiseCapability.promise instanceof ObjectValue);
+      return new ReturnCompletion(promiseCapability.promise, realm.currentLocation);
     } else {
       // Recursion whose depth depends on abstract values is residualized before getting here (#1586):
       // see tryResidualizeRecursiveCall in recursion.js.

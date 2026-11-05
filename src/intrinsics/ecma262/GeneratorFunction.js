@@ -17,7 +17,7 @@ export default function(realm: Realm): NativeFunctionValue {
   // ECMA262 25.2.1
   let func = new NativeFunctionValue(
     realm,
-    "GeneratorFunction",
+    "(function* () {}.constructor)",
     "GeneratorFunction",
     1,
     (context, _args, argCount, NewTarget) => {

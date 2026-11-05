@@ -11,12 +11,15 @@
 
 import {
   AbstractValue,
+  ECMAScriptFunctionValue,
   ECMAScriptSourceFunctionValue,
   EmptyValue,
   FunctionValue,
   IntegralValue,
+  NullValue,
   ObjectValue,
   SymbolValue,
+  Value,
 } from "../values/index.js";
 import type { Effects, Realm, SideEffectType } from "../realm.js";
 
@@ -155,6 +158,45 @@ export function canIgnoreClassLengthProperty(val: ObjectValue, desc: void | Desc
         "Functions with length properties with different attributes are not supported in residual heap."
       );
     }
+  }
+  return true;
+}
+
+export function getNaturalFunctionPrototype(realm: Realm, func: ObjectValue): ObjectValue {
+  if (func instanceof ECMAScriptFunctionValue) {
+    if (func.$FunctionKind === "generator") return realm.intrinsics.Generator;
+    if (func.$FunctionKind === "async") return realm.intrinsics.AsyncFunctionPrototype;
+    if (func.$FunctionKind === "asyncGenerator") return realm.intrinsics.AsyncGenerator;
+  }
+  return realm.intrinsics.FunctionPrototype;
+}
+
+function mightHaveThenProperty(obj: ObjectValue): boolean {
+  let cur: ?Value = obj;
+  let seen = new Set();
+  while (cur instanceof ObjectValue) {
+    if (seen.has(cur)) return true;
+    seen.add(cur);
+    if (cur.$PromiseState !== undefined) return true;
+    if (cur.isPartialObject() || cur.mightBeLeakedObject() || cur.unknownProperty !== undefined) return true;
+    if (cur.properties.has("then")) {
+      let pb = cur.properties.get("then");
+      if (pb !== undefined && pb.descriptor !== undefined) return true;
+    }
+    cur = cur.$Prototype;
+  }
+  return cur !== null && !(cur instanceof NullValue);
+}
+
+export function canSerializePromiseAsResolved(val: ObjectValue): boolean {
+  if (val.$PromiseState !== "fulfilled") return false;
+  let res = val.$PromiseResult;
+  if (!(res instanceof Value)) return false;
+  if (res instanceof AbstractValue) {
+    return !res.mightBeObject();
+  }
+  if (res instanceof ObjectValue) {
+    return !mightHaveThenProperty(res);
   }
   return true;
 }

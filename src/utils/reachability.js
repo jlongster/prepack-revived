@@ -36,6 +36,7 @@ import traverse from "@babel/traverse";
 import type { BabelTraversePath } from "@babel/traverse";
 import type { Binding } from "../environment.js";
 import invariant from "../invariant.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js";
 
 type FunctionBindingVisitorInfo = {
@@ -234,6 +235,21 @@ export class ReachabilityImplementation {
         case "WeakSet":
           ifNotVisited(value, computeFromSet);
           break;
+        case "Promise":
+          if (value.$PromiseResult instanceof Value) {
+            computeFromValue(value.$PromiseResult);
+          }
+          break;
+        case "Generator": {
+          let diag = new CompilerDiagnostic(
+            "Generator objects are not supported in calls to abstract functions",
+            realm.currentLocation,
+            "PP0001",
+            "FatalError"
+          );
+          realm.handleError(diag);
+          throw new FatalError();
+        }
         default:
           invariant(kind === "Object", `Object of kind ${kind} is not supported in calls to abstract functions.`);
           invariant(
@@ -367,8 +383,12 @@ export class ReachabilityImplementation {
 
       FunctionBindingVisitor._readOnly = !!readOnly;
 
+      let fKind = func.$FunctionKind;
+      let isGen = fKind === "generator" || fKind === "asyncGenerator";
+      let isAsync = fKind === "async" || fKind === "asyncGenerator";
+
       traverse(
-        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code))])),
+        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code, isGen, isAsync))])),
         FunctionBindingVisitor,
         null,
         functionInfo

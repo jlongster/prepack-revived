@@ -12,6 +12,7 @@
 import type { Realm } from "../realm.js";
 import type { ResolvingFunctions, PromiseCapability, PromiseReaction } from "../types.js";
 import { AbruptCompletion } from "../completions.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import {
   Value,
   ObjectValue,
@@ -30,7 +31,16 @@ import { Create, Properties } from "../singletons.js";
 import invariant from "../invariant.js";
 
 // ECMA262 8.4.1
-export function EnqueueJob(realm: Realm, queueName: string, job: Function, args: Array<any>): void {}
+export function EnqueueJob(realm: Realm, queueName: string, job: Function, args: Array<any>): void {
+  let diag = new CompilerDiagnostic(
+    "Promise reaction jobs during initialization are not yet supported",
+    realm.currentLocation,
+    "PP0001",
+    "FatalError"
+  );
+  realm.handleError(diag);
+  throw new FatalError();
+}
 
 // ECMA262 25.4.1.5
 export function NewPromiseCapability(realm: Realm, C: Value): PromiseCapability {
@@ -375,7 +385,7 @@ export function PerformPromiseThen(
   }
 
   // 4. If IsCallable(onRejected) is false, then
-  if (IsCallable(realm, onRejected)) {
+  if (IsCallable(realm, onRejected) === false) {
     // a. Let onRejected be "Thrower".
     onRejected = new StringValue(realm, "Thrower");
   }
@@ -485,7 +495,7 @@ function createResolveFunction(realm) {
       let thenAction = then;
 
       // 11. If IsCallable(thenAction) is false, then
-      if (IsCallable(realm, thenAction)) {
+      if (IsCallable(realm, thenAction) === false) {
         // a. Return FulfillPromise(promise, resolution).
         return FulfillPromise(realm, promise, resolution);
       }
@@ -600,7 +610,7 @@ export function RejectPromise(realm: Realm, promise: ObjectValue, reason: Value)
   invariant(promise.$PromiseState === "pending");
 
   // 2. Let reactions be promise.[[PromiseRejectReactions]].
-  let reactions = promise.$PromiseFulfillReactions;
+  let reactions = promise.$PromiseRejectReactions;
   invariant(reactions);
 
   // 3. Set promise.[[PromiseResult]] to reason.

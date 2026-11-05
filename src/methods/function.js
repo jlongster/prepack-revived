@@ -842,7 +842,7 @@ export class FunctionImplementation {
 
     // 4. Let Strict be the value of the [[Strict]] internal slot of F.
     let Strict = F.$Strict;
-    if (!Strict) {
+    if (!Strict && F.$FunctionKind === "normal" && kind === "normal") {
       Properties.DefinePropertyOrThrow(
         realm,
         F,
@@ -896,7 +896,42 @@ export class FunctionImplementation {
     let F = this.FunctionAllocate(realm, functionPrototype, Strict, "generator");
 
     // 3. Return FunctionInitialize(F, kind, ParameterList, Body, Scope).
-    return this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
+    if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
+    return result;
+  }
+
+  AsyncFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method" | "arrow",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
+    Strict: boolean
+  ): ECMAScriptSourceFunctionValue {
+    let functionPrototype = realm.intrinsics.AsyncFunctionPrototype;
+    let F = this.FunctionAllocate(realm, functionPrototype, Strict, "async");
+    let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
+    if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
+    return result;
+  }
+
+  AsyncGeneratorFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
+    Strict: boolean
+  ): ECMAScriptSourceFunctionValue {
+    let functionPrototype = realm.intrinsics.AsyncGenerator;
+    let F = this.FunctionAllocate(realm, functionPrototype, Strict, "asyncGenerator");
+    let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
+    if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
+    return result;
   }
 
   // ECMA262 9.2.7
@@ -938,14 +973,18 @@ export class FunctionImplementation {
     realm: Realm,
     functionPrototype: ObjectValue | AbstractObjectValue,
     strict: boolean,
-    functionKind: "normal" | "non-constructor" | "generator"
+    functionKind: "normal" | "non-constructor" | "generator" | "async" | "asyncGenerator"
   ): ECMAScriptSourceFunctionValue {
     // 1. Assert: Type(functionPrototype) is Object.
     invariant(functionPrototype instanceof ObjectValue, "expected functionPrototype to be an object");
 
-    // 2. Assert: functionKind is either "normal", "non-constructor" or "generator".
+    // 2. Assert: functionKind is valid.
     invariant(
-      functionKind === "normal" || functionKind === "non-constructor" || functionKind === "generator",
+      functionKind === "normal" ||
+        functionKind === "non-constructor" ||
+        functionKind === "generator" ||
+        functionKind === "async" ||
+        functionKind === "asyncGenerator",
       "invalid functionKind"
     );
 

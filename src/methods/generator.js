@@ -11,8 +11,9 @@
 
 import type { Realm } from "../realm.js";
 import { AbruptCompletion } from "../completions.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { Value, ObjectValue, UndefinedValue } from "../values/index.js";
-import { Create, Properties } from "../singletons.js";
+import { Create } from "../singletons.js";
 import invariant from "../invariant.js";
 import type { BabelNodeBlockStatement } from "@babel/types";
 
@@ -100,53 +101,26 @@ export function GeneratorResume(realm: Realm, generator: Value, value: Value): V
     "state is either 'suspendedStart' or 'suspendedYield'"
   );
 
-  // 4. Let genContext be generator.[[GeneratorContext]].
-  let genContext = generator.$GeneratorContext;
-  invariant(genContext);
-
-  // 5. Let methodContext be the running execution context.
-  let methodContext = realm.getRunningContext();
-
-  // 6. Suspend methodContext.
-  methodContext.suspend();
-
-  // 7. Set generator.[[GeneratorState]] to "executing".
-  Properties.ThrowIfInternalSlotNotWritable(realm, generator, "$GeneratorState").$GeneratorState = "executing";
-
-  // 8. Push genContext onto the execution context stack; genContext is now the running execution context.
-  realm.pushContext(genContext);
-
-  // 9. Resume the suspended evaluation of genContext using NormalCompletion(value) as the result of the operation that suspended it. Let result be the value returned by the resumed computation.
-  let result = genContext.resume();
-
-  // 10. Assert: When we return here, genContext has already been removed from the execution context stack and methodContext is the currently running execution context.
-  invariant(realm.getRunningContext() === methodContext);
-
-  // 11. Return Completion(result).
-  return result;
+  let diag = new CompilerDiagnostic(
+    "Resuming a generator during initialization is not yet supported",
+    realm.currentLocation,
+    "PP0001",
+    "FatalError"
+  );
+  realm.handleError(diag);
+  throw new FatalError();
 }
 
 // ECMA26225.3.3.4
 export function GeneratorResumeAbrupt(realm: Realm, generator: Value, abruptCompletion: AbruptCompletion): Value {
-  // 1. Let state be ? GeneratorValidate(generator).
-  // 2. If state is "suspendedStart", then
-  // a. Set generator.[[GeneratorState]] to "completed".
-  // b. Once a generator enters the "completed" state it never leaves it and its associated execution context is never resumed. Any execution state associated with generator can be discarded at this point.
-  // c. Let state be "completed".
-  // 3. If state is "completed", then
-  // a. If abruptCompletion.[[Type]] is return, then
-  // i. Return CreateIterResultObject(abruptCompletion.[[Value]], true).
-  // b. Return Completion(abruptCompletion).
-  // 4. Assert: state is "suspendedYield".
-  // 5. Let genContext be generator.[[GeneratorContext]].
-  // 6. Let methodContext be the running execution context.
-  // 7. Suspend methodContext.
-  // 8. Set generator.[[GeneratorState]] to "executing".
-  // 9. Push genContext onto the execution context stack; genContext is now the running execution context.
-  // 10. Resume the suspended evaluation of genContext using abruptCompletion as the result of the operation that suspended it. Let result be the completion record returned by the resumed computation.
-  // 11. Assert: When we return here, genContext has already been removed from the execution context stack and methodContext is the currently running execution context.
-  // 12. Return Completion(result).
-  return realm.intrinsics.undefined;
+  let diag = new CompilerDiagnostic(
+    "Resuming a generator during initialization is not yet supported",
+    realm.currentLocation,
+    "PP0001",
+    "FatalError"
+  );
+  realm.handleError(diag);
+  throw new FatalError();
 }
 
 // ECMA26225.3.3.5

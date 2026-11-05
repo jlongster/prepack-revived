@@ -372,6 +372,11 @@ export default function(
   realm: Realm,
   labelSet: ?Array<string>
 ): Value {
+  if ((ast: any).await) {
+    let diag = new CompilerDiagnostic("for-await-of is not yet supported", ast.loc, "PP0001", "FatalError");
+    realm.handleError(diag);
+    throw new FatalError();
+  }
   if (!realm.isInPureScope() || realm.instantRender.enabled)
     return evaluateForOf(ast, strictCode, env, realm, labelSet);
   // In pure scope, fall back to a residual loop if the loop cannot be unrolled.

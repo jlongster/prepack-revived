@@ -40,8 +40,11 @@ export default function(
   // 3. Let parameters be CoveredFormalsList of ArrowParameters.
   let parameters = ast.params;
 
-  // 4. Let closure be FunctionCreate(Arrow, parameters, ConciseBody, scope, strict).
-  let closure = Functions.FunctionCreate(realm, "arrow", parameters, ConciseBody, scope, strict);
+  // 4. Let closure be AsyncFunctionCreate / FunctionCreate(Arrow, parameters, ConciseBody, scope, strict).
+  let closure =
+    ast.async === true
+      ? Functions.AsyncFunctionCreate(realm, "arrow", parameters, ConciseBody, scope, strict)
+      : Functions.FunctionCreate(realm, "arrow", parameters, ConciseBody, scope, strict);
   closure.loc = ast.loc;
 
   // 5. Return closure.

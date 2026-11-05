@@ -372,6 +372,12 @@ export class Emitter {
           result = recurse(val.$DateValue);
           if (result !== undefined) return result;
           break;
+        case "Promise":
+          if (val.$PromiseResult instanceof Value) {
+            result = recurse(val.$PromiseResult);
+            if (result !== undefined) return result;
+          }
+          break;
         case "ReactElement":
           let realm = val.$Realm;
           let type = getProperty(realm, val, "type");

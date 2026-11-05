@@ -56,7 +56,9 @@ import { Modules } from "../utils/modules.js";
 import { HeapInspector } from "../utils/HeapInspector.js";
 import {
   canIgnoreClassLengthProperty,
+  canSerializePromiseAsResolved,
   ClassPropertiesToIgnore,
+  getNaturalFunctionPrototype,
   getObjectPrototypeMetadata,
   getOrDefault,
   getSuggestedArrayLiteralLength,
@@ -345,7 +347,9 @@ export class ResidualHeapVisitor {
     let proto = obj.$Prototype;
 
     let kind = obj.getKind();
-    if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
+    let naturalProto =
+      kind === "Function" ? getNaturalFunctionPrototype(this.realm, obj) : this.realm.intrinsics[kind + "Prototype"];
+    if (proto === naturalProto) return;
 
     if (!obj.$IsClassPrototype || proto !== this.realm.intrinsics.null) {
       this.visitValue(proto);
@@ -590,8 +594,12 @@ export class ResidualHeapVisitor {
         getModuleIdIfNodeIsRequireFunction: this.modules.getGetModuleIdIfNodeIsRequireFunction(formalParameters, [val]),
       };
 
+      let fKind = val.$FunctionKind;
+      let isGen = fKind === "generator" || fKind === "asyncGenerator";
+      let isAsync = fKind === "async" || fKind === "asyncGenerator";
+
       traverse(
-        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code))])),
+        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code, isGen, isAsync))])),
         ClosureRefVisitor,
         null,
         state
@@ -920,6 +928,31 @@ export class ResidualHeapVisitor {
       case "WeakSet":
         this.visitValueWeakSet(val);
         return;
+      case "Promise": {
+        if (!canSerializePromiseAsResolved(val)) {
+          let diag = new CompilerDiagnostic(
+            "Only fulfilled Promises with non-thenable values can be serialized in residual heap",
+            val.expressionLocation,
+            "PP0001",
+            "FatalError"
+          );
+          this.realm.handleError(diag);
+          throw new FatalError();
+        }
+        invariant(val.$PromiseResult instanceof Value);
+        this.visitValue(val.$PromiseResult);
+        return;
+      }
+      case "Generator": {
+        let diag = new CompilerDiagnostic(
+          "Generator objects cannot be serialized in residual heap",
+          val.expressionLocation,
+          "PP0001",
+          "FatalError"
+        );
+        this.realm.handleError(diag);
+        throw new FatalError();
+      }
       default:
         if (kind !== "Object") this.logger.logError(val, `Object of kind ${kind} is not supported in residual heap.`);
         if (this.realm.react.enabled && valueIsReactLibraryObject(this.realm, val, this.logger)) {

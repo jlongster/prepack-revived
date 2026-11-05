@@ -279,6 +279,12 @@ export type Intrinsics = {
   Generator: ObjectValue,
   GeneratorPrototype: ObjectValue,
   GeneratorFunction: NativeFunctionValue,
+  AsyncFunctionPrototype: ObjectValue,
+  AsyncFunction: NativeFunctionValue,
+  AsyncIteratorPrototype: ObjectValue,
+  AsyncGenerator: ObjectValue,
+  AsyncGeneratorPrototype: ObjectValue,
+  AsyncGeneratorFunction: NativeFunctionValue,
 
   __IntrospectionError: NativeFunctionValue,
   __IntrospectionErrorPrototype: ObjectValue,
@@ -331,7 +337,9 @@ export type ObjectKind =
   | "WeakMap"
   | "WeakSet"
   | TypedArrayKind
-  | "ReactElement";
+  | "ReactElement"
+  | "Promise"
+  | "Generator";
 // TODO #26 #712: Promises. All kinds of iterators. Generators.
 
 export type ClassComponentMetadata = {
@@ -540,6 +548,24 @@ export type FunctionType = {
     Strict: boolean
   ): ECMAScriptSourceFunctionValue,
 
+  AsyncFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method" | "arrow",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
+    Strict: boolean
+  ): ECMAScriptSourceFunctionValue,
+
+  AsyncGeneratorFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
+    Strict: boolean
+  ): ECMAScriptSourceFunctionValue,
+
   // ECMA262 9.2.7
   AddRestrictedFunctionProperties(F: FunctionValue, realm: Realm): boolean,
 
@@ -559,7 +585,7 @@ export type FunctionType = {
     realm: Realm,
     functionPrototype: ObjectValue | AbstractObjectValue,
     strict: boolean,
-    functionKind: "normal" | "non-constructor" | "generator"
+    functionKind: "normal" | "non-constructor" | "generator" | "async" | "asyncGenerator"
   ): ECMAScriptSourceFunctionValue,
 
   // ECMA262 9.4.1.3
@@ -849,7 +875,7 @@ export type CreateType = {
     realm: Realm,
     constructor: ObjectValue,
     newTarget: void | ObjectValue,
-    kind: "normal" | "generator",
+    kind: "normal" | "generator" | "async" | "asyncGenerator",
     args: Array<Value>
   ): Value,
 };

@@ -23,6 +23,6 @@ export default class ECMAScriptFunctionValue extends FunctionValue {
   $ConstructorKind: "base" | "derived";
   $ThisMode: "lexical" | "strict" | "global";
   $HomeObject: void | ObjectValue;
-  $FunctionKind: "normal" | "classConstructor" | "generator";
+  $FunctionKind: "normal" | "classConstructor" | "generator" | "async" | "asyncGenerator";
   isCalledInMultipleContexts: boolean;
 }

@@ -72,6 +72,8 @@ import {
   withDescriptorValue,
   ClassPropertiesToIgnore,
   canIgnoreClassLengthProperty,
+  canSerializePromiseAsResolved,
+  getNaturalFunctionPrototype,
   getObjectPrototypeMetadata,
 } from "./utils.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
@@ -406,7 +408,9 @@ export class ResidualHeapSerializer {
       }
       return;
     }
-    if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
+    let naturalProto =
+      kind === "Function" ? getNaturalFunctionPrototype(this.realm, obj) : this.realm.intrinsics[kind + "Prototype"];
+    if (proto === naturalProto) return;
 
     let semaphore = this._acquireOneObjectSemaphore(obj);
     this.emitter.emitNowOrAfterWaitingForDependencies(
@@ -1490,6 +1494,29 @@ export class ResidualHeapSerializer {
     return t.newExpression(this.preludeGenerator.memoizeReference(kind), args);
   }
 
+  _serializeValuePromise(val: ObjectValue): BabelNodeExpression {
+    invariant(canSerializePromiseAsResolved(val));
+    let result = val.$PromiseResult;
+    invariant(result instanceof Value);
+    if (this.emitter.getReasonToWaitForDependencies(result)) {
+      let diag = new CompilerDiagnostic(
+        "Cyclic fulfilled Promise cannot be serialized in residual heap",
+        val.expressionLocation,
+        "PP0001",
+        "FatalError"
+      );
+      this.realm.handleError(diag);
+      throw new FatalError();
+    }
+    let serializedResult = this.serializeValue(result);
+    this._emitObjectProperties(val);
+    let args = result instanceof UndefinedValue ? [] : [serializedResult];
+    return t.callExpression(
+      t.memberExpression(this.preludeGenerator.memoizeReference("Promise"), t.identifier("resolve")),
+      args
+    );
+  }
+
   _serializeValueTypedArrayOrDataView(val: ObjectValue): BabelNodeExpression {
     let buf = val.$ViewedArrayBuffer;
     invariant(buf !== undefined);
@@ -1966,6 +1993,8 @@ export class ResidualHeapSerializer {
       case "Set":
       case "WeakSet":
         return this._serializeValueSet(val);
+      case "Promise":
+        return this._serializeValuePromise(val);
       default:
         invariant(kind === "Object", "invariant established by visitor");
 

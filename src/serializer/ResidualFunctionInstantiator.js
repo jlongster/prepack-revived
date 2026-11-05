@@ -198,7 +198,7 @@ export class ResidualFunctionInstantiator<
       const functionExpression: BabelNodeFunctionExpression = node;
       const functionTag = ((functionExpression.body: any): FunctionBodyAstNode).uniqueOrderedTag;
       // Un-interpreted nested function?
-      if (functionTag !== undefined) {
+      if (functionTag !== undefined && !functionExpression.generator && !functionExpression.async) {
         // Un-interpreted nested function.
 
         const duplicateFunctionInfo = this.factoryFunctionInfos.get(functionTag);
