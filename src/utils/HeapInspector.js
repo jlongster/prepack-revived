@@ -59,6 +59,26 @@ function hasAnyWritable(desc: void | Descriptor): boolean {
   invariant(false, "internal slots aren't covered here");
 }
 
+const NATIVE_ERROR_CONSTRUCTORS = [
+  "Error",
+  "TypeError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "URIError",
+  "EvalError",
+];
+
+export function getNativeErrorConstructorName(realm: Realm, val: ObjectValue): void | string {
+  if (val.$ErrorData === undefined || val.temporalAlias !== undefined) return undefined;
+  if (!val.mightNotBeLeakedObject()) return undefined;
+  let proto = val.$Prototype;
+  for (let ctorName of NATIVE_ERROR_CONSTRUCTORS) {
+    if (proto === realm.intrinsics[ctorName + "Prototype"]) return ctorName;
+  }
+  return undefined;
+}
+
 export class HeapInspector {
   constructor(realm: Realm, logger: Logger) {
     this.realm = realm;
@@ -121,6 +141,14 @@ export class HeapInspector {
 
     if (val instanceof AbstractValue) {
       if (val.hasIdentifier()) {
+        return true;
+      }
+      if (
+        val.operationDescriptor !== undefined &&
+        (val.operationDescriptor.type === "ENV_GLOBAL" ||
+          val.operationDescriptor.type === "TYPEOF_GLOBAL" ||
+          val.envPath === "define.amd")
+      ) {
         return true;
       }
 
@@ -237,7 +265,12 @@ export class HeapInspector {
           desc.enumerable !== true &&
           desc.writable === targetDescriptor.writable &&
           desc.value instanceof ObjectValue &&
-          desc.value.originalConstructor === val
+          (desc.value.originalConstructor === val ||
+            (val instanceof ECMAScriptSourceFunctionValue &&
+              val.$FunctionKind === "generator" &&
+              desc.value.$Prototype === this.realm.intrinsics.GeneratorPrototype &&
+              desc.value.properties.size === 0 &&
+              desc.value.symbols.size === 0))
         ) {
           return true;
         }
@@ -258,6 +291,19 @@ export class HeapInspector {
           }
           break;
         default:
+          if (
+            key === "stack" &&
+            val.$ErrorData !== undefined &&
+            getNativeErrorConstructorName(this.realm, val) !== undefined &&
+            desc.value === val.$ErrorData.defaultStack &&
+            desc.writable === targetDescriptor.writable &&
+            desc.enumerable !== true &&
+            desc.configurable === targetDescriptor.configurable &&
+            desc.get === undefined &&
+            desc.set === undefined
+          ) {
+            return true;
+          }
           break;
       }
     }

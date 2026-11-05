@@ -20,7 +20,14 @@ import {
   type InvariantModeTypes,
   InvariantModeValues,
   DiagnosticSeverityValues,
+  type UnknownGlobalsMode,
+  UnknownGlobalsModeValues,
+  type AssumptionFallbackMode,
+  AssumptionFallbackModeValues,
+  type SmtMode,
+  SmtModeValues,
 } from "./options.js";
+import { parseCliAssumption } from "./intrinsics/env/assumptions.js";
 import { type SerializedResult } from "./serializer/types.js";
 import { TextPrinter } from "./utils/TextPrinter.js";
 import { prepackStdin, prepackFileSync } from "./prepack-node.js";
@@ -86,6 +93,13 @@ function run(
     --warnAsError            Turns all warnings into errors.
     --diagnosticAsError      A comma-separated list of non-fatal-error PPxxxx diagnostic codes that should get turned into (recoverable) errors.
     --noDiagnostic           A comma-separated list of non-fatal-error PPxxxx diagnostic codes that should get suppressed.
+    --closedWorld            Legacy closed-world mode: assume undeclared globals do not exist.
+    --unknownGlobals         How to handle undeclared globals: "open" (default), "error", or "closed".
+    --assume KEY=JSON        Specialize on an environment assumption (e.g. 'typeof window="undefined"', 'process.env.NODE_ENV="production"', 'timezoneOffset=0') and emit a runtime guard.
+    --assumptionsFile PATH   JSON file mapping environment assumption expressions/paths to expected values.
+    --fallbackMode           Action when a runtime assumption guard fails: "inline" (default: run embedded original code) or "throw".
+    --profileEnv TARGET      Probe environment assumptions against "node" or "browser" before prepacking.
+    --smt                    Z3 path-condition solver mode: off | fallback | audit (default = fallback when z3 is available, or $PREPACK_SMT).
   `;
   let args = Array.from(process.argv);
   args.splice(0, 2);
@@ -110,6 +124,7 @@ function run(
   let cpuprofilePath: void | string;
   let invariantMode: void | InvariantModeTypes;
   let invariantLevel: void | number;
+  let smt: void | SmtMode;
   let reproMode: void | "reproUnconditionally" | "reproOnFatalError";
   let debugReproPackager: void | DebugReproPackager;
   // Indicates where to find a zip with prepack runtime. Used in environments where
@@ -119,11 +134,15 @@ function run(
   let noDiagnostic: void | Set<string>;
   let warnAsError: void | true;
   let modulesToInitialize: void | Set<string | number> | "ALL";
+  let unknownGlobals: void | UnknownGlobalsMode;
+  let assumptions: void | { [string]: mixed };
+  let fallbackMode: void | AssumptionFallbackMode;
+  let profileEnv: void | "node" | "browser";
   let flags = {
     trace: false,
     debugNames: false,
     emitConcreteModel: false,
-    inlineExpressions: false,
+    inlineExpressions: (undefined: void | boolean),
     removeModuleFactoryFunctions: false,
     logStatistics: false,
     logModules: false,
@@ -133,6 +152,7 @@ function run(
     profile: false,
     instantRender: false,
     reactEnabled: false,
+    closedWorld: false,
   };
   let reproArguments = [];
   let reproFileNames = [];
@@ -303,6 +323,15 @@ function run(
           invariantMode = (arg: any);
           reproArguments.push("--invariantMode", invariantMode);
           break;
+        case "smt":
+          arg = args.shift();
+          if (!SmtModeValues.includes(arg)) {
+            console.error(`Unsupported smt mode: ${arg}`);
+            process.exit(1);
+          }
+          smt = (arg: any);
+          reproArguments.push("--smt", smt);
+          break;
         case "invariantLevel":
           let invariantLevelString = args.shift();
           if (isNaN(invariantLevelString)) {
@@ -337,6 +366,47 @@ function run(
         case "externalPrepackPath":
           externalPrepackPath = args.shift();
           break;
+        case "unknownGlobals":
+          arg = args.shift();
+          if (!UnknownGlobalsModeValues.includes(arg)) {
+            console.error(`Unsupported unknownGlobals mode: ${arg}`);
+            process.exit(1);
+          }
+          unknownGlobals = (arg: any);
+          reproArguments.push("--unknownGlobals", unknownGlobals);
+          break;
+        case "assume":
+          let assumeSpec = args.shift();
+          let [assumeKey, assumeVal] = parseCliAssumption(assumeSpec);
+          if (!assumptions) assumptions = {};
+          assumptions[assumeKey] = assumeVal;
+          reproArguments.push("--assume", assumeSpec);
+          break;
+        case "assumptionsFile":
+          let assumeFile = args.shift();
+          let loadedAssumptions = JSON.parse(fs.readFileSync(assumeFile, "utf8"));
+          if (!assumptions) assumptions = {};
+          Object.assign(assumptions, loadedAssumptions);
+          break;
+        case "fallbackMode":
+          arg = args.shift();
+          if (!AssumptionFallbackModeValues.includes(arg)) {
+            console.error(`Unsupported fallbackMode: ${arg}`);
+            process.exit(1);
+          }
+          fallbackMode = (arg: any);
+          reproArguments.push("--fallbackMode", fallbackMode);
+          break;
+        case "profileEnv":
+          arg = args.shift();
+          if (arg === "node" || arg === "browser") {
+            profileEnv = arg;
+            reproArguments.push("--profileEnv", profileEnv);
+          } else {
+            console.error(`Unsupported profileEnv target: ${arg}`);
+            process.exit(1);
+          }
+          break;
         case "help":
           const options = [
             "-- | input.js",
@@ -359,6 +429,7 @@ function run(
             "--warnAsError",
             "--diagnosticAsError PPxxxx,PPyyyy,...",
             "--noDiagnostic PPxxxx,PPyyyy,...",
+            "--smt " + SmtModeValues.join(" | "),
           ];
           for (let flag of Object.keys(flags)) options.push(`--${flag}`);
 
@@ -398,9 +469,14 @@ function run(
       reactOutput,
       invariantMode,
       invariantLevel,
+      smt,
       debuggerConfigArgs,
       debugReproArgs,
       modulesToInitialize,
+      unknownGlobals,
+      assumptions,
+      fallbackMode,
+      profileEnv,
     },
     flags
   );

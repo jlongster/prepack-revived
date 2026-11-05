@@ -52,6 +52,7 @@ export default function(
       // 7. Let closure be GeneratorFunctionCreate(Normal, FormalParameters, GeneratorBody, funcEnv, strict).
       let closure = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
       closure.loc = ast.loc;
+      closure.__originalName = name;
 
       // 8. Let prototype be ObjectCreate(%GeneratorPrototype%).
       let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
@@ -103,6 +104,7 @@ export default function(
       // 7. Let closure be FunctionCreate(Normal, FormalParameters, FunctionBody, funcEnv, strict).
       let closure = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
       closure.loc = ast.loc;
+      closure.__originalName = name;
 
       // 8. Perform MakeConstructor(closure).
       MakeConstructor(realm, closure);

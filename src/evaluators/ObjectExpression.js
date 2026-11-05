@@ -13,7 +13,7 @@ import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import type { PropertyKeyValue } from "../types.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
-import { AbstractValue, ConcreteValue, ObjectValue, StringValue } from "../values/index.js";
+import { AbstractValue, ConcreteValue, NullValue, ObjectValue, StringValue } from "../values/index.js";
 import { IsAnonymousFunctionDefinition, HasOwnProperty } from "../methods/index.js";
 import { Create, Environment, Functions, Properties, To } from "../singletons.js";
 import invariant from "../invariant.js";
@@ -75,6 +75,28 @@ export default function(
   // 2. Let status be the result of performing PropertyDefinitionEvaluation of PropertyDefinitionList with arguments obj and true.
   for (let prop of ast.properties) {
     if (prop.type === "ObjectProperty") {
+      // ECMA262 Annex B.3.1: PropertyDefinition : PropertyName : AssignmentExpression
+      // When PropertyName is "__proto__" and neither computed nor shorthand, set [[Prototype]] instead of defining an own property.
+      let isProtoSetter =
+        !prop.computed &&
+        !(prop: any).shorthand &&
+        !(prop: any).method &&
+        ((prop.key.type === "Identifier" && prop.key.name === "__proto__") ||
+          (prop.key.type === "StringLiteral" && prop.key.value === "__proto__"));
+      if (isProtoSetter) {
+        let exprValueRef = env.evaluate(prop.value, strictCode);
+        let propValue = Environment.GetValue(realm, exprValueRef);
+        if (propValue instanceof ObjectValue || propValue instanceof NullValue) {
+          obj.$SetPrototypeOf(propValue);
+        } else if (propValue instanceof AbstractValue && (propValue.mightBeObject() || propValue.mightBeNull())) {
+          let concreteProto = propValue.throwIfNotConcrete();
+          if (concreteProto instanceof ObjectValue || concreteProto instanceof NullValue) {
+            obj.$SetPrototypeOf(concreteProto);
+          }
+        }
+        continue;
+      }
+
       // 12.2.6.9 case 3
       // 1. Let propKey be the result of evaluating PropertyName.
       let propKey = EvalPropertyNamePartial(prop, env, realm, strictCode);

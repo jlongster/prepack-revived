@@ -544,8 +544,17 @@ export default function(realm: Realm): ObjectValue {
       invariant(unfiltered.intrinsicName !== undefined);
       invariant(realm.generator);
       realm.rebuildNestedProperties(unfiltered, unfiltered.intrinsicName);
+    } else if (
+      text instanceof AbstractValue &&
+      text.isEnvironmentValue &&
+      (reviver === undefined || reviver instanceof UndefinedValue)
+    ) {
+      unfiltered = AbstractValue.createTemporalFromTemplate(realm, "global.JSON.parse(A)", Value, [text], {
+        skipInvariant: true,
+      });
+      unfiltered.isEnvironmentValue = true;
+      return unfiltered;
     } else {
-      // 1. Let JText be ? ToString(text).
       let JText = To.ToStringPartial(realm, text);
 
       // 2. Parse JText interpreted as UTF-16 encoded Unicode points (6.1.4) as a JSON text as specified in ECMA-404. Throw a SyntaxError exception if JText is not a valid JSON text as defined in that specification.

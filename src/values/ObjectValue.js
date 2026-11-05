@@ -176,9 +176,11 @@ export default class ObjectValue extends ConcreteValue {
   $BooleanData: void | BooleanValue | AbstractValue;
 
   // error
+  $IsEngineError: void | boolean;
   $ErrorData: void | {
     // undefined when the property is "missing"
     contextStack: Array<ExecutionContext>,
+    defaultStack?: Value,
     locationData: void | {
       filename: string,
       sourceCode: string,

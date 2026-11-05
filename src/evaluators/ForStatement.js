@@ -9,7 +9,7 @@
 
 /* @flow */
 
-import type { LexicalEnvironment } from "../environment.js";
+import { EnvironmentRecord, type LexicalEnvironment } from "../environment.js";
 import { Effects, Realm } from "../realm.js";
 import { AbstractValue, NumberValue, Value, EmptyValue, type UndefinedValue } from "../values/index.js";
 import {
@@ -30,6 +30,7 @@ import { UpdateEmpty } from "../methods/index.js";
 import { LoopContinues, InternalGetResultValue } from "./ForOfStatement.js";
 import { Environment, Functions, To } from "../singletons.js";
 import { evaluateSpeculatively, residualizeLoop } from "./residualLoop.js";
+import { prepareLoopRecomputeBeforeApply, finalizeLoopRecomputeAfterApply } from "../methods/recompute.js";
 import invariant from "../invariant.js";
 import type { BabelNodeForStatement } from "@babel/types";
 
@@ -216,12 +217,29 @@ function ForBodyEvaluation(
       // many forked execution paths, and they're non linear, then it might
       // computationally lead to a something that seems like an infinite loop.
       possibleInfiniteLoopIterations++;
-      if (possibleInfiniteLoopIterations > 6) {
+      if (possibleInfiniteLoopIterations > 6 || countSavedCompletionNodes(realm.savedCompletion, 65) > 64) {
         failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
       }
     }
   }
   invariant(false);
+
+  function countSavedCompletionNodes(
+    c: void | Completion | Value,
+    limit: number,
+    seen: Set<Completion> = new Set()
+  ): number {
+    if (!(c instanceof Completion) || seen.has(c) || seen.size >= limit) return seen.size;
+    seen.add(c);
+    if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
+      countSavedCompletionNodes(c.composedWith, limit, seen);
+    }
+    if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
+      countSavedCompletionNodes(c.consequent, limit, seen);
+      countSavedCompletionNodes(c.alternate, limit, seen);
+    }
+    return seen.size;
+  }
 
   function failIfContainsBreakOrReturnOrThrowCompletion(c: void | Completion | Value) {
     if (c === undefined) return;
@@ -250,6 +268,7 @@ function tryToEvaluateForStatementOrLeaveAsAbstract(
   labelSet: ?Array<string>
 ): Value {
   invariant(!realm.instantRender.enabled);
+  let minEnvId = EnvironmentRecord.nextId;
   let effects = evaluateSpeculatively(realm, () =>
     realm.evaluateForEffects(
       () => evaluateForStatement(ast, strictCode, env, realm, labelSet),
@@ -260,7 +279,9 @@ function tryToEvaluateForStatementOrLeaveAsAbstract(
   if (!(effects instanceof Effects)) {
     return residualizeLoop(realm, ast, strictCode, env, labelSet, effects.failure);
   }
+  let loopToken = prepareLoopRecomputeBeforeApply(realm, ast, env, labelSet, effects, minEnvId);
   realm.applyEffects(effects);
+  finalizeLoopRecomputeAfterApply(realm, loopToken, effects);
   return realm.returnOrThrowCompletion(effects.result);
 }
 

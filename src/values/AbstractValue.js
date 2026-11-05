@@ -19,7 +19,8 @@ import { Completion, JoinedAbruptCompletions, JoinedNormalAndAbruptCompletions }
 import { FatalError } from "../errors.js";
 import type { Realm } from "../realm.js";
 import { createOperationDescriptor, type OperationDescriptor } from "../utils/generator.js";
-import type { PropertyKeyValue, ShapeInformationInterface } from "../types.js";
+import type { PathConditions, PropertyKeyValue, ShapeInformationInterface } from "../types.js";
+import type { ModelMethodSpec } from "../intrinsics/env/generatedModels.js";
 import { Placeholders } from "../utils/PreludeGenerator.js";
 import {
   AbstractObjectValue,
@@ -44,6 +45,7 @@ import invariant from "../invariant.js";
 export type AbstractValueKind =
   | "||"
   | "!"
+  | "typeof"
   | "==="
   | "!=="
   | "rebuiltProperty"
@@ -88,7 +90,9 @@ type AbstractValueKindPrefix =
   | "process"
   | "template"
   | "abstractCounted"
-  | "magicGlobalObject";
+  | "magicGlobalObject"
+  | "envGlobal"
+  | "typeofGlobal";
 
 export default class AbstractValue extends Value {
   constructor(
@@ -124,6 +128,12 @@ export default class AbstractValue extends Value {
   args: Array<Value>;
   shape: void | ShapeInformationInterface;
   operationDescriptor: void | OperationDescriptor;
+  isEnvironmentValue: void | boolean;
+  envShapeName: void | string;
+  envMethodSpec: void | ModelMethodSpec;
+  envConstructorShape: void | string;
+  envPath: void | string;
+  envElementType: void | typeof Value;
 
   toDisplayString(): string {
     return "[Abstract " + this.hashValue.toString() + "]";
@@ -219,28 +229,21 @@ export default class AbstractValue extends Value {
   }
 
   // this => val. A false value does not imply that !(this => val).
-  implies(val: AbstractValue, depth: number = 0): boolean {
+  implies(val: AbstractValue, depth: number = 0, context?: PathConditions): boolean {
     if (depth > 5) return false;
     if (this.equals(val)) return true; // x => x regardless of its value
+    let pc = context || this.$Realm.pathConditions;
     if (this.kind === "||") {
       let [x, y] = this.args;
-      let xi =
-        x.implies(val, depth + 1) ||
-        (x instanceof AbstractValue && this.$Realm.pathConditions.impliesNot(x, depth + 1));
+      let xi = x.implies(val, depth + 1, pc) || (x instanceof AbstractValue && pc.impliesNot(x, depth + 1));
       if (!xi) return false;
-      let yi =
-        y.implies(val, depth + 1) ||
-        (y instanceof AbstractValue && this.$Realm.pathConditions.impliesNot(y, depth + 1));
+      let yi = y.implies(val, depth + 1, pc) || (y instanceof AbstractValue && pc.impliesNot(y, depth + 1));
       return yi;
     } else if (this.kind === "&&") {
       let [x, y] = this.args;
-      let xi =
-        x.implies(val, depth + 1) ||
-        (x instanceof AbstractValue && this.$Realm.pathConditions.impliesNot(x, depth + 1));
+      let xi = x.implies(val, depth + 1, pc) || (x instanceof AbstractValue && pc.impliesNot(x, depth + 1));
       if (xi) return true;
-      let yi =
-        y.implies(val, depth + 1) ||
-        (y instanceof AbstractValue && this.$Realm.pathConditions.impliesNot(y, depth + 1));
+      let yi = y.implies(val, depth + 1, pc) || (y instanceof AbstractValue && pc.impliesNot(y, depth + 1));
       return yi;
     } else if (this.kind === "!") {
       let [nx] = this.args;
@@ -249,7 +252,7 @@ export default class AbstractValue extends Value {
         // !!x => val if x => val
         let [x] = nx.args;
         invariant(x instanceof AbstractValue);
-        return x.implies(val, depth + 1);
+        return x.implies(val, depth + 1, pc);
       }
     } else if (this.kind === "conditional") {
       let [c, x, y] = this.args;
@@ -263,30 +266,25 @@ export default class AbstractValue extends Value {
         if (!x.mightNotBeFalse()) {
           // (c ? false : y) => vx !== undefined && vx !== null if y => vx, since val is false unless y is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return y.implies(vx, depth + 1);
+            return y.implies(vx, depth + 1, pc);
           // (c ? false : y) => undefined !== vy && null !== vy if y => vy, since val is false unless y is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return y.implies(vy, depth + 1);
+            return y.implies(vy, depth + 1, pc);
         } else if (!y.mightNotBeFalse()) {
           // (c ? x : false) => vx !== undefined && vx !== null if x => vx, since val is false unless x is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return x.implies(vx, depth + 1);
+            return x.implies(vx, depth + 1, pc);
           // (c ? x : false) => undefined !== vy && null !== vy if x => vy, since val is false unless x is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return x.implies(vy, depth + 1);
+            return x.implies(vy, depth + 1, pc);
         }
       }
 
       // (c ? x : false) => c && x (if c or x were falsy, (c ? x : false) could not be true)
       if (!y.mightNotBeFalse()) {
-        if (c.implies(val, depth + 1)) return true;
-        if (x.implies(val, depth + 1)) return true;
+        if (c.implies(val, depth + 1, pc)) return true;
+        if (x.implies(val, depth + 1, pc)) return true;
       }
-    } else if (this.kind === "!==") {
-      // (0 !== x) => x since undefined, null, false, 0, NaN and "" are excluded by the !== and all other values are thruthy
-      let [x, y] = this.args;
-      if (x instanceof NumberValue && x.value === 0) return y.equals(val);
-      if (y instanceof NumberValue && y.value === 0) return x.equals(val);
     } else if ((this.kind === "===" || this.kind === "==") && (val.kind === "===" || val.kind === "==")) {
       let [x, y] = this.args;
       let [vx, vy] = val.args;
@@ -296,7 +294,7 @@ export default class AbstractValue extends Value {
           if (vx instanceof NullValue || vx instanceof UndefinedValue) return y.equals(vy);
           // null/undefined === y && vx === null/undefined && y === vx => null/undefined == vx
           if (vy instanceof NullValue || vy instanceof UndefinedValue) return y.equals(vx);
-        } else {
+        } else if (this.kind === "===") {
           invariant(val.kind === "===");
           // null === y && null === vy && y === vy => null === vy
           // undefined === y && undefined === vy && y === vy => undefined === vy
@@ -312,12 +310,12 @@ export default class AbstractValue extends Value {
           if (vx instanceof NullValue || vx instanceof UndefinedValue) return x.equals(vy);
           // x === null/undefined && vx === null/undefined && x === vx => null/undefined == vx
           if (vy instanceof NullValue || vy instanceof UndefinedValue) return x.equals(vx);
-        } else {
+        } else if (this.kind === "===") {
           invariant(val.kind === "===");
           // x === null && null === vy && x === vy => null === vy
-          // x == undefined && undefined === vy && x === vy => undefined === vy
+          // x === undefined && undefined === vy && x === vy => undefined === vy
           if (y.equals(vx)) return x.equals(vy);
-          // x === null && vx === null && x === vx => null == vy
+          // x === null && vx === null && x === vx => vx === null
           // x === undefined && vx === undefined && x === vx => vx === undefined
           if (y.equals(vy)) return x.equals(vx);
         }
@@ -327,26 +325,27 @@ export default class AbstractValue extends Value {
     if (val.kind === "!") {
       let [y] = val.args;
       invariant(y instanceof AbstractValue);
-      return y.impliesNot(this, depth + 1);
+      return y.impliesNot(this, depth + 1, pc);
     }
     return false;
   }
 
   // this => !val. A false value does not imply that !(this => !val).
-  impliesNot(val: AbstractValue, depth: number = 0): boolean {
+  impliesNot(val: AbstractValue, depth: number = 0, context?: PathConditions): boolean {
     if (depth > 5) return false;
     if (this.equals(val)) return false; // x => x regardless of its value, hence x => !val is false
+    let pc = context || this.$Realm.pathConditions;
     if (this.kind === "||") {
       let [x, y] = this.args;
-      let xi = x.impliesNot(val, depth + 1);
+      let xi = x.impliesNot(val, depth + 1, pc);
       if (!xi) return false;
-      let yi = y.impliesNot(val, depth + 1);
+      let yi = y.impliesNot(val, depth + 1, pc);
       return yi;
     } else if (this.kind === "&&") {
       let [x, y] = this.args;
-      let xi = x.impliesNot(val, depth + 1);
+      let xi = x.impliesNot(val, depth + 1, pc);
       if (xi) return true;
-      let yi = y.impliesNot(val, depth + 1);
+      let yi = y.impliesNot(val, depth + 1, pc);
       return yi;
     } else if (this.kind === "!") {
       let [nx] = this.args;
@@ -355,11 +354,11 @@ export default class AbstractValue extends Value {
         // !!x => !y if y => !x
         let [x] = nx.args;
         invariant(x instanceof AbstractValue);
-        return x.impliesNot(val, depth + 1);
+        return x.impliesNot(val, depth + 1, pc);
       }
       if (nx.kind === "abstractConcreteUnion") return false; // can't use two valued logic for this.
       // !x => !val if val => x since if val is false x can be any value and if val is true then x must be true
-      return val.implies(nx);
+      return val.implies(nx, depth + 1, pc);
     } else if (this.kind === "conditional") {
       let [c, x, y] = this.args;
       // (c ? x : y) => !val if x is false and y is true and c = val
@@ -372,32 +371,35 @@ export default class AbstractValue extends Value {
         if (!x.mightNotBeFalse()) {
           // (c ? false : y) => !(vx === undefined) && !(vx === null) if y => vx, since val is false unless y is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return y.implies(vx, depth + 1);
+            return y.implies(vx, depth + 1, pc);
           // (c ? false : y) => !(undefined === vy) && !(null === vy) if y => vy, since val is false unless y is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return y.implies(vy, depth + 1);
+            return y.implies(vy, depth + 1, pc);
         } else if (!y.mightNotBeFalse()) {
           // (c ? x : false) => !(vx === undefined) && !(vx === null) if x => vx, since val is false unless x is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return x.implies(vx, depth + 1);
+            return x.implies(vx, depth + 1, pc);
           // (c ? x : false) => !(undefined === vy) && !(null !== vy) if x => vy, since val is false unless x is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return x.implies(vy, depth + 1);
+            return x.implies(vy, depth + 1, pc);
         }
       }
 
       // (c ? x : false) => c && x (if c or x were falsy, (c ? x : false) could not be true)
       if (!y.mightNotBeFalse()) {
-        if (c.impliesNot(val, depth + 1)) return true;
-        if (x.impliesNot(val, depth + 1)) return true;
+        if (c.impliesNot(val, depth + 1, pc)) return true;
+        if (x.impliesNot(val, depth + 1, pc)) return true;
       }
     } else if (this.kind === "===" && val.kind === "===") {
       // x === y and y !== z => !(x === z)
       let [x1, y1] = this.args;
       let [x2, y2] = val.args;
-      if (x1.equals(x2) && y1 instanceof ConcreteValue && y2 instanceof ConcreteValue && !y1.equals(y2)) return true;
+      let sameConcrete = (a: ConcreteValue, b: ConcreteValue) =>
+        a instanceof NumberValue && b instanceof NumberValue ? a.value === b.value : a.equals(b);
+      if (x1.equals(x2) && y1 instanceof ConcreteValue && y2 instanceof ConcreteValue && !sameConcrete(y1, y2))
+        return true;
       // x === y and x !== z => !(z === y)
-      if (y1.equals(y2) && x1 instanceof ConcreteValue && x2 instanceof ConcreteValue && !x1.equals(x2)) {
+      if (y1.equals(y2) && x1 instanceof ConcreteValue && x2 instanceof ConcreteValue && !sameConcrete(x1, x2)) {
         return true;
       }
     }
@@ -443,6 +445,12 @@ export default class AbstractValue extends Value {
     if (this.kind === "abstractConcreteUnion") {
       for (let arg of this.args) if (arg.mightBeNull()) return true;
       return false;
+    }
+    if (this.kind === "||") {
+      return this.args[1].mightBeNull();
+    }
+    if (this.kind === "conditional") {
+      return this.args[1].mightBeNull() || this.args[2].mightBeNull();
     }
     if (this.values.isTop()) return true;
     return this.values.includesValueOfType(NullValue);
@@ -540,6 +548,12 @@ export default class AbstractValue extends Value {
       for (let arg of this.args) if (arg.mightBeUndefined()) return true;
       return false;
     }
+    if (this.kind === "||") {
+      return this.args[1].mightBeUndefined();
+    }
+    if (this.kind === "conditional") {
+      return this.args[1].mightBeUndefined() || this.args[2].mightBeUndefined();
+    }
     if (this.values.isTop()) return true;
     return this.values.includesValueOfType(UndefinedValue);
   }
@@ -564,6 +578,16 @@ export default class AbstractValue extends Value {
   promoteEmptyToUndefined(): Value {
     if (this.values.isTop()) return this;
     if (!this.mightBeEmpty) return this;
+    if (this.kind === "conditional") {
+      let [c, x, y] = this.args;
+      return AbstractValue.createFromConditionalOp(
+        this.$Realm,
+        c,
+        x.promoteEmptyToUndefined(),
+        y.promoteEmptyToUndefined(),
+        this.expressionLocation
+      );
+    }
     let cond = AbstractValue.createFromBinaryOp(this.$Realm, "===", this, this.$Realm.intrinsics.empty);
     let result = AbstractValue.createFromConditionalOp(this.$Realm, cond, this.$Realm.intrinsics.undefined, this);
     if (result instanceof AbstractValue) result.values = this.values.promoteEmptyToUndefined();
@@ -613,14 +637,17 @@ export default class AbstractValue extends Value {
 
   static createJoinConditionForSelectedCompletions(
     selector: Completion => boolean,
-    completion: JoinedAbruptCompletions | JoinedNormalAndAbruptCompletions
+    completion: JoinedAbruptCompletions | JoinedNormalAndAbruptCompletions,
+    memo: Map<Completion, Value> = new Map()
   ): Value {
+    let cached = memo.get(completion);
+    if (cached !== undefined) return cached;
     let jcw;
     let jc = completion.joinCondition;
     let realm = jc.$Realm;
     let njc = AbstractValue.createFromUnaryOp(realm, "!", jc, true, undefined, true);
     if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
-      jcw = AbstractValue.createJoinConditionForSelectedCompletions(selector, completion.composedWith);
+      jcw = AbstractValue.createJoinConditionForSelectedCompletions(selector, completion.composedWith, memo);
       jc = AbstractValue.createFromLogicalOp(realm, "&&", jcw, jc, undefined, true);
       njc = AbstractValue.createFromLogicalOp(realm, "&&", jcw, njc, undefined, true);
     }
@@ -629,31 +656,40 @@ export default class AbstractValue extends Value {
     let cContainsSelectedCompletion = c.containsSelectedCompletion(selector);
     let aContainsSelectedCompletion = a.containsSelectedCompletion(selector);
     if (!cContainsSelectedCompletion && !aContainsSelectedCompletion) {
-      if (jcw !== undefined) return jcw;
-      return realm.intrinsics.false;
+      let res = jcw !== undefined ? jcw : realm.intrinsics.false;
+      memo.set(completion, res);
+      return res;
     }
     let cCond = jc;
     if (cContainsSelectedCompletion) {
       if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
-        let jcc = AbstractValue.createJoinConditionForSelectedCompletions(selector, c);
+        let jcc = AbstractValue.createJoinConditionForSelectedCompletions(selector, c, memo);
         cCond = AbstractValue.createFromLogicalOp(realm, "&&", cCond, jcc, undefined, true);
       }
-      if (!aContainsSelectedCompletion) return cCond;
+      if (!aContainsSelectedCompletion) {
+        memo.set(completion, cCond);
+        return cCond;
+      }
     }
     let aCond = njc;
     if (aContainsSelectedCompletion) {
       if (a instanceof JoinedAbruptCompletions || a instanceof JoinedNormalAndAbruptCompletions) {
-        let jac = AbstractValue.createJoinConditionForSelectedCompletions(selector, a);
+        let jac = AbstractValue.createJoinConditionForSelectedCompletions(selector, a, memo);
         aCond = AbstractValue.createFromLogicalOp(realm, "&&", aCond, jac, undefined, true);
       }
-      if (!cContainsSelectedCompletion) return aCond;
+      if (!cContainsSelectedCompletion) {
+        memo.set(completion, aCond);
+        return aCond;
+      }
     }
     let or = AbstractValue.createFromLogicalOp(realm, "||", cCond, aCond, undefined, true);
     if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
-      let composedCond = AbstractValue.createJoinConditionForSelectedCompletions(selector, completion.composedWith);
-      let and = AbstractValue.createFromLogicalOp(realm, "&&", composedCond, or, undefined, true);
+      invariant(jcw !== undefined);
+      let and = AbstractValue.createFromLogicalOp(realm, "&&", jcw, or, undefined, true);
+      memo.set(completion, and);
       return and;
     }
+    memo.set(completion, or);
     return or;
   }
 
@@ -764,6 +800,39 @@ export default class AbstractValue extends Value {
     if (!condition.mightNotBeFalse()) return right || realm.intrinsics.undefined;
 
     let types = TypesDomain.joinValues(left, right);
+    if (types.isTop() && condition instanceof AbstractValue && left !== undefined && right !== undefined) {
+      let refinedType = (cond: AbstractValue, target: Value, truthy: boolean): typeof Value => {
+        let t0 = target.getType();
+        if (t0 !== Value) return t0;
+        if (cond.kind === "!" && cond.args[0] instanceof AbstractValue) {
+          return refinedType(cond.args[0], target, !truthy);
+        }
+        if ((cond.kind === "===" && truthy) || (cond.kind === "!==" && !truthy)) {
+          let [a, b] = cond.args;
+          let tag;
+          if (a instanceof AbstractValue && a.kind === "typeof" && a.args[0] === target && b instanceof StringValue)
+            tag = b.value;
+          else if (
+            b instanceof AbstractValue &&
+            b.kind === "typeof" &&
+            b.args[0] === target &&
+            a instanceof StringValue
+          )
+            tag = a.value;
+          if (tag === "string") return StringValue;
+          if (tag === "number") return NumberValue;
+          if (tag === "boolean") return BooleanValue;
+          if (tag === "undefined") return UndefinedValue;
+          if (tag === "symbol") return SymbolValue;
+        }
+        return t0;
+      };
+      let lt = refinedType(condition, left, true);
+      let rt = refinedType(condition, right, false);
+      if (lt !== Value && rt !== Value) {
+        types = new TypesDomain(lt).joinWith(rt);
+      }
+    }
     if (types.getType() === NullValue) return realm.intrinsics.null;
     if (types.getType() === UndefinedValue) return realm.intrinsics.undefined;
     let values = ValuesDomain.joinValues(realm, left, right);
