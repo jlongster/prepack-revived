@@ -1823,6 +1823,13 @@ export class ResidualHeapSerializer {
     let classMethodInstance = this.residualClassMethodInstances.get(classFunc);
     invariant(classMethodInstance !== undefined);
     classMethodInstance.staticPrivateFields = undefined;
+    classMethodInstance.minInsertionIndex = 0;
+    classMethodInstance.minInsertionBody = undefined;
+    let recordMinInsertion = () => {
+      let ref = this.emitter.getBodyReference();
+      classMethodInstance.minInsertionBody = ref.body;
+      classMethodInstance.minInsertionIndex = Math.max(classMethodInstance.minInsertionIndex || 0, ref.index);
+    };
 
     // handle class inheritance (including built-ins such as Map, Set, Array, Error, and extends null)
     if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
@@ -1832,6 +1839,9 @@ export class ResidualHeapSerializer {
         [superProto],
         () => {
           classMethodInstance.classSuperNode = this.serializeValue(superProto);
+          if (!(superProto instanceof FunctionValue && this.residualClassMethodInstances.has(superProto))) {
+            recordMinInsertion();
+          }
           bindingsEmittedSemaphore.releaseOne();
         },
         this.emitter.getBody()
@@ -1955,6 +1965,7 @@ export class ResidualHeapSerializer {
           invariant(typeof pName === "string");
           invariant(method.descriptor.value instanceof Value);
           let valNode = this.serializeValue(method.descriptor.value);
+          recordMinInsertion();
           if (classMethodInstance.staticPrivateFields === undefined) {
             classMethodInstance.staticPrivateFields = [];
           }
@@ -2076,6 +2087,12 @@ export class ResidualHeapSerializer {
     } else if (key instanceof SymbolValue) {
       classMethodInstance.classMethodKeyNode = this.serializeValue(key);
       classMethodInstance.classMethodComputed = true;
+      let ownerCmi = this.residualClassMethodInstances.get(classMethodInstance.classConstructor);
+      if (ownerCmi !== undefined) {
+        let ref = this.emitter.getBodyReference();
+        ownerCmi.minInsertionBody = ref.body;
+        ownerCmi.minInsertionIndex = Math.max(ownerCmi.minInsertionIndex || 0, ref.index);
+      }
     } else {
       invariant(false, "Unknown method key type");
     }

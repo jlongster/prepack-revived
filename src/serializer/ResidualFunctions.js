@@ -1272,6 +1272,33 @@ export class ResidualFunctions {
     for (let instance of this.functionInstances) {
       if (functionBodies.has(instance)) bodyInstanceSet.add(instance);
     }
+    const getMinClassIndex = (fv: FunctionValue, body: SerializedBody): number => {
+      let cmi = this.residualClassMethodInstances.get(fv);
+      if (cmi !== undefined && cmi.minInsertionBody === body && cmi.minInsertionIndex !== undefined) {
+        return cmi.minInsertionIndex;
+      }
+      return 0;
+    };
+    let minPropChanged = true;
+    while (minPropChanged) {
+      minPropChanged = false;
+      for (let instance of bodyInstanceSet) {
+        let fv = instance.functionValue;
+        let cmi = this.residualClassMethodInstances.get(fv);
+        if (cmi === undefined) continue;
+        let ip = instance.insertionPoint;
+        if (!(ip instanceof BodyReference)) continue;
+        let superVal = fv.$Prototype;
+        if (!(superVal instanceof FunctionValue) || superVal === fv) continue;
+        let superMin = getMinClassIndex(superVal, ip.body);
+        let curMin = getMinClassIndex(fv, ip.body);
+        if (superMin > curMin) {
+          cmi.minInsertionBody = ip.body;
+          cmi.minInsertionIndex = superMin;
+          minPropChanged = true;
+        }
+      }
+    }
     for (let instance of bodyInstanceSet) {
       let fv = instance.functionValue;
       if (!this.residualClassMethodInstances.has(fv)) continue;
@@ -1279,8 +1306,11 @@ export class ResidualFunctions {
       if (!(ip instanceof BodyReference)) continue;
       let byBody = this.firstFunctionUsagesPerBody.get(fv);
       let firstUsage = byBody !== undefined ? byBody.get(ip.body) : this.firstFunctionUsages.get(fv);
-      if (firstUsage instanceof BodyReference && firstUsage.body === ip.body && firstUsage.index < ip.index) {
-        instance.insertionPoint = new BodyReference(ip.body, firstUsage.index);
+      if (firstUsage instanceof BodyReference && firstUsage.body === ip.body) {
+        let targetIdx = Math.max(firstUsage.index, getMinClassIndex(fv, ip.body));
+        if (targetIdx < ip.index) {
+          instance.insertionPoint = new BodyReference(ip.body, targetIdx);
+        }
       }
     }
     let superOrderChanged = true;
@@ -1301,7 +1331,12 @@ export class ResidualFunctions {
           superInst.insertionPoint.body === ip.body &&
           superInst.insertionPoint.index > ip.index
         ) {
-          superInst.insertionPoint = new BodyReference(ip.body, ip.index);
+          let superMin = getMinClassIndex(superVal, ip.body);
+          let targetIdx = Math.max(ip.index, superMin);
+          superInst.insertionPoint = new BodyReference(ip.body, targetIdx);
+          if (targetIdx > ip.index) {
+            instance.insertionPoint = new BodyReference(ip.body, targetIdx);
+          }
           superOrderChanged = true;
         }
       }
