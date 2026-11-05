@@ -14,6 +14,14 @@ import invariant from "../invariant.js";
 import { Realm } from "../realm.js";
 import { PathConditions } from "../types.js";
 import { AbstractValue, ConcreteValue, NullValue, UndefinedValue, Value } from "../values/index.js";
+import {
+  auditDerivedCondition,
+  auditImplication,
+  smtAuditing,
+  smtEnabled,
+  smtImplies,
+  smtImpliesNot,
+} from "./smt/index.js";
 
 export class PathConditionsImplementation extends PathConditions {
   constructor(baseConditions?: void | PathConditions) {
@@ -33,12 +41,16 @@ export class PathConditionsImplementation extends PathConditions {
   _impliedNegatives: void | Set<AbstractValue>;
   _failedImplications: void | Set<AbstractValue>;
   _failedNegativeImplications: void | Set<AbstractValue>;
+  _smtFailedImplications: void | Set<AbstractValue>;
+  _smtFailedNegatives: void | Set<AbstractValue>;
 
   add(c: AbstractValue): void {
     invariant(!this._readonly);
     this._assumedConditions.add(c);
     this._failedImplications = undefined;
     this._failedNegativeImplications = undefined;
+    this._smtFailedImplications = undefined;
+    this._smtFailedNegatives = undefined;
   }
 
   // It makes the strong assumption that, in order for 2 path conditions to be equal,
@@ -199,6 +211,13 @@ export class PathConditionsImplementation extends PathConditions {
     return this._assumedConditions;
   }
 
+  // All conditions assumed on this path, including those of the base conditions.
+  getAllConditions(): Array<AbstractValue> {
+    let result = new Set();
+    for (let p = this; p !== undefined; p = p._baseConditions) for (let c of p._assumedConditions) result.add(c);
+    return Array.from(result);
+  }
+
   // Refinement may temporarily make a target non-read-only, but marks the target as read-only at the end.
   refineBaseConditons(
     realm: Realm,
@@ -245,7 +264,22 @@ export class PathImplementation {
     if (!condition.mightNotBeTrue()) return true; // any path implies true
     if (!condition.mightNotBeFalse()) return false; // no path condition is false
     invariant(condition instanceof AbstractValue);
-    return condition.$Realm.pathConditions.implies(condition, depth);
+    let realm = condition.$Realm;
+    let pathConditions = realm.pathConditions;
+    invariant(pathConditions instanceof PathConditionsImplementation);
+    if (pathConditions.implies(condition, depth)) {
+      if (smtAuditing(realm)) auditImplication(realm, pathConditions.getAllConditions(), condition, false);
+      return true;
+    }
+    if (!smtEnabled(realm)) return false;
+    // The hand-written rules don't know: ask the solver.
+    if (pathConditions._smtFailedImplications !== undefined && pathConditions._smtFailedImplications.has(condition))
+      return false;
+    if (smtImplies(pathConditions.getAllConditions(), condition))
+      return pathConditions.cacheImplicationSuccess(condition);
+    if (pathConditions._smtFailedImplications === undefined) pathConditions._smtFailedImplications = new Set();
+    pathConditions._smtFailedImplications.add(condition);
+    return false;
   }
 
   // this => !val. A false value does not imply that !(this => !val).
@@ -253,7 +287,21 @@ export class PathImplementation {
     if (!condition.mightNotBeFalse()) return true; // any path implies !false
     if (!condition.mightNotBeTrue()) return false; // no path condition is false, so none can imply !true
     invariant(condition instanceof AbstractValue);
-    return condition.$Realm.pathConditions.impliesNot(condition, depth);
+    let realm = condition.$Realm;
+    let pathConditions = realm.pathConditions;
+    invariant(pathConditions instanceof PathConditionsImplementation);
+    if (pathConditions.impliesNot(condition, depth)) {
+      if (smtAuditing(realm)) auditImplication(realm, pathConditions.getAllConditions(), condition, true);
+      return true;
+    }
+    if (!smtEnabled(realm)) return false;
+    if (pathConditions._smtFailedNegatives !== undefined && pathConditions._smtFailedNegatives.has(condition))
+      return false;
+    if (smtImpliesNot(pathConditions.getAllConditions(), condition))
+      return pathConditions.cacheNegativeImplicationSuccess(condition);
+    if (pathConditions._smtFailedNegatives === undefined) pathConditions._smtFailedNegatives = new Set();
+    pathConditions._smtFailedNegatives.add(condition);
+    return false;
   }
 
   withCondition<T>(condition: Value, evaluate: () => T): T {
@@ -265,8 +313,10 @@ export class PathImplementation {
     let savedPath = realm.pathConditions;
     realm.pathConditions = new PathConditionsImplementation(savedPath);
     try {
+      if (smtProvesInfeasible(savedPath, condition, false)) throw new InfeasiblePathError();
       pushPathCondition(condition);
       realm.pathConditions.refineBaseConditons(realm);
+      if (smtAuditing(realm)) auditPush(savedPath, condition, false);
       return evaluate();
     } catch (e) {
       if (e instanceof InfeasiblePathError) {
@@ -290,8 +340,10 @@ export class PathImplementation {
     let savedPath = realm.pathConditions;
     realm.pathConditions = new PathConditionsImplementation(savedPath);
     try {
+      if (smtProvesInfeasible(savedPath, condition, true)) throw new InfeasiblePathError();
       pushInversePathCondition(condition);
       realm.pathConditions.refineBaseConditons(realm);
+      if (smtAuditing(realm)) auditPush(savedPath, condition, true);
       return evaluate();
     } catch (e) {
       if (e instanceof InfeasiblePathError) {
@@ -313,6 +365,7 @@ export class PathImplementation {
 
     pushPathCondition(condition);
     realm.pathConditions.refineBaseConditons(realm);
+    if (smtAuditing(realm)) auditPush(savedPath, condition, false);
   }
 
   pushInverseAndRefine(condition: Value): void {
@@ -322,6 +375,30 @@ export class PathImplementation {
 
     pushInversePathCondition(condition);
     realm.pathConditions.refineBaseConditons(realm);
+    if (smtAuditing(realm)) auditPush(savedPath, condition, true);
+  }
+}
+
+// Does the solver prove that the path `base` can not continue with `condition` (or its inverse)?
+function smtProvesInfeasible(base: PathConditions, condition: Value, inverse: boolean): boolean {
+  if (!(condition instanceof AbstractValue)) return false;
+  let realm = condition.$Realm;
+  if (!smtEnabled(realm)) return false;
+  invariant(base instanceof PathConditionsImplementation);
+  let conditions = base.getAllConditions();
+  return inverse ? smtImplies(conditions, condition) : smtImpliesNot(conditions, condition);
+}
+
+// Audit: every condition that pushing `condition` added to the path must follow from the base path and `condition`.
+function auditPush(base: PathConditions, condition: Value, inverse: boolean): void {
+  let realm = condition.$Realm;
+  let current = realm.pathConditions;
+  invariant(base instanceof PathConditionsImplementation && current instanceof PathConditionsImplementation);
+  let baseConditions = base.getAllConditions();
+  let known = new Set(baseConditions);
+  for (let derived of current.getAllConditions()) {
+    if (known.has(derived) || derived === condition) continue;
+    auditDerivedCondition(realm, baseConditions, condition, inverse, derived);
   }
 }
 

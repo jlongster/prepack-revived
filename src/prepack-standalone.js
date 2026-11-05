@@ -47,6 +47,11 @@ export function prepackSources(
     options.debugReproArgs
   );
   initializeGlobals(realm);
+  if (realm.smtMode === "audit")
+    realm.smtAuditContext = sourceFileCollection
+      .toArray()
+      .map(f => f.filePath)
+      .join(",");
   if (typeof options.additionalGlobals === "function") {
     options.additionalGlobals(realm);
   }

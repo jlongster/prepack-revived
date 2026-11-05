@@ -19,6 +19,7 @@ import { Path, To } from "../singletons.js";
 import EmptyValue from "../values/EmptyValue.js";
 import { createOperationDescriptor } from "./generator.js";
 import { NullValue, NumberValue, ObjectValue, PrimitiveValue, UndefinedValue } from "../values/index.js";
+import { auditRewrite, smtAuditing } from "./smt/index.js";
 
 export default function simplifyAndRefineAbstractValue(
   realm: Realm,
@@ -43,10 +44,15 @@ export default function simplifyAndRefineAbstractValue(
       throw new FatalError();
     };
     let result = simplify(realm, value, isCondition, 0);
-    if (result !== value) realm.statistics.simplifications++;
+    if (result !== value) {
+      realm.statistics.simplifications++;
+      if (smtAuditing(realm)) {
+        auditRewrite(realm, realm.pathConditions.getAllConditions(), value, result, isCondition);
+      }
+    }
     return result;
   } catch (e) {
-    if (e.name === "Invariant Violation") throw e;
+    if (e.name === "Invariant Violation" || e.name === "SmtAuditError") throw e;
     if (e instanceof FatalError && typeof e.message === "string" && e.message.includes("PP0029")) {
       if (isRootSimplification) {
         return value;

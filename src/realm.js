@@ -70,6 +70,7 @@ import invariant from "./invariant.js";
 import seedrandom from "seedrandom";
 import { createOperationDescriptor, Generator, type TemporalOperationEntry } from "./utils/generator.js";
 import { PreludeGenerator } from "./utils/PreludeGenerator.js";
+import { resolveSmtMode, type SmtMode } from "./utils/smt/index.js";
 import {
   createPathConditions,
   Environment,
@@ -266,6 +267,7 @@ export class Realm {
     this.abstractValueImpliesMax = opts.abstractValueImpliesMax !== undefined ? opts.abstractValueImpliesMax : 0;
     this.abstractValueImpliesCounter = 0;
     this.inSimplificationPath = false;
+    this.smtMode = resolveSmtMode(opts.smt);
 
     this.timeout = opts.timeout;
     if (this.timeout !== undefined) {
@@ -378,6 +380,8 @@ export class Realm {
   abstractValueImpliesCounter: number;
   impliesCounterOverflowed: boolean;
   inSimplificationPath: boolean;
+  smtMode: SmtMode;
+  smtAuditContext: void | string;
 
   modifiedBindings: void | Bindings;
   modifiedProperties: void | PropertyBindings;

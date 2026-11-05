@@ -20,6 +20,8 @@ import {
   type InvariantModeTypes,
   InvariantModeValues,
   DiagnosticSeverityValues,
+  type SmtMode,
+  SmtModeValues,
 } from "./options.js";
 import { type SerializedResult } from "./serializer/types.js";
 import { TextPrinter } from "./utils/TextPrinter.js";
@@ -86,6 +88,7 @@ function run(
     --warnAsError            Turns all warnings into errors.
     --diagnosticAsError      A comma-separated list of non-fatal-error PPxxxx diagnostic codes that should get turned into (recoverable) errors.
     --noDiagnostic           A comma-separated list of non-fatal-error PPxxxx diagnostic codes that should get suppressed.
+    --smt                    Z3 path-condition solver mode: off | fallback | audit (default = off, or $PREPACK_SMT).
   `;
   let args = Array.from(process.argv);
   args.splice(0, 2);
@@ -110,6 +113,7 @@ function run(
   let cpuprofilePath: void | string;
   let invariantMode: void | InvariantModeTypes;
   let invariantLevel: void | number;
+  let smt: void | SmtMode;
   let reproMode: void | "reproUnconditionally" | "reproOnFatalError";
   let debugReproPackager: void | DebugReproPackager;
   // Indicates where to find a zip with prepack runtime. Used in environments where
@@ -303,6 +307,15 @@ function run(
           invariantMode = (arg: any);
           reproArguments.push("--invariantMode", invariantMode);
           break;
+        case "smt":
+          arg = args.shift();
+          if (!SmtModeValues.includes(arg)) {
+            console.error(`Unsupported smt mode: ${arg}`);
+            process.exit(1);
+          }
+          smt = (arg: any);
+          reproArguments.push("--smt", smt);
+          break;
         case "invariantLevel":
           let invariantLevelString = args.shift();
           if (isNaN(invariantLevelString)) {
@@ -359,6 +372,7 @@ function run(
             "--warnAsError",
             "--diagnosticAsError PPxxxx,PPyyyy,...",
             "--noDiagnostic PPxxxx,PPyyyy,...",
+            "--smt " + SmtModeValues.join(" | "),
           ];
           for (let flag of Object.keys(flags)) options.push(`--${flag}`);
 
@@ -398,6 +412,7 @@ function run(
       reactOutput,
       invariantMode,
       invariantLevel,
+      smt,
       debuggerConfigArgs,
       debugReproArgs,
       modulesToInitialize,
