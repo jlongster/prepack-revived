@@ -44,6 +44,8 @@ import type { BabelNodeTemplateLiteral } from "@babel/types";
 import { createOperationDescriptor } from "../utils/generator.js";
 import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js";
 import { IsArrayIndex } from "./is.js";
+import { IntervalDomain } from "../domains/index.js";
+import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
 
 // ECMA262 7.3.22
 export function GetFunctionRealm(realm: Realm, obj: ObjectValue): Realm {
@@ -361,6 +363,13 @@ export function OrdinaryGetPartial(
   }
 
   if (!(P instanceof AbstractValue)) return O.$Get(P, Receiver);
+
+  // If the key can only be one of a few strings or numbers, read each of them under the
+  // condition that the key has that value.
+  if (O.unknownProperty === undefined && !O.isPartialObject()) {
+    let keys = IntervalDomain.enumeratePropertyKeys(P, MAX_KEY_CASES);
+    if (keys !== undefined) return mapCases(realm, P, keys, k => O.$Get(To.ToString(realm, k), Receiver));
+  }
 
   // A string coercion might have side-effects.
   // TODO #1682: We assume that simple objects mean that they don't have a

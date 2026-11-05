@@ -14,9 +14,6 @@ import { StringValue, ObjectValue, NumberValue, AbstractValue } from "../../valu
 import { To } from "../../singletons.js";
 import invariant from "../../invariant.js";
 import { CompilerDiagnostic } from "../../errors.js";
-import { Placeholders } from "../../utils/PreludeGenerator.js";
-
-let buildMathTemplates: Map<string, string> = new Map();
 
 export default function(realm: Realm): ObjectValue {
   let obj = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, "Math");
@@ -154,21 +151,9 @@ export default function(realm: Realm): ObjectValue {
   for (let [name, length] of functions) {
     obj.defineNativeMethod(name, length, (context, args, originalLength) => {
       invariant(originalLength >= 0);
-      args.length = originalLength;
-      if (
-        originalLength <= 26 &&
-        args.some(arg => arg instanceof AbstractValue) &&
-        args.every(arg => To.IsToNumberPure(realm, arg))
-      ) {
-        let templateSource = buildMathTemplates.get(name);
-        if (templateSource === undefined) {
-          let params = Placeholders.slice(0, originalLength).join(",");
-          templateSource = `global.Math.${name}(${params})`;
-          buildMathTemplates.set(name, templateSource);
-        }
-        return AbstractValue.createFromTemplate(realm, templateSource, NumberValue, args);
-      }
-
+      args.length =
+        name === "hypot" || name === "max" || name === "min" ? originalLength : Math.min(originalLength, length);
+      // Calls with abstract arguments are handled by the effect summaries in intrinsics/summaries.js.
       return new NumberValue(
         realm,
         Math[name].apply(null, args.map((arg, i) => To.ToNumber(realm, arg.throwIfNotConcrete())))
@@ -176,18 +161,8 @@ export default function(realm: Realm): ObjectValue {
     });
   }
 
-  const imulTemplateSrc = "global.Math.imul(A, B)";
-
   // ECMA262 20.2.2.19
   obj.defineNativeMethod("imul", 2, (context, [x, y]) => {
-    if (
-      (x instanceof AbstractValue || y instanceof AbstractValue) &&
-      To.IsToNumberPure(realm, x) &&
-      To.IsToNumberPure(realm, y)
-    ) {
-      return AbstractValue.createFromTemplate(realm, imulTemplateSrc, NumberValue, [x, y]);
-    }
-
     return new NumberValue(
       realm,
       Math.imul(To.ToUint32(realm, x.throwIfNotConcrete()), To.ToUint32(realm, y.throwIfNotConcrete()))

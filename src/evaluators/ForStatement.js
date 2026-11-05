@@ -10,14 +10,8 @@
 /* @flow */
 
 import type { LexicalEnvironment } from "../environment.js";
-import { Realm } from "../realm.js";
-import {
-  AbstractValue,
-  Value,
-  EmptyValue,
-  ECMAScriptSourceFunctionValue,
-  type UndefinedValue,
-} from "../values/index.js";
+import { Effects, Realm } from "../realm.js";
+import { AbstractValue, NumberValue, Value, EmptyValue, type UndefinedValue } from "../values/index.js";
 import {
   AbruptCompletion,
   BreakCompletion,
@@ -29,26 +23,15 @@ import {
   ThrowCompletion,
   SimpleNormalCompletion,
 } from "../completions.js";
-import traverse from "@babel/traverse";
-import type { BabelTraversePath } from "@babel/traverse";
-import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { IntervalDomain } from "../domains/index.js";
+import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { UpdateEmpty } from "../methods/index.js";
 import { LoopContinues, InternalGetResultValue } from "./ForOfStatement.js";
-import { Environment, Functions, Leak, To } from "../singletons.js";
+import { Environment, Functions, To } from "../singletons.js";
+import { evaluateSpeculatively, residualizeLoop } from "./residualLoop.js";
 import invariant from "../invariant.js";
-import * as t from "@babel/types";
-import type { BabelNodeExpression, BabelNodeForStatement, BabelNodeBlockStatement } from "@babel/types";
-import { createOperationDescriptor } from "../utils/generator.js";
-
-type BailOutWrapperInfo = {
-  usesArguments: boolean,
-  usesThis: boolean,
-  usesReturn: boolean,
-  usesGotoToLabel: boolean,
-  usesThrow: boolean,
-  varPatternUnsupported: boolean,
-};
+import type { BabelNodeForStatement } from "@babel/types";
 
 // ECMA262 13.7.4.9
 export function CreatePerIterationEnvironment(realm: Realm, perIterationBindings: Array<string>): UndefinedValue {
@@ -83,6 +66,37 @@ export function CreatePerIterationEnvironment(realm: Realm, perIterationBindings
   return realm.intrinsics.undefined;
 }
 
+// If a loop test compares a concrete number against an abstract number whose range has only a few
+// integer values (e.g. a clamped bound in [0, 3]), return that bound and its possible values.
+function findSmallEnumerableLoopBound(testValue: AbstractValue): void | [AbstractValue, Array<NumberValue>] {
+  let op = testValue.kind;
+  if (
+    op !== "<" &&
+    op !== "<=" &&
+    op !== ">" &&
+    op !== ">=" &&
+    op !== "!==" &&
+    op !== "!=" &&
+    op !== "===" &&
+    op !== "=="
+  ) {
+    return undefined;
+  }
+  if (testValue.args.length !== 2) return undefined;
+  let [x, y] = testValue.args;
+  let bound =
+    x instanceof NumberValue && y instanceof AbstractValue
+      ? y
+      : y instanceof NumberValue && x instanceof AbstractValue
+      ? x
+      : undefined;
+  if (bound === undefined) return undefined;
+  let nums = IntervalDomain.enumerate(bound, MAX_KEY_CASES, true);
+  if (nums === undefined || nums.length <= 1) return undefined;
+  let realm = bound.$Realm;
+  return [bound, nums.map(n => new NumberValue(realm, n))];
+}
+
 // ECMA262 13.7.4.8
 function ForBodyEvaluation(
   realm: Realm,
@@ -91,13 +105,16 @@ function ForBodyEvaluation(
   stmt,
   perIterationBindings: Array<string>,
   labelSet: ?Array<string>,
-  strictCode: boolean
+  strictCode: boolean,
+  initialV?: Value,
+  initialTestValue?: Value
 ): Value {
   // 1. Let V be undefined.
-  let V: Value = realm.intrinsics.undefined;
+  let V: Value = initialV !== undefined ? initialV : realm.intrinsics.undefined;
+  let pendingTestValue: void | Value = initialTestValue;
 
   // 2. Perform ? CreatePerIterationEnvironment(perIterationBindings).
-  CreatePerIterationEnvironment(realm, perIterationBindings);
+  if (pendingTestValue === undefined) CreatePerIterationEnvironment(realm, perIterationBindings);
   let env = realm.getRunningContext().lexicalEnvironment;
   let possibleInfiniteLoopIterations = 0;
 
@@ -106,11 +123,34 @@ function ForBodyEvaluation(
     let result;
     // a. If test is not [empty], then
     if (test) {
-      // i. Let testRef be the result of evaluating test.
-      let testRef = env.evaluate(test, strictCode);
+      let testValue;
+      if (pendingTestValue !== undefined) {
+        testValue =
+          pendingTestValue instanceof AbstractValue
+            ? realm.simplifyAndRefineAbstractCondition(pendingTestValue)
+            : pendingTestValue;
+        pendingTestValue = undefined;
+      } else {
+        // i. Let testRef be the result of evaluating test.
+        let testRef = env.evaluate(test, strictCode);
 
-      // ii. Let testValue be ? GetValue(testRef).
-      let testValue = Environment.GetValue(realm, testRef);
+        // ii. Let testValue be ? GetValue(testRef).
+        testValue = Environment.GetValue(realm, testRef);
+
+        if (
+          testValue instanceof AbstractValue &&
+          perIterationBindings.length === 0 &&
+          realm.savedCompletion === undefined
+        ) {
+          let bound = findSmallEnumerableLoopBound(testValue);
+          if (bound !== undefined) {
+            let [boundVal, cases] = bound;
+            return mapCases(realm, boundVal, cases, () =>
+              ForBodyEvaluation(realm, test, increment, stmt, perIterationBindings, labelSet, strictCode, V, testValue)
+            );
+          }
+        }
+      }
 
       // iii. If ToBoolean(testValue) is false, return NormalCompletion(V).
       if (!To.ToBooleanPartial(realm, testValue)) {
@@ -202,171 +242,6 @@ function ForBodyEvaluation(
   }
 }
 
-let BailOutWrapperClosureRefVisitor = {
-  ReferencedIdentifier(path: BabelTraversePath, state: BailOutWrapperInfo) {
-    if (path.node.name === "arguments") {
-      state.usesArguments = true;
-    }
-  },
-  ThisExpression(path: BabelTraversePath, state: BailOutWrapperInfo) {
-    state.usesThis = true;
-  },
-  "BreakStatement|ContinueStatement"(path: BabelTraversePath, state: BailOutWrapperInfo) {
-    if (path.node.label !== null) {
-      state.usesGotoToLabel = true;
-    }
-  },
-  ReturnStatement(path: BabelTraversePath, state: BailOutWrapperInfo) {
-    state.usesReturn = true;
-  },
-  ThrowStatement(path: BabelTraversePath, state: BailOutWrapperInfo) {
-    state.usesThrow = true;
-  },
-  VariableDeclaration(path: BabelTraversePath, state: BailOutWrapperInfo) {
-    let node = path.node;
-
-    // `let` and `const` are lexically scoped. We only need to change `var`s into assignments. Since we hoist the loop
-    // into its own function `var`s (which are function scoped) need to be made available outside the loop.
-    if (node.kind !== "var") return;
-
-    if (t.isForOfStatement(path.parentPath.node) || t.isForInStatement(path.parentPath.node)) {
-      // For-of and for-in variable declarations behave a bit differently. There is only one declarator and there is
-      // never an initializer. Furthermore we can’t replace with an expression or statement, only a
-      // `LeftHandSideExpression`. However, that `LeftHandSideExpression` will perform a `DestructuringAssignment`
-      // operation which is what we want.
-
-      invariant(node.declarations.length === 1);
-      invariant(node.declarations[0].init == null);
-
-      const { id } = node.declarations[0];
-
-      if (!t.isIdentifier(id)) {
-        // We do not currently support ObjectPattern, SpreadPattern and ArrayPattern
-        // see: https://github.com/babel/babylon/blob/master/ast/spec.md#patterns
-        state.varPatternUnsupported = true;
-        return;
-      }
-
-      // Replace with the id directly since it is a `LeftHandSideExpression`.
-      path.replaceWith(id);
-    } else {
-      // Change all variable declarations into assignment statements. We assign to capture variables made available
-      // outside of this scope.
-
-      // If our parent is a `for (var x; x < y; x++)` loop we do not need a wrapper.
-      // i.e. for (var x of y) for (var x in y) for (var x; x < y; x++)
-      let needsExpressionWrapper = !t.isForStatement(path.parentPath.node);
-
-      const getConvertedDeclarator = index => {
-        let { id, init } = node.declarations[index];
-
-        if (t.isIdentifier(id)) {
-          // If init is undefined, then we need to ensure we provide
-          // an actual Babel undefined node for it.
-          if (init === null) {
-            init = t.identifier("undefined");
-          }
-          return t.assignmentExpression("=", id, init);
-        } else {
-          // We do not currently support ObjectPattern, SpreadPattern and ArrayPattern
-          // see: https://github.com/babel/babylon/blob/master/ast/spec.md#patterns
-          state.varPatternUnsupported = true;
-        }
-      };
-
-      if (node.declarations.length === 1) {
-        let convertedNodeOrUndefined = getConvertedDeclarator(0);
-        if (convertedNodeOrUndefined === undefined) {
-          // Do not continue as we don't support this
-          return;
-        }
-        path.replaceWith(
-          needsExpressionWrapper ? t.expressionStatement(convertedNodeOrUndefined) : convertedNodeOrUndefined
-        );
-      } else {
-        // convert to sequence, so: `var x = 1, y = 2;` becomes `x = 1, y = 2;`
-        let expressions = [];
-        for (let i = 0; i < node.declarations.length; i++) {
-          let convertedNodeOrUndefined = getConvertedDeclarator(i);
-          if (convertedNodeOrUndefined === undefined) {
-            // Do not continue as we don't support this
-            return;
-          }
-          expressions.push(convertedNodeOrUndefined);
-        }
-        let sequenceExpression = t.sequenceExpression(((expressions: any): Array<BabelNodeExpression>));
-        path.replaceWith(needsExpressionWrapper ? t.expressionStatement(sequenceExpression) : sequenceExpression);
-      }
-    }
-  },
-};
-
-function generateRuntimeForStatement(
-  ast: BabelNodeForStatement,
-  strictCode: boolean,
-  env: LexicalEnvironment,
-  realm: Realm,
-  labelSet: ?Array<string>
-): AbstractValue {
-  let wrapperFunction = new ECMAScriptSourceFunctionValue(realm);
-  let body = ((t.cloneDeep(t.blockStatement([ast])): any): BabelNodeBlockStatement);
-  wrapperFunction.initialize([], body);
-  wrapperFunction.$Environment = env;
-  // We need to scan to AST looking for "this", "return", "throw", labels and "arguments"
-  let functionInfo = {
-    usesArguments: false,
-    usesThis: false,
-    usesReturn: false,
-    usesGotoToLabel: false,
-    usesThrow: false,
-    varPatternUnsupported: false,
-  };
-
-  traverse(
-    t.file(t.program([t.expressionStatement(t.functionExpression(null, [], body))])),
-    BailOutWrapperClosureRefVisitor,
-    null,
-    functionInfo
-  );
-  traverse.cache.clear();
-  let { usesReturn, usesThrow, usesArguments, usesGotoToLabel, varPatternUnsupported, usesThis } = functionInfo;
-
-  if (usesReturn || usesThrow || usesArguments || usesGotoToLabel || varPatternUnsupported) {
-    // We do not have support for these yet
-    let diagnostic = new CompilerDiagnostic(
-      `failed to recover from a for/while loop bail-out due to unsupported logic in loop body`,
-      realm.currentLocation,
-      "PP0037",
-      "FatalError"
-    );
-    realm.handleError(diagnostic);
-    throw new FatalError();
-  }
-  let args = [wrapperFunction];
-
-  if (usesThis) {
-    let thisRef = env.evaluate(t.thisExpression(), strictCode);
-    let thisVal = Environment.GetValue(realm, thisRef);
-    Leak.value(realm, thisVal);
-    args.push(thisVal);
-  }
-
-  // We leak the wrapping function value, which in turn invokes the leak
-  // logic which is transitive. The leaking logic should recursively visit
-  // all bindings/objects in the loop and its body and mark the associated
-  // bindings/objects as leaked
-  Leak.value(realm, wrapperFunction);
-
-  let wrapperValue = AbstractValue.createTemporalFromBuildFunction(
-    realm,
-    Value,
-    args,
-    createOperationDescriptor("FOR_STATEMENT_FUNC", { usesThis })
-  );
-  invariant(wrapperValue instanceof AbstractValue);
-  return wrapperValue;
-}
-
 function tryToEvaluateForStatementOrLeaveAsAbstract(
   ast: BabelNodeForStatement,
   strictCode: boolean,
@@ -375,28 +250,15 @@ function tryToEvaluateForStatementOrLeaveAsAbstract(
   labelSet: ?Array<string>
 ): Value {
   invariant(!realm.instantRender.enabled);
-  let effects;
-  let savedSuppressDiagnostics = realm.suppressDiagnostics;
-  try {
-    realm.suppressDiagnostics = true;
-    effects = realm.evaluateForEffects(
+  let effects = evaluateSpeculatively(realm, () =>
+    realm.evaluateForEffects(
       () => evaluateForStatement(ast, strictCode, env, realm, labelSet),
       undefined,
       "tryToEvaluateForStatementOrLeaveAsAbstract"
-    );
-  } catch (error) {
-    if (error instanceof FatalError) {
-      realm.suppressDiagnostics = savedSuppressDiagnostics;
-      return realm.evaluateWithPossibleThrowCompletion(
-        () => generateRuntimeForStatement(ast, strictCode, env, realm, labelSet),
-        TypesDomain.topVal,
-        ValuesDomain.topVal
-      );
-    } else {
-      throw error;
-    }
-  } finally {
-    realm.suppressDiagnostics = savedSuppressDiagnostics;
+    )
+  );
+  if (!(effects instanceof Effects)) {
+    return residualizeLoop(realm, ast, strictCode, env, labelSet, effects.failure);
   }
   realm.applyEffects(effects);
   return realm.returnOrThrowCompletion(effects.result);
@@ -410,7 +272,8 @@ export default function(
   realm: Realm,
   labelSet: ?Array<string>
 ): Value {
-  if (realm.isInPureScope() && !realm.instantRender.enabled) {
+  // Trial iterations created by residualLoop.js must not be residualized themselves.
+  if (realm.useAbstractInterpretation && !realm.instantRender.enabled && !(ast: any).prepackTrialLoop) {
     return tryToEvaluateForStatementOrLeaveAsAbstract(ast, strictCode, env, realm, labelSet);
   } else {
     return evaluateForStatement(ast, strictCode, env, realm, labelSet);

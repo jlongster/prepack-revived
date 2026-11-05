@@ -21,7 +21,7 @@
 // Any solver failure (not installed, timeout, crash, untranslatable value) is "don't know", which is always safe.
 
 import type { Realm } from "../../realm.js";
-import { AbstractValue, EmptyValue, Value } from "../../values/index.js";
+import { AbstractValue, EmptyValue, NumberValue, Value } from "../../values/index.js";
 import { SmtTranslator, SMT_PRELUDE, TranslationError, describe } from "./translate.js";
 import { Z3Process, findZ3, type Z3Answer } from "./z3.js";
 
@@ -287,8 +287,8 @@ export function auditRewrite(
   isCondition: boolean
 ): void {
   // Prepack's internal EmptyValue sentinel promotes to `undefined` on value reads while comparing !== undefined on
-  // raw descriptors; skip JS-value equivalence checks on trees containing it.
-  if (containsEmptySentinel(from) || containsEmptySentinel(to)) return;
+  // raw descriptors, and literal -0 vs +0 is collapsed in the Real number sort; skip equivalence checks on them.
+  if (containsEmptySentinel(from) || containsEmptySentinel(to) || containsNegativeZeroConstant(from)) return;
   stats.auditChecks++;
   let cex = findCounterexample(conditions, t =>
     isCondition ? `(not (= ${t.truthy(from)} ${t.truthy(to)}))` : `(not (same ${t.term(from)} ${t.term(to)}))`
@@ -308,6 +308,13 @@ function containsEmptySentinel(v: Value, depth: number = 0): boolean {
   if (!(v instanceof AbstractValue) || depth > 6) return false;
   if (v.mightBeEmpty) return true;
   for (let a of v.args) if (containsEmptySentinel(a, depth + 1)) return true;
+  return false;
+}
+
+function containsNegativeZeroConstant(v: Value, depth: number = 0): boolean {
+  if (v instanceof NumberValue) return Object.is(v.value, -0);
+  if (!(v instanceof AbstractValue) || depth > 6) return false;
+  for (let a of v.args) if (containsNegativeZeroConstant(a, depth + 1)) return true;
   return false;
 }
 

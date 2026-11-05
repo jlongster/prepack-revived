@@ -33,10 +33,11 @@ import {
   ReturnCompletion,
   ThrowCompletion,
 } from "../completions.js";
+import { InfeasiblePathError } from "../errors.js";
 import { IsDataDescriptor, StrictEqualityComparison } from "../methods/index.js";
-import { Path } from "../singletons.js";
+import { Leak, Path } from "../singletons.js";
 import { Generator } from "../utils/generator.js";
-import { AbstractValue, ConcreteValue, EmptyValue, Value } from "../values/index.js";
+import { AbstractValue, ConcreteValue, EmptyValue, NumberValue, ObjectValue, Value } from "../values/index.js";
 
 import invariant from "../invariant.js";
 
@@ -101,7 +102,7 @@ export class JoinImplementation {
   composeCompletions(leftCompletion: void | Completion | Value, rightCompletion: Completion | Value): Completion {
     if (leftCompletion instanceof AbruptCompletion) return leftCompletion;
     if (leftCompletion instanceof JoinedNormalAndAbruptCompletions) {
-      if (rightCompletion instanceof JoinedNormalAndAbruptCompletions) {
+      if (rightCompletion instanceof JoinedNormalAndAbruptCompletions && leftCompletion.savedEffects !== undefined) {
         rightCompletion.composedWith = leftCompletion;
         rightCompletion.pathConditionsAtCreation = leftCompletion.pathConditionsAtCreation;
         return rightCompletion;
@@ -209,6 +210,14 @@ export class JoinImplementation {
     if (!joinCondition.mightNotBeFalse()) return e2;
     invariant(joinCondition instanceof AbstractValue);
 
+    // Just like bindings (see _joinBindings), an object must either be leaked on both sides or on neither:
+    // the property values tracked for an object that leaked on one side only are stale on that side, and
+    // materializing them later on would overwrite whatever unknown code did to the object.
+    let leakedOnlyIn1 = this._objectsLeakedOnlyInFirst(e1, e2);
+    let leakedOnlyIn2 = this._objectsLeakedOnlyInFirst(e2, e1);
+    if (leakedOnlyIn1.length > 0) e2 = this._leakObjectsAfterEffects(joinCondition.$Realm, e2, leakedOnlyIn1);
+    if (leakedOnlyIn2.length > 0) e1 = this._leakObjectsAfterEffects(joinCondition.$Realm, e1, leakedOnlyIn2);
+
     let {
       result: c1,
       generator: generator1,
@@ -269,6 +278,35 @@ export class JoinImplementation {
     return new Effects(c, generator, bindings, properties, createdObjects, createdAbstracts);
   }
 
+  _objectsLeakedOnlyInFirst(e1: Effects, e2: Effects): Array<ObjectValue> {
+    let result = [];
+    e1.modifiedProperties.forEach((desc, binding) => {
+      if (binding.key !== "_isLeaked" || !binding.internalSlot) return;
+      let object = binding.object;
+      if (!(object instanceof ObjectValue) || e1.createdObjects.has(object)) return;
+      let isLeaked1 = desc instanceof InternalSlotDescriptor ? desc.value : undefined;
+      if (!(isLeaked1 instanceof Value) || isLeaked1.mightNotBeTrue()) return;
+      // The pre-split value of a binding that was not modified by e2 is the current value, since effects are undone.
+      let desc2 = e2.modifiedProperties.has(binding) ? e2.modifiedProperties.get(binding) : binding.descriptor;
+      let isLeaked2 = desc2 instanceof InternalSlotDescriptor ? desc2.value : undefined;
+      if (isLeaked2 instanceof Value && !isLeaked2.mightNotBeTrue()) return;
+      result.push(object);
+    });
+    return result;
+  }
+
+  _leakObjectsAfterEffects(realm: Realm, effects: Effects, objects: Array<ObjectValue>): Effects {
+    return realm.evaluateForEffects(
+      () => {
+        realm.applyEffects(effects);
+        for (let object of objects) Leak.value(realm, object);
+        return effects.result;
+      },
+      undefined,
+      "leakObjectsLeakedInOtherBranch"
+    );
+  }
+
   joinValuesOfSelectedCompletions(
     selector: Completion => boolean,
     completion: Completion,
@@ -278,8 +316,17 @@ export class JoinImplementation {
     let bottom = realm.intrinsics.__bottomValue;
     if (completion instanceof JoinedAbruptCompletions || completion instanceof JoinedNormalAndAbruptCompletions) {
       let joinCondition = completion.joinCondition;
-      let c = this.joinValuesOfSelectedCompletions(selector, completion.consequent);
-      let a = this.joinValuesOfSelectedCompletions(selector, completion.alternate);
+      let c = this.joinValuesOfSelectedCompletions(selector, completion.consequent, keepInfeasiblePaths);
+      let a = this.joinValuesOfSelectedCompletions(selector, completion.alternate, keepInfeasiblePaths);
+      if (c === bottom && a === bottom) {
+        if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
+          let composedWith = completion.composedWith;
+          if (composedWith.containsSelectedCompletion(selector)) {
+            return this.joinValuesOfSelectedCompletions(selector, composedWith, keepInfeasiblePaths);
+          }
+        }
+        return bottom;
+      }
       // do some simplification
       if (c === bottom) {
         // joinCondition will never be true when this completion is reached
@@ -310,7 +357,7 @@ export class JoinImplementation {
       if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
         let composedWith = completion.composedWith;
         if (!composedWith.containsSelectedCompletion(selector)) return jv;
-        let cjv = this.joinValuesOfSelectedCompletions(selector, composedWith);
+        let cjv = this.joinValuesOfSelectedCompletions(selector, composedWith, keepInfeasiblePaths);
         joinCondition = AbstractValue.createJoinConditionForSelectedCompletions(selector, composedWith);
         jv = this.joinValues(realm, jv, cjv, getAbstractValue);
         invariant(jv instanceof Value);
@@ -553,22 +600,56 @@ export class JoinImplementation {
     functionToMap: ConcreteValue => Completion | Value
   ): Value {
     invariant(values.size > 1);
-    let joinedEffects;
+    let nanValue;
+    let entries: Array<[ConcreteValue, Value]> = [];
     for (let val of values) {
-      let condition = joinConditionFactory(val);
-      let effects = realm.evaluateForEffects(
-        () => {
-          invariant(condition instanceof AbstractValue);
-          return Path.withCondition(condition, () => {
-            return functionToMap(val);
-          });
-        },
-        undefined,
-        "mapAndJoin"
-      );
+      if (val instanceof NumberValue && Number.isNaN(val.value)) {
+        nanValue = val;
+      } else {
+        entries.push([val, joinConditionFactory(val)]);
+      }
+    }
+    if (nanValue !== undefined) {
+      // `x === NaN` is always false; NaN is the complement of all non-NaN elements in `values`.
+      // Put it first so it serves as the fallback arm of the joined effects.
+      let nanCondition: Value = realm.intrinsics.true;
+      for (let [, cond] of entries) {
+        let notCond =
+          cond instanceof AbstractValue
+            ? AbstractValue.createFromUnaryOp(realm, "!", cond, true, undefined, true)
+            : cond.mightNotBeFalse()
+            ? realm.intrinsics.false
+            : realm.intrinsics.true;
+        nanCondition = !nanCondition.mightNotBeTrue()
+          ? notCond
+          : !nanCondition.mightNotBeFalse() || !notCond.mightNotBeFalse()
+          ? realm.intrinsics.false
+          : !notCond.mightNotBeTrue()
+          ? nanCondition
+          : AbstractValue.createFromLogicalOp(realm, "&&", nanCondition, notCond, undefined, true);
+      }
+      entries.unshift([nanValue, nanCondition]);
+    }
+    let joinedEffects;
+    for (let [val, condition] of entries) {
+      if (!condition.mightNotBeFalse()) continue;
+      if (!condition.mightNotBeTrue()) {
+        joinedEffects = realm.evaluateForEffects(() => functionToMap(val), undefined, "mapAndJoin");
+        break;
+      }
+      invariant(condition instanceof AbstractValue);
+      let effects;
+      try {
+        effects = Path.withCondition(condition, () =>
+          realm.evaluateForEffects(() => functionToMap(val), undefined, "mapAndJoin")
+        );
+      } catch (e) {
+        if (!(e instanceof InfeasiblePathError)) throw e;
+        continue;
+      }
       joinedEffects = joinedEffects === undefined ? effects : this.joinEffects(condition, effects, joinedEffects);
     }
-    invariant(joinedEffects !== undefined);
+    if (joinedEffects === undefined) throw new InfeasiblePathError();
     realm.applyEffects(joinedEffects);
     return realm.returnOrThrowCompletion(joinedEffects.result);
   }

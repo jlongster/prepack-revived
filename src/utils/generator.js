@@ -36,7 +36,7 @@ import {
   Value,
 } from "../values/index.js";
 import { CompilerDiagnostic } from "../errors.js";
-import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
 import invariant from "../invariant.js";
 import { JoinedNormalAndAbruptCompletions, SimpleNormalCompletion, ThrowCompletion } from "../completions.js";
 import type {
@@ -125,6 +125,7 @@ export type OperationDescriptorType =
   | "RESIDUAL_CALL"
   | "SINGLE_ARG"
   | "THROW"
+  | "TRY_CATCH"
   | "UNARY_EXPRESSION"
   | "UNKNOWN_ARRAY_GET_PARTIAL"
   | "UNKNOWN_ARRAY_LENGTH"
@@ -150,7 +151,7 @@ export type OperationDescriptorData = {
   callFunctionRef?: string, // used by EMIT_CALL and EMIT_CALL_AND_CAPTURE_RESULT
   concreteComparisons?: Array<Value>, // used by FULL_INVARIANT_ABSTRACT
   descriptor?: Descriptor, // used by DEFINE_PROPERTY
-  generator?: Generator, // used by DO_WHILE
+  generator?: Generator, // used by DO_WHILE, TRY_CATCH
   generators?: Array<Generator>, // used by JOIN_GENERATORS
   id?: string, // used by IDENTIFIER
   lh?: BabelNodeVariableDeclaration, // used by FOR_IN
@@ -169,6 +170,7 @@ export type OperationDescriptorData = {
   templateSource?: string, // used by ABSTRACT_FROM_TEMPLATE
   typeComparisons?: Set<typeof Value>, // used by FULL_INVARIANT_ABSTRACT
   usesThis?: boolean, // used by FOR_STATEMENT_FUNC
+  usesArguments?: boolean, // used by FOR_STATEMENT_FUNC
   value?: Value, // used by DO_WHILE, CONDITIONAL_PROPERTY_ASSIGNMENT, LOGICAL_PROPERTY_ASSIGNMENT, LOCAL_ASSIGNMENT, CONDITIONAL_THROW, EMIT_PROPERTY_ASSIGNMENT
   violationConditionOperationDescriptor?: OperationDescriptor, // used by INVARIANT
 };
@@ -225,6 +227,7 @@ export type VisitEntryCallbacks = {|
   visitModifiedProperty: PropertyBinding => void,
   visitModifiedBinding: Binding => void,
   visitBindingAssignment: (Binding, Value) => Value,
+  visitLeakedBinding: Binding => void,
 |};
 
 export type CustomGeneratorEntryType = "MODIFIED_PROPERTY" | "MODIFIED_BINDING" | "RETURN" | "BINDING_ASSIGNMENT";
@@ -336,6 +339,11 @@ export class TemporalOperationEntry extends GeneratorEntry {
       return false;
     } else {
       if (this.declared) callbacks.recordDeclaration(this.declared);
+      if (this.operationDescriptor.type === "GET_BINDING") {
+        let binding = this.operationDescriptor.data.binding;
+        invariant(binding !== undefined);
+        callbacks.visitLeakedBinding(binding);
+      }
       for (let i = 0, n = this.args.length; i < n; i++) {
         let originalArg = this.args[i];
         let visitedArg = callbacks.visitEquivalentValue(originalArg);
@@ -345,9 +353,6 @@ export class TemporalOperationEntry extends GeneratorEntry {
             case "CALL_BAILOUT":
               if (originalArg === this.operationDescriptor.data.thisArg)
                 this.operationDescriptor.data.thisArg = visitedArg;
-              break;
-            case "CONDITIONAL_THROW":
-              this.operationDescriptor.data.value = visitedArg;
               break;
             default:
               break;
@@ -429,6 +434,10 @@ export class TemporalOperationEntry extends GeneratorEntry {
         let generators = operationDescriptor.data.generators;
         invariant(generators !== undefined);
         return generators;
+      case "TRY_CATCH":
+        let body = operationDescriptor.data.generator;
+        invariant(body !== undefined);
+        return [body];
       default:
         return undefined;
     }
@@ -716,7 +725,7 @@ export class Generator {
       let selector = c =>
         c instanceof ThrowCompletion && c.value !== realm.intrinsics.__bottomValue && !(c.value instanceof EmptyValue);
       output.emitConditionalThrow(Join.joinValuesOfSelectedCompletions(selector, result, true));
-      output.emitReturnValue(result.value);
+      output.emitReturnValue(Join.joinValuesOfSelectedCompletions(c => c instanceof SimpleNormalCompletion, result));
     } else {
       invariant(false);
     }
@@ -889,8 +898,23 @@ export class Generator {
   emitConditionalThrow(value: Value): void {
     if (value instanceof EmptyValue) return;
     this._issueThrowCompilerDiagnostic(value);
+    let args = [];
+    function collectArgs(val: Value): void {
+      if (val instanceof EmptyValue) return;
+      if (!(val instanceof AbstractValue) || val.kind !== "conditional") {
+        args.push(val);
+        return;
+      }
+      let [cond, trueVal, falseVal] = val.args;
+      if (trueVal instanceof EmptyValue && falseVal instanceof EmptyValue) return;
+      args.push(cond);
+      collectArgs(trueVal);
+      collectArgs(falseVal);
+    }
+    collectArgs(value);
+    if (args.length === 0) return;
     this._addEntry({
-      args: [value],
+      args,
       operationDescriptor: createOperationDescriptor("CONDITIONAL_THROW", { value }),
     });
   }
@@ -908,6 +932,18 @@ export class Generator {
     }
     const diagnostic = new CompilerDiagnostic(message, value.expressionLocation, "PP0023", "Warning");
     this.realm.handleError(diagnostic);
+  }
+
+  // Emits the code of body inside a residual try statement. The returned value is undefined if body completes
+  // normally, and an array containing the exception otherwise.
+  emitTryCatch(body: Generator): AbstractValue {
+    return this.deriveAbstract(
+      TypesDomain.topVal,
+      ValuesDomain.topVal,
+      [],
+      createOperationDescriptor("TRY_CATCH", { generator: body }),
+      { skipInvariant: true }
+    );
   }
 
   emitThrow(value: Value): void {
@@ -1101,6 +1137,7 @@ export class Generator {
       options
     );
     res.intrinsicName = id;
+    IntervalDomain.noteDerivation(res, args, operationDescriptor);
     this._addDerivedEntry({
       isPure: optionalArgs ? optionalArgs.isPure : undefined,
       declared: res,

@@ -43,7 +43,7 @@ import {
   ThrowCompletion,
 } from "../completions.js";
 import { GetTemplateObject, GetV, GetThisValue } from "./get.js";
-import { Create, Environment, Functions, Leak, Join, To, Widen } from "../singletons.js";
+import { Create, Environment, Functions, Leak, Join, To } from "../singletons.js";
 import invariant from "../invariant.js";
 import { createOperationDescriptor } from "../utils/generator.js";
 import type { BabelNodeExpression, BabelNodeSpreadElement, BabelNodeTemplateLiteral } from "@babel/types";
@@ -397,57 +397,9 @@ export function OrdinaryCallEvaluateBody(
       // 4. Return Completion{[[Type]]: return, [[Value]]: G, [[Target]]: empty}.
       return new ReturnCompletion(G, realm.currentLocation);
     } else {
-      // TODO #1586: abstractRecursionSummarization is disabled for now, as it is likely too limiting
-      // (as observed in large internal tests).
-      const abstractRecursionSummarization = false;
-      if (!realm.useAbstractInterpretation || realm.pathConditions.isEmpty() || !abstractRecursionSummarization)
-        return normalCall();
-      let savedIsSelfRecursive = F.isSelfRecursive;
-      try {
-        F.isSelfRecursive = false;
-        let effects = realm.evaluateForEffects(guardedCall, undefined, "OrdinaryCallEvaluateBody");
-        if (F.isSelfRecursive) {
-          AbstractValue.reportIntrospectionError(F, "call to function that calls itself");
-          throw new FatalError();
-          //todo: need to emit a specialized function that temporally captures the heap state at this point
-        } else {
-          realm.applyEffects(effects);
-          let c = effects.result;
-          return processResult(() => {
-            if (c instanceof AbruptCompletion || c instanceof JoinedNormalAndAbruptCompletions) return c;
-            return undefined;
-          });
-        }
-      } finally {
-        F.isSelfRecursive = savedIsSelfRecursive;
-      }
-
-      function guardedCall(): Value | Completion {
-        let currentLocation = realm.currentLocation;
-        if (F.activeArguments !== undefined && F.activeArguments.has(currentLocation)) {
-          let [previousPathLength, previousArguments] = F.activeArguments.get(currentLocation);
-          if (realm.pathConditions.getLength() > previousPathLength) {
-            invariant(previousArguments !== undefined);
-            // F is being called recursively while a call to it is still active
-            F.isSelfRecursive = true;
-            let widenedArgumentsList: Array<Value> = (Widen.widenValues(realm, previousArguments, argumentsList): any);
-            if (Widen.containsArraysOfValue(realm, previousArguments, widenedArgumentsList)) {
-              // Reached a fixed point. Executing this call will not add any knowledge
-              // about the effects of the original call.
-              return realm.intrinsics.undefined;
-            } else {
-              argumentsList = widenedArgumentsList;
-            }
-          }
-        }
-        try {
-          if (F.activeArguments === undefined) F.activeArguments = new Map();
-          F.activeArguments.set(currentLocation, [realm.pathConditions.getLength(), argumentsList]);
-          return normalCall() || realm.intrinsics.undefined;
-        } finally {
-          F.activeArguments.delete(currentLocation);
-        }
-      }
+      // Recursion whose depth depends on abstract values is residualized before getting here (#1586):
+      // see tryResidualizeRecursiveCall in recursion.js.
+      return normalCall();
 
       function normalCall(): void | AbruptCompletion {
         // 1. Perform ? FunctionDeclarationInstantiation(F, argumentsList).

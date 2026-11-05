@@ -1,4 +1,5 @@
-// throws introspection error
+// Number.isFinite(p) must not be folded to false: p might be a number.
+// does contain:isFinite
 
 let x = global.__abstract ? global.__abstract("boolean", "true") : true;
 let ob = global.__abstract ? global.__abstract("object", "({})") : {};

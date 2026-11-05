@@ -258,6 +258,7 @@ export class Realm {
     this.useAbstractInterpretation = opts.serialize === true || Array.isArray(opts.check);
     this.ignoreLeakLogic = false;
     this.isInPureTryStatement = false;
+    this.unmodeledThrowsInPureTry = undefined;
     if (opts.mathRandomSeed !== undefined) {
       this.mathRandomGenerator = seedrandom(opts.mathRandomSeed);
     }
@@ -367,6 +368,9 @@ export class Realm {
   useAbstractInterpretation: boolean;
   debugNames: void | boolean;
   isInPureTryStatement: boolean; // TODO(1264): Remove this once we implement proper exception handling in abstract calls.
+  // If defined, counts the operations that might throw an exception that Prepack does not model, inside the try
+  // block that is being evaluated, instead of reporting PP0021.
+  unmodeledThrowsInPureTry: void | number;
   timeout: void | number;
   mathRandomGenerator: void | (() => number);
   strictlyMonotonicDateNow: boolean;
@@ -760,7 +764,20 @@ export class Realm {
     // We should then compose that with the saved completion and move on to the normal route.
     // Currently we just issue a recoverable error instead if this might matter.
     let value = f();
+    this.reportPossibleThrowInsideTry();
+    return value;
+  }
+
+  // Call this whenever residual code that might throw (e.g. a call to unknown code, or a property access on a
+  // leaked object, which might run a getter or setter) is emitted. Prepack does not model such throws yet, so
+  // if they could be caught by an enclosing try statement, the handler would be lost.
+  reportPossibleThrowInsideTry(): void {
     if (this.isInPureTryStatement) {
+      if (this.unmodeledThrowsInPureTry !== undefined) {
+        // The enclosing try statement will wrap the code in a residual try statement.
+        this.unmodeledThrowsInPureTry++;
+        return;
+      }
       let diag = new CompilerDiagnostic(
         "Possible throw inside try/catch is not yet supported",
         this.currentLocation,
@@ -769,7 +786,6 @@ export class Realm {
       );
       if (this.handleError(diag) !== "Recover") throw new FatalError();
     }
-    return value;
   }
 
   // Evaluate the given ast in a sandbox and return the evaluation results
@@ -1098,7 +1114,15 @@ export class Realm {
     }
     this.applyEffects(effects);
 
-    return condValue.$Realm.returnOrThrowCompletion(effects.result);
+    let completion = effects.result;
+    if (completion instanceof JoinedNormalAndAbruptCompletions) {
+      // The value of the conditional is the join of the values of all of its normal paths, not just one of them.
+      // Compute it before composing the completion with the saved completion, which may modify it.
+      let value = Join.joinValuesOfSelectedCompletions(c => c instanceof SimpleNormalCompletion, completion);
+      this.returnOrThrowCompletion(completion);
+      return value;
+    }
+    return this.returnOrThrowCompletion(completion);
   }
 
   _applyPropertiesToNewlyCreatedObjects(
@@ -1225,6 +1249,38 @@ export class Realm {
       }
       return cc;
     }
+  }
+
+  // Evaluates f with an empty saved completion and then incorporates whatever conditional abrupt completions
+  // f saved, so that a join point (the end of a labeled statement, a try block, ...) only joins the completions
+  // that arose inside it. Completions saved before f started (e.g. a throw that precedes a try statement) must
+  // not be seen by the join point. The outer saved completion is restored before returning, so the caller
+  // must compose the result with it, e.g. via returnOrThrowCompletion.
+  evaluateCompletionInSavedCompletionScope(f: () => Completion | Value): Completion | Value {
+    let priorSavedCompletion = this.savedCompletion;
+    this.savedCompletion = undefined;
+    let c;
+    try {
+      try {
+        c = f();
+      } catch (e) {
+        if (!(e instanceof AbruptCompletion)) throw e;
+        c = e;
+      }
+      c = Functions.incorporateSavedCompletion(this, c);
+      invariant(c !== undefined);
+    } catch (e) {
+      // Keep the prior saved completions reachable, so that an enclosing evaluateForEffects can undo their effects.
+      if (this.savedCompletion === undefined) this.savedCompletion = priorSavedCompletion;
+      else {
+        let last = this.savedCompletion;
+        while (last.composedWith !== undefined) last = last.composedWith;
+        last.composedWith = priorSavedCompletion;
+      }
+      throw e;
+    }
+    this.savedCompletion = priorSavedCompletion;
+    return c;
   }
 
   pushPathConditionsLeadingToNormalCompletions(completion: Completion): void {

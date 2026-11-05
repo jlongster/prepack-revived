@@ -1024,7 +1024,11 @@ export class ResidualHeapSerializer {
     let residualBinding = this._getResidualFunctionBinding(binding);
     invariant(residualBinding !== undefined, "any referenced residual binding should have been visited");
 
-    this._serializeDeclarativeEnvironmentRecordBinding(residualBinding);
+    if (residualBinding.declarativeEnvironmentRecord) {
+      this._serializeDeclarativeEnvironmentRecordBinding(residualBinding);
+    } else {
+      this._serializeGlobalBinding(binding.name, residualBinding);
+    }
 
     let location = residualBinding.serializedUnscopedLocation;
     invariant(location !== undefined);
@@ -2143,10 +2147,11 @@ export class ResidualHeapSerializer {
       binding.referentialized = true;
       if (boundName === "undefined") {
         binding.serializedValue = voidExpression;
-      } else if (binding.value !== undefined) {
-        binding.serializedValue = t.identifier(boundName);
-        invariant(binding.value !== undefined);
-        this.declaredGlobalLets.set(boundName, binding.value);
+      } else if (binding.value !== undefined || binding.hasLeaked) {
+        let id = t.identifier(boundName);
+        binding.serializedValue = id;
+        binding.serializedUnscopedLocation = id;
+        this.declaredGlobalLets.set(boundName, binding.value || this.realm.intrinsics.__leakedValue);
       }
     }
   }
@@ -2471,6 +2476,8 @@ export class ResidualHeapSerializer {
       this.requireReturns.set(moduleId, getReplacement(this.serializeValue(moduleValue), moduleValue));
 
     for (let [name, value] of this.declaredGlobalLets) {
+      let globalBinding = this.globalBindings.get(name);
+      if (value === this.realm.intrinsics.__leakedValue || (globalBinding && globalBinding.hasLeaked)) continue;
       this.emitter.emit(
         t.expressionStatement(t.assignmentExpression("=", t.identifier(name), this.serializeValue(value)))
       );

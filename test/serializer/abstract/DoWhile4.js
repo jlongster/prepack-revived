@@ -1,4 +1,3 @@
-// throws introspection error
 let n = global.__abstract ? __abstract("number", "10") : 10;
 let i = 0;
 do {

@@ -747,6 +747,11 @@ export class ResidualHeapVisitor {
         };
         // Queue up visiting of global binding exactly once in the globalGenerator scope.
         this._enqueueWithUnrelatedScope(this.globalGenerator, () => {
+          let declBindings = (this.globalEnvironmentRecord.$DeclarativeRecord: any).bindings;
+          if (declBindings && declBindings[name] && declBindings[name].hasLeaked) {
+            residualFunctionBinding.hasLeaked = true;
+            return;
+          }
           let value = this.realm.getGlobalLetBinding(name);
           if (value !== undefined) residualFunctionBinding.value = this.visitEquivalentValue(value);
         });
@@ -1235,6 +1240,10 @@ export class ResidualHeapVisitor {
         fixpoint_rerun();
       },
       visitBindingAssignment: (binding: Binding, value: Value) => {
+        callbacks.visitLeakedBinding(binding);
+        return this.visitEquivalentValue(value);
+      },
+      visitLeakedBinding: (binding: Binding) => {
         let residualBinding = this.getBinding(binding.environment, binding.name);
         residualBinding.modified = true;
         residualBinding.hasLeaked = true;
@@ -1251,7 +1260,6 @@ export class ResidualHeapVisitor {
             this.visitBinding(commonScope, residualBinding);
           });
         }
-        return this.visitEquivalentValue(value);
       },
     };
     return callbacks;

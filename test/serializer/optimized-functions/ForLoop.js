@@ -1,4 +1,3 @@
-// throws introspection error
 var x = global.__abstract ? (x = __abstract("number", "(2)")) : 2;
 
 function func1() {

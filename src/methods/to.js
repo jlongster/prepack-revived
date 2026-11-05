@@ -11,7 +11,7 @@
 
 import type { Descriptor, CallableObjectValue } from "../types.js";
 import type { Realm } from "../realm.js";
-import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
 import { GetMethod, Get } from "./get.js";
 import { Create } from "../singletons.js";
 import { HasProperty } from "./has.js";
@@ -471,6 +471,12 @@ export class ToImplementation {
 
   // ECMA262 7.1.15
   ToLength(realm: Realm, argument: numberOrValue): number {
+    // An abstract length may be known to have a single value on the current path.
+    if (argument instanceof AbstractValue) {
+      let values = IntervalDomain.enumerate(argument, 1, true);
+      if (values !== undefined && values.length === 1) argument = values[0];
+    }
+
     // Let len be ? ToInteger(argument).
     let len = this.ToInteger(realm, argument);
 
@@ -766,6 +772,7 @@ export class ToImplementation {
       // If the property is not a string we need to coerce it.
       let coerceToString = createOperationDescriptor("COERCE_TO_STRING");
       if (value.mightBeObject() && !value.isSimpleObject()) {
+        if (!realm.isInPureScope()) value.throwIfNotConcrete();
         // If this might be a non-simple object, we need to coerce this at a
         // temporal point since it can have side-effects.
         // We can't rely on comparison to do it later, even if

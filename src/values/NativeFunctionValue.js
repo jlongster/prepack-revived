@@ -33,6 +33,13 @@ export type NativeFunctionCallback = (
   newTarget?: void | ObjectValue
 ) => Value;
 
+// Residualizes a call with abstract inputs according to the built-in's effect summary, or returns
+// undefined to run the native implementation (see intrinsics/summaries.js).
+export type NativeFunctionSummary = (
+  context: UndefinedValue | NullValue | ObjectValue | AbstractObjectValue,
+  args: Array<Value>
+) => void | Value;
+
 /* Built-in Function Objects */
 export default class NativeFunctionValue extends ECMAScriptFunctionValue {
   constructor(
@@ -107,6 +114,7 @@ export default class NativeFunctionValue extends ECMAScriptFunctionValue {
 
   name: string;
   callback: NativeFunctionCallback;
+  summary: void | NativeFunctionSummary;
   length: number;
 
   // Override.
@@ -119,6 +127,11 @@ export default class NativeFunctionValue extends ECMAScriptFunctionValue {
     originalArgsList: Array<Value>,
     newTarget?: void | ObjectValue
   ): ReturnCompletion {
+    let summary = this.summary;
+    if (summary !== undefined && newTarget === undefined) {
+      let result = summary(context, originalArgsList);
+      if (result !== undefined) return new ReturnCompletion(result, this.$Realm.currentLocation);
+    }
     let originalLength = originalArgsList.length;
     let argsList = originalArgsList.slice();
     for (let i = 0; i < this.length; i++) {

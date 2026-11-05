@@ -39,6 +39,7 @@ import { ObjectValue, Value, FunctionValue } from "../values/index.js";
 import { Properties } from "../singletons.js";
 import { PropertyDescriptor } from "../descriptors.js";
 import { ResidualOptimizedFunctions } from "./ResidualOptimizedFunctions";
+import { checkResidualRecursionSnapshots } from "../methods/recursion.js";
 
 export class Serializer {
   constructor(realm: Realm, serializerOptions: SerializerOptions = {}) {
@@ -181,6 +182,8 @@ export class Serializer {
         if (!this.modules.initializedModules.has(moduleIdOfFunction)) moduleFactoryFunctionsToRemove.delete(functionId);
       }
 
+      checkResidualRecursionSnapshots(this.realm);
+
       let heapGraph;
       let ast = (() => {
         // We wrap the following in an anonymous function declaration to ensure
@@ -217,7 +220,7 @@ export class Serializer {
           this.options,
           preludeGenerator.createNameGenerator("__scope_"),
           preludeGenerator.createNameGenerator("__get_scope_binding_"),
-          preludeGenerator.createNameGenerator("__leaked_"),
+          preludeGenerator.createNameGenerator("__l"),
           residualOptimizedFunctions
         );
         statistics.referentialization.measure(() => {

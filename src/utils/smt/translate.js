@@ -179,6 +179,12 @@ export class SmtTranslator {
     return `(truthy ${this.term(v, depth)})`;
   }
 
+  freshN(): string {
+    let name = `dz${this.counter++}`;
+    this.decls.push(`(declare-const ${name} N)`);
+    return name;
+  }
+
   // The script (declarations, definitions and background facts) needed by the terms produced so far.
   script(): string {
     return this.decls.join("\n");
@@ -276,6 +282,12 @@ export class SmtTranslator {
     }
     if (kind === undefined || od === undefined) return undefined;
     switch (od.type) {
+      case "ABSTRACT_FROM_TEMPLATE": {
+        if (od.data.templateSource === "(A).length" && args.length === 1 && args[0].getType() === StringValue) {
+          return `(Num (Fin (to_real (str.len (js ${this.term(args[0], depth)})))))`;
+        }
+        return undefined;
+      }
       case "CANNOT_BECOME_OBJECT": {
         if (args.length !== 1) return undefined;
         return `(Bool (nullish ${this.term(args[0], depth)}))`;
@@ -367,9 +379,17 @@ export class SmtTranslator {
             if (args[1] instanceof NumberValue) return `(Num ${constMul(args[1].value, `(tonum ${a})`)})`;
             return `(Num (numop ${NUMOP_CODES["*"]} (tonum ${a}) (tonum ${b})))`;
           }
-          case "/":
+          case "/": {
+            let ta = `(tonum ${a})`;
+            let tb = `(tonum ${b})`;
+            return `(Num (ite (nzero ${tb}) ${this.freshN()} (numop ${NUMOP_CODES["/"]} ${ta} ${tb})))`;
+          }
+          case "**": {
+            let ta = `(tonum ${a})`;
+            let tb = `(tonum ${b})`;
+            return `(Num (ite (nzero ${ta}) ${this.freshN()} (numop ${NUMOP_CODES["**"]} ${ta} ${tb})))`;
+          }
           case "%":
-          case "**":
           case "&":
           case "|":
           case "^":
@@ -457,6 +477,7 @@ function operatorKindOf(od: OperationDescriptor): void | any {
   if (od.type === "LOGICAL_EXPRESSION") return od.data.logicalOperator;
   if (od.type === "UNARY_EXPRESSION") return od.data.unaryOperator;
   if (od.type === "CONDITIONAL_EXPRESSION") return "conditional";
+  if (od.type === "ABSTRACT_FROM_TEMPLATE") return od.data.templateSource;
   return undefined;
 }
 
