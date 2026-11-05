@@ -151,7 +151,8 @@ export default function(realm: Realm): ObjectValue {
   for (let [name, length] of functions) {
     obj.defineNativeMethod(name, length, (context, args, originalLength) => {
       invariant(originalLength >= 0);
-      args.length = originalLength;
+      args.length =
+        name === "hypot" || name === "max" || name === "min" ? originalLength : Math.min(originalLength, length);
       // Calls with abstract arguments are handled by the effect summaries in intrinsics/summaries.js.
       return new NumberValue(
         realm,
