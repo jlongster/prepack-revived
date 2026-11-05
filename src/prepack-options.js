@@ -10,7 +10,15 @@
 /* @flow strict-local */
 
 import type { ErrorHandler } from "./errors.js";
-import type { SerializerOptions, RealmOptions, Compatibility, ReactOutputTypes, InvariantModeTypes } from "./options";
+import type {
+  SerializerOptions,
+  RealmOptions,
+  Compatibility,
+  ReactOutputTypes,
+  InvariantModeTypes,
+  UnknownGlobalsMode,
+  AssumptionFallbackMode,
+} from "./options";
 import { type Realm } from "./realm.js";
 import { type Generator } from "./utils/generator.js";
 import { type FunctionValue } from "./values/index.js";
@@ -64,10 +72,15 @@ export type PrepackOptions = {|
   onExecute?: (Realm, Map<FunctionValue, Generator>) => void,
   arrayNestedOptimizedFunctionsEnabled?: boolean,
   reactFailOnUnsupportedSideEffects?: boolean,
+  closedWorld?: boolean,
+  unknownGlobals?: UnknownGlobalsMode,
+  assumptions?: { [string]: mixed },
+  fallbackMode?: AssumptionFallbackMode,
+  profileEnv?: "node" | "browser",
 |};
 
 export function getRealmOptions({
-  compatibility = "browser",
+  compatibility,
   debugNames = false,
   errorHandler,
   mathRandomSeed,
@@ -92,9 +105,14 @@ export function getRealmOptions({
   arrayNestedOptimizedFunctionsEnabled,
   reactFailOnUnsupportedSideEffects,
   removeModuleFactoryFunctions,
+  closedWorld,
+  unknownGlobals,
+  assumptions,
+  fallbackMode,
 }: PrepackOptions): RealmOptions {
   return {
-    compatibility,
+    compatibility: compatibility !== undefined ? compatibility : "browser",
+    hasExplicitCompatibility: compatibility !== undefined,
     debugNames,
     errorHandler,
     mathRandomSeed,
@@ -119,6 +137,10 @@ export function getRealmOptions({
     arrayNestedOptimizedFunctionsEnabled,
     reactFailOnUnsupportedSideEffects,
     removeModuleFactoryFunctions,
+    closedWorld,
+    unknownGlobals,
+    assumptions,
+    fallbackMode,
   };
 }
 
@@ -135,6 +157,7 @@ export function getSerializerOptions({
   inlineExpressions = false,
   modulesToInitialize,
   trace = false,
+  fallbackMode,
 }: PrepackOptions): SerializerOptions {
   let result: SerializerOptions = {
     delayInitializations,
@@ -153,6 +176,9 @@ export function getSerializerOptions({
   }
   if (heapGraphFormat !== undefined) {
     result.heapGraphFormat = heapGraphFormat;
+  }
+  if (fallbackMode !== undefined) {
+    result.fallbackMode = fallbackMode;
   }
   return result;
 }

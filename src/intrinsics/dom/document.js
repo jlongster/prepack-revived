@@ -19,17 +19,26 @@ const functions = [
   "getElementById",
   "getElementByTag",
   "getElementByClassName",
+  "getElementsByClassName",
   "getElementByName",
+  "getElementsByName",
   "getElementByTagName",
+  "getElementsByTagName",
   "getElementByTagNameNS",
+  "getElementsByTagNameNS",
   "querySelector",
   "querySelectorAll",
   "createElement",
+  "createElementNS",
   "createDocumentFragment",
   "createTextNode",
+  "createComment",
+  "createEvent",
+  "addEventListener",
+  "removeEventListener",
 ];
 
-export default function(realm: Realm): AbstractObjectValue {
+export default function(realm: Realm): AbstractObjectValue | ObjectValue {
   // document object
   let document = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, "document", false);
 
@@ -38,16 +47,29 @@ export default function(realm: Realm): AbstractObjectValue {
     // common methods on document
     for (let name of functions) {
       let func = createAbstract(realm, "function", `document.${name}`);
+      func.isEnvironmentValue = true;
+      if (name === "createElement" || name === "createElementNS") {
+        func.envMethodSpec = { r: "object", s: "HTMLElement" };
+      } else if (name === "getElementById" || name === "querySelector") {
+        func.envMethodSpec = { r: "object", s: "HTMLElement", n: true };
+      }
       Properties.Set(realm, document, name, func, false);
     }
 
-    // document.body
-    let body = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, "document.body");
-    Properties.Set(realm, document, "body", body, false);
+    // document.body, document.head, document.documentElement, document.childNodes
+    for (let prop of ["body", "head", "documentElement", "childNodes"]) {
+      let childObj = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, `document.${prop}`);
+      childObj.makePartial();
+      childObj.makeSimple();
+      Properties.Set(realm, document, prop, childObj, false);
+    }
 
+    document.makeSimple();
     // make abstract
     let abstractObject = createAbstract(realm, document, "document");
     invariant(abstractObject instanceof AbstractObjectValue);
+    abstractObject.isEnvironmentValue = true;
+    abstractObject.envShapeName = "Document";
     return abstractObject;
   }
   return document;

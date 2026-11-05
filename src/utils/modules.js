@@ -273,10 +273,13 @@ export class Modules {
   _getGlobalProperty(name: string): Value {
     if (this.active) return this.realm.intrinsics.undefined;
     this.active = true;
+    let savedReadOnly = this.realm.isReadOnly;
+    this.realm.isReadOnly = true;
     try {
       let realm = this.realm;
       return this.logger.tryQuery(() => Get(realm, realm.$GlobalObject, name), realm.intrinsics.undefined);
     } finally {
+      this.realm.isReadOnly = savedReadOnly;
       this.active = false;
     }
   }

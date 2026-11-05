@@ -123,6 +123,12 @@ export class HeapInspector {
       if (val.hasIdentifier()) {
         return true;
       }
+      if (
+        val.operationDescriptor !== undefined &&
+        (val.operationDescriptor.type === "ENV_GLOBAL" || val.operationDescriptor.type === "TYPEOF_GLOBAL")
+      ) {
+        return true;
+      }
 
       if (
         val.$Realm.instantRender.enabled &&

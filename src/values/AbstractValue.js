@@ -88,7 +88,9 @@ type AbstractValueKindPrefix =
   | "process"
   | "template"
   | "abstractCounted"
-  | "magicGlobalObject";
+  | "magicGlobalObject"
+  | "envGlobal"
+  | "typeofGlobal";
 
 export default class AbstractValue extends Value {
   constructor(
@@ -124,6 +126,12 @@ export default class AbstractValue extends Value {
   args: Array<Value>;
   shape: void | ShapeInformationInterface;
   operationDescriptor: void | OperationDescriptor;
+  isEnvironmentValue: void | boolean;
+  envShapeName: void | string;
+  envMethodSpec: void | { +r: string, +s?: string, +n?: boolean, +o?: boolean };
+  envConstructorShape: void | string;
+  envPath: void | string;
+  envElementType: void | typeof Value;
 
   toDisplayString(): string {
     return "[Abstract " + this.hashValue.toString() + "]";

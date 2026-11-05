@@ -33,6 +33,7 @@ import { Completion, ReturnCompletion, ThrowCompletion } from "../completions.js
 import { GetMethod, Get } from "./get.js";
 import { HasCompatibleType } from "./has.js";
 import { To } from "../singletons.js";
+import { isEnvironmentDerived } from "../intrinsics/env/models.js";
 import type { BabelNodeSourceLocation, BabelBinaryOperator } from "@babel/types";
 import invariant from "../invariant.js";
 
@@ -78,8 +79,8 @@ export function RequireObjectCoercible(
     throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
   }
   if (arg instanceof AbstractValue && (arg.mightBeNull() || arg.mightBeUndefined())) {
-    if (realm.isInPureScope()) {
-      // In a pure function it is ok to throw if this happens to be null or undefined.
+    if (realm.isInPureScope() || isEnvironmentDerived(arg)) {
+      // In a pure function (or on an open-world environment value) allow runtime coercion/access.
       return arg;
     }
     if (argLoc) {

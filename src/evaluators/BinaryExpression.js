@@ -159,7 +159,16 @@ export function getPureBinaryOperationResultType(
     }
     if (!rval.mightNotBeObject()) {
       // Simple object won't throw here, aren't proxy objects or typed arrays and do not have @@hasInstance properties.
-      if (rval.isSimpleObject()) return BooleanValue;
+      let isWellBehaved = function checkWellBehaved(v: Value): boolean {
+        if (v.isSimpleObject()) return true;
+        if (v instanceof AbstractObjectValue && v.isEnvironmentValue) return true;
+        if (v instanceof AbstractObjectValue && v.kind === "conditional") {
+          return checkWellBehaved(v.args[1]) && checkWellBehaved(v.args[2]);
+        }
+        return false;
+      };
+      if (isWellBehaved(rval) && (op !== "in" || lval.getType() === SymbolValue || To.IsToStringPure(realm, lval)))
+        return BooleanValue;
     }
     let error = new CompilerDiagnostic(
       `might be an object that behaves badly for the ${op} operator`,

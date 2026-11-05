@@ -12,6 +12,7 @@
 import type { Descriptor, CallableObjectValue } from "../types.js";
 import type { Realm } from "../realm.js";
 import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
+import { isEnvironmentDerived } from "../intrinsics/env/models.js";
 import { GetMethod, Get } from "./get.js";
 import { Create } from "../singletons.js";
 import { HasProperty } from "./has.js";
@@ -441,10 +442,16 @@ export class ToImplementation {
       /*eslint-disable */
       default:
         /*eslint-enable */
-        if (realm.isInPureScope()) {
-          // will be serialized as Object.assign(serialized_arg)
+        if (realm.isInPureScope() || isEnvironmentDerived(arg)) {
+          // will be serialized as Object.assign(serialized_arg), or unwrapped on direct property access
           obj = AbstractValue.createFromType(realm, ObjectValue, "explicit conversion to object", [arg]);
           invariant(obj instanceof AbstractObjectValue);
+          if (isEnvironmentDerived(arg)) {
+            obj.isEnvironmentValue = true;
+            obj.envShapeName = arg.envShapeName;
+            obj.envPath = arg.envPath;
+            obj.envElementType = arg.envElementType;
+          }
         } else {
           obj = arg.throwIfNotConcreteObject();
         }
