@@ -92,8 +92,8 @@ function getObjectKeys(obj: BabelNodeObjectExpression): string | false {
 export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGenerator: NameGenerator): void {
   let signatures = Object.create(null);
 
-  function collectObjectExpressions(holder: Object, key: string | number): void {
-    let node = holder[key];
+  function collectObjectExpressions(holder, key: string | number): void {
+    let node = (holder: $FlowFixMe)[key];
     if (!node || typeof node !== "object") return;
     if (node.type === "ArrayExpression") {
       for (let i = 0; i < node.elements.length; i++) {

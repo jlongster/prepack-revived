@@ -53,7 +53,7 @@ import {
 import { TestIntegrityLevel } from "./integrity.js";
 import { Leak } from "../singletons.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
-import { createOperationDescriptor } from "../utils/generator.js";
+import { createOperationDescriptor, Generator, TemporalOperationEntry } from "../utils/generator.js";
 import invariant from "../invariant.js";
 import * as t from "@babel/types";
 import traverse from "@babel/traverse";
@@ -219,10 +219,10 @@ export function tryResidualizeRecursiveCall(
   return emitResidualCall(realm, F, thisArgument, argsList);
 }
 
-function generatorReferencesValue(gen: Object, target: Value): boolean {
+function generatorReferencesValue(gen: Generator, target: Value): boolean {
   for (let entry of gen._entries) {
-    if (entry.args && entry.args.includes(target)) return true;
-    let deps = entry.getDependencies ? entry.getDependencies() : undefined;
+    if (entry instanceof TemporalOperationEntry && entry.args.includes(target)) return true;
+    let deps = entry.getDependencies();
     if (deps !== undefined) {
       for (let dep of deps) {
         if (generatorReferencesValue(dep, target)) return true;

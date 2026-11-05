@@ -7,13 +7,13 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-/* @flow strict-local */
+/* @flow */
 
 import type { Realm } from "../realm.js";
 import type { CompilerDiagnostic, ErrorHandlerResult } from "../errors.js";
 import { FatalError } from "../errors.js";
 import { PropertyDescriptor } from "../descriptors.js";
-import { AbstractValue, ECMAScriptSourceFunctionValue, FunctionValue, Value } from "../values/index.js";
+import { AbstractValue, ECMAScriptSourceFunctionValue, FunctionValue, ObjectValue, Value } from "../values/index.js";
 import { Generator, TemporalOperationEntry } from "../utils/generator.js";
 import { isInsidePureProbe, tryEmitPureResidualCall } from "./recursion.js";
 import traverseFast from "../utils/traverse-fast.js";
@@ -43,12 +43,14 @@ function getStaticCallCounts(code: BabelNode): Map<string, number> {
 }
 
 export function isRetainedOnGlobalObject(realm: Realm, fn: FunctionValue): boolean {
+  let globalObj = realm.$GlobalObject;
+  if (!(globalObj instanceof ObjectValue)) return false;
   if (fn.__originalName !== undefined) {
-    let pb = realm.$GlobalObject.properties.get(fn.__originalName);
+    let pb = globalObj.properties.get(fn.__originalName);
     let desc = pb && pb.descriptor;
     if (desc instanceof PropertyDescriptor && desc.value === fn) return true;
   }
-  for (let pb of realm.$GlobalObject.properties.values()) {
+  for (let pb of globalObj.properties.values()) {
     let desc = pb && pb.descriptor;
     if (desc instanceof PropertyDescriptor && desc.value === fn) return true;
   }
@@ -112,7 +114,7 @@ export function tryAvoidInliningExplosion(
   if (!hasAbstractArg) return undefined;
 
   let code = F.$ECMAScriptCode;
-  if (!code || !code.start || !code.end) return undefined;
+  if (!code || code.start == null || code.end == null) return undefined;
   let bodyBytes = code.end - code.start;
   if (bodyBytes < 100) return undefined;
 
@@ -127,12 +129,9 @@ export function tryAvoidInliningExplosion(
 
   // Heuristic 1 (#2140): Repeated calls to a branching helper with abstract arguments.
   let staticCalls = 0;
-  if (
-    optRoot instanceof ECMAScriptSourceFunctionValue &&
-    optRoot.$ECMAScriptCode &&
-    F.__originalName !== undefined
-  ) {
-    staticCalls = getStaticCallCounts(optRoot.$ECMAScriptCode).get(F.__originalName) || 0;
+  let fnName = F.__originalName;
+  if (optRoot instanceof ECMAScriptSourceFunctionValue && optRoot.$ECMAScriptCode && fnName !== undefined) {
+    staticCalls = getStaticCallCounts(optRoot.$ECMAScriptCode).get(fnName) || 0;
   }
   if ((staticCalls >= 4 && staticCalls * bodyBytes >= 750) || (dynCount >= 3 && dynCount * bodyBytes >= 750)) {
     let residual = tryEmitPureResidualCall(realm, F, thisArgument, argsList);

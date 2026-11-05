@@ -352,11 +352,7 @@ export class ResidualHeapSerializer {
 
       if (desc === undefined) continue; //deleted
       if (this.residualHeapInspector.canIgnoreProperty(obj, key)) continue;
-      if (
-        key === "name" &&
-        obj instanceof ECMAScriptSourceFunctionValue &&
-        this._tryEmbedFunctionName(obj, desc)
-      ) {
+      if (key === "name" && obj instanceof ECMAScriptSourceFunctionValue && this._tryEmbedFunctionName(obj, desc)) {
         continue;
       }
       invariant(desc !== undefined);
@@ -2897,8 +2893,11 @@ export class ResidualHeapSerializer {
     let counts: Map<string, number> = new Map();
     let wrapper = t.program(body);
     traverseFast(wrapper, node => {
-      if (node.type === "Identifier" && candidates.has(node.name)) {
-        counts.set(node.name, (counts.get(node.name) || 0) + 1);
+      if (t.isIdentifier(node)) {
+        let idName = ((node: any): BabelNodeIdentifier).name;
+        if (candidates.has(idName)) {
+          counts.set(idName, (counts.get(idName) || 0) + 1);
+        }
       }
       return false;
     });
@@ -2908,8 +2907,8 @@ export class ResidualHeapSerializer {
     if (candidates.size === 0) return;
 
     let removedStmtIndices: Set<number> = new Set();
-    const tryReplaceInTopExpr = (holder: Object, prop: string | number, currentStmtIdx: number): void => {
-      let expr = holder[prop];
+    const tryReplaceInTopExpr = (holder, prop: string | number, currentStmtIdx: number): void => {
+      let expr = (holder: $FlowFixMe)[prop];
       if (!expr || typeof expr !== "object") return;
       if (
         expr.type === "FunctionExpression" ||
@@ -2921,7 +2920,7 @@ export class ResidualHeapSerializer {
       if (expr.type === "Identifier") {
         let cand = candidates.get(expr.name);
         if (cand !== undefined && cand.stmtIdx < currentStmtIdx) {
-          holder[prop] = cand.funcNode;
+          (holder: $FlowFixMe)[prop] = cand.funcNode;
           removedStmtIndices.add(cand.stmtIdx);
           candidates.delete(expr.name);
         }

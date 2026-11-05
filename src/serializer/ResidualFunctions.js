@@ -212,20 +212,23 @@ export class ResidualFunctions {
     }
 
     const canReachViaGroup = (startFv: FunctionValue, targetFv: FunctionValue): boolean => {
-      let stack = [startFv];
-      let visited = new Set([startFv]);
+      let stack: Array<FunctionValue> = [startFv];
+      let visited: Set<FunctionValue> = new Set([startFv]);
       while (stack.length > 0) {
         let cur = stack.pop();
+        if (!cur) continue;
         if (cur === targetFv) return true;
         let curInst = this.residualFunctionInstances.get(cur);
         if (!curInst || this.additionalFunctionValueInfos.has(cur)) continue;
+        if (!(cur instanceof ECMAScriptSourceFunctionValue)) continue;
         let curCode = cur.$ECMAScriptCode;
         let curGroup = curCode ? this.functions.get(curCode) : undefined;
         if (!curGroup || curGroup.length <= 1) continue;
         for (let bVal of curInst.residualFunctionBindings.values()) {
-          if (bVal.value instanceof FunctionValue && bVal.value !== cur && !visited.has(bVal.value)) {
-            visited.add(bVal.value);
-            stack.push(bVal.value);
+          let nextVal = bVal.value;
+          if (nextVal instanceof FunctionValue && nextVal !== cur && !visited.has(nextVal)) {
+            visited.add(nextVal);
+            stack.push(nextVal);
           }
         }
       }
@@ -267,14 +270,19 @@ export class ResidualFunctions {
         if (firstUsage !== undefined && !firstUsage.isNotEarlierThan(insertionPoint)) continue;
         let depBeforeOk = true;
         for (let [, rb] of inst.residualFunctionBindings) {
-          if (rb.value instanceof FunctionValue && rb.value !== fv) {
-            let depInst = this.residualFunctionInstances.get(rb.value);
-            if (depInst !== undefined && !this.additionalFunctionValueInfos.has(rb.value)) {
-              let depCode = rb.value.$ECMAScriptCode;
+          let rbVal = rb.value;
+          if (rbVal instanceof ECMAScriptSourceFunctionValue && rbVal !== fv) {
+            let depInst = this.residualFunctionInstances.get(rbVal);
+            if (depInst !== undefined && !this.additionalFunctionValueInfos.has(rbVal)) {
+              let depCode = rbVal.$ECMAScriptCode;
               let depGroup = depCode ? this.functions.get(depCode) : undefined;
               if (depGroup !== undefined && depGroup.length > 1) {
                 let depPoint = depInst.insertionPoint;
-                if (depPoint === undefined || depPoint.body !== insertionPoint.body || depPoint.index > insertionPoint.index) {
+                if (
+                  depPoint === undefined ||
+                  depPoint.body !== insertionPoint.body ||
+                  depPoint.index > insertionPoint.index
+                ) {
                   depBeforeOk = false;
                   break;
                 }
@@ -837,7 +845,7 @@ export class ResidualFunctions {
             let functionId = this.locationService.getLocation(functionValue);
             invariant(functionId !== undefined);
             let allPreludeSafe = true;
-            let flatArgs: Array<BabelNodeExpression> = factoryNames.map(name => {
+            let flatArgs: Array<any> = factoryNames.map(name => {
               let residualBinding = residualFunctionBindings.get(name);
               invariant(residualBinding);
               if (!this._isPreludeSafeArg(residualBinding.value)) allPreludeSafe = false;

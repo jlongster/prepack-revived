@@ -28,7 +28,7 @@ import { Construct } from "../methods/index.js";
 import invariant from "../invariant.js";
 import { FatalError } from "../errors.js";
 import { BabelNodeNewExpression } from "@babel/types";
-import { createOperationDescriptor } from "../utils/generator.js";
+import { createOperationDescriptor, Generator, TemporalOperationEntry } from "../utils/generator.js";
 
 export default function(
   ast: BabelNodeNewExpression,
@@ -128,11 +128,12 @@ function tryToEvaluateConstructOrLeaveAsAbstract(
   return completion;
 }
 
-function isCleanGeneratorForConstruct(gen): boolean {
+function isCleanGeneratorForConstruct(gen: Generator): boolean {
   for (let entry of gen._entries) {
+    if (!(entry instanceof TemporalOperationEntry)) return false;
     if (entry.isPure) continue;
-    let deps = entry.getDependencies ? entry.getDependencies() : undefined;
-    if (deps !== undefined && entry.operationDescriptor && entry.operationDescriptor.type === "JOIN_GENERATORS") {
+    let deps = entry.getDependencies();
+    if (deps !== undefined && entry.operationDescriptor.type === "JOIN_GENERATORS") {
       for (let dep of deps) {
         if (!isCleanGeneratorForConstruct(dep)) return false;
       }
@@ -155,11 +156,7 @@ function isCleanIsolatedConstructEffects(effects, minEnvId: number): boolean {
   return isCleanGeneratorForConstruct(effects.generator);
 }
 
-function emitResidualNewExpression(
-  realm: Realm,
-  constructor: Value,
-  argsList: Array<Value>
-): AbstractObjectValue {
+function emitResidualNewExpression(realm: Realm, constructor: Value, argsList: Array<Value>): AbstractObjectValue {
   Leak.value(realm, constructor);
   for (let arg of argsList) {
     Leak.value(realm, arg);

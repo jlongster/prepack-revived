@@ -14,14 +14,11 @@ import type { Binding } from "../environment.js";
 import {
   DeclarativeEnvironmentRecord,
   EnvironmentRecord,
-  FunctionEnvironmentRecord,
   GlobalEnvironmentRecord,
   type LexicalEnvironment,
   ObjectEnvironmentRecord,
 } from "../environment.js";
 import {
-  AbstractValue,
-  ArrayValue,
   BooleanValue,
   ECMAScriptSourceFunctionValue,
   FunctionValue,
@@ -39,7 +36,6 @@ import { TemporalOperationEntry } from "../utils/generator.js";
 import invariant from "../invariant.js";
 import * as t from "@babel/types";
 import type { BabelNode, BabelNodeForStatement, BabelNodeStatement } from "@babel/types";
-import traverseFast from "../utils/traverse-fast.js";
 
 type ObjectSnapshot = {
   obj: ObjectValue,
@@ -163,10 +159,16 @@ function verifyObjectSnapshot(snap: ObjectSnapshot): boolean {
   return true;
 }
 
-function hasTopLevelValueReturn(code: BabelNode): boolean {
+function getGlobalPropertyBinding(realm: Realm, name: string) {
+  let g = realm.$GlobalObject;
+  return g instanceof ObjectValue ? g.properties.get(name) : undefined;
+}
+
+function hasTopLevelValueReturn(codeNode: BabelNode): boolean {
+  let code: any = codeNode;
   if (code.type !== "BlockStatement") return true; // concise arrow body
   let found = false;
-  const scan = (stmts: Array<BabelNodeStatement>): void => {
+  const scan = (stmts: Array<any>): void => {
     for (let s of stmts) {
       if (found) return;
       switch (s.type) {
@@ -197,11 +199,15 @@ function hasTopLevelValueReturn(code: BabelNode): boolean {
   return found;
 }
 
-function collectFreeIdentifiers(rootNode: BabelNode, extraBound?: Set<string>): { names: Set<string>, hasUnsupported: boolean } {
+function collectFreeIdentifiers(
+  rootNode: BabelNode,
+  extraBound?: Set<string>
+): { names: Set<string>, hasUnsupported: boolean } {
   let names: Set<string> = new Set();
   let hasUnsupported = false;
 
-  const walk = (node: ?BabelNode, bound: Set<string>): void => {
+  const walk = (rawNode: any, bound: Set<string>): void => {
+    let node: any = rawNode;
     if (!node || typeof node !== "object" || hasUnsupported) return;
     switch (node.type) {
       case "WithStatement":
@@ -272,7 +278,7 @@ function collectFreeIdentifiers(rootNode: BabelNode, extraBound?: Set<string>): 
         for (let key in node) {
           if (key === "loc" || key === "leadingComments" || key === "trailingComments" || key === "innerComments")
             continue;
-          let child = (node: any)[key];
+          let child = node[key];
           if (Array.isArray(child)) {
             for (let elem of child) {
               if (elem && typeof elem.type === "string") walk(elem, bound);
@@ -293,7 +299,8 @@ function collectFreeIdentifiers(rootNode: BabelNode, extraBound?: Set<string>): 
   return { names, hasUnsupported };
 }
 
-function addPatternNames(pat: ?BabelNode, out: Set<string>): void {
+function addPatternNames(rawPat: any, out: Set<string>): void {
+  let pat: any = rawPat;
   if (!pat) return;
   if (pat.type === "Identifier") {
     out.add(pat.name);
@@ -311,12 +318,13 @@ function addPatternNames(pat: ?BabelNode, out: Set<string>): void {
   }
 }
 
-function collectHoistedDecls(node: ?BabelNode, out: Set<string>, includeVars: boolean): void {
+function collectHoistedDecls(rawNode: any, out: Set<string>, includeVars: boolean): void {
+  let node: any = rawNode;
   if (!node || typeof node !== "object") return;
   if (node.type === "BlockStatement") {
     for (let s of node.body) {
       if (s.type === "FunctionDeclaration" && s.id) out.add(s.id.name);
-      else if (s.type === "VariableDeclaration" && ( s.kind !== "var" || includeVars)) {
+      else if (s.type === "VariableDeclaration" && (s.kind !== "var" || includeVars)) {
         for (let d of s.declarations) addPatternNames(d.id, out);
       } else if (includeVars) {
         collectVarsOnly(s, out);
@@ -327,7 +335,8 @@ function collectHoistedDecls(node: ?BabelNode, out: Set<string>, includeVars: bo
   }
 }
 
-function collectVarsOnly(node: ?BabelNode, out: Set<string>): void {
+function collectVarsOnly(rawNode: any, out: Set<string>): void {
+  let node: any = rawNode;
   if (!node || typeof node !== "object") return;
   if (
     node.type === "FunctionExpression" ||
@@ -342,7 +351,7 @@ function collectVarsOnly(node: ?BabelNode, out: Set<string>): void {
   }
   for (let key in node) {
     if (key === "loc") continue;
-    let child = (node: any)[key];
+    let child = node[key];
     if (Array.isArray(child)) {
       for (let el of child) if (el && typeof el.type === "string") collectVarsOnly(el, out);
     } else if (child && typeof child.type === "string") {
@@ -476,12 +485,13 @@ function resolveFreeSnapshots(
           break;
         }
       } else if (rec instanceof GlobalEnvironmentRecord) {
-        let decl = rec.$DeclarativeRecord.bindings[name];
+        let declRec: any = rec.$DeclarativeRecord;
+        let decl = declRec.bindings && declRec.bindings[name];
         if (decl !== undefined) {
           // Global let/const bindings are emitted after mainBody, so avoid recomputing through them unless unchanged.
           return { ok: false, bindingSnapshots: [], globalSnapshots: [], readObjectSnapshots: [] };
         }
-        let pb = realm.$GlobalObject.properties.get(name);
+        let pb = getGlobalPropertyBinding(realm, name);
         let tok = descriptorToken(pb === undefined ? undefined : pb.descriptor);
         globalSnapshots.push([name, tok, tok === undefined || tok instanceof UndefinedValue]);
         snapObj(tok);
@@ -493,7 +503,7 @@ function resolveFreeSnapshots(
       cur = cur.parent;
     }
     if (!resolved) {
-      let pb = realm.$GlobalObject.properties.get(name);
+      let pb = getGlobalPropertyBinding(realm, name);
       let tok = descriptorToken(pb === undefined ? undefined : pb.descriptor);
       globalSnapshots.push([name, tok, tok === undefined || tok instanceof UndefinedValue]);
       snapObj(tok);
@@ -584,16 +594,14 @@ export function evaluateCallWithRecomputeTracking(
     if (pure) {
       for (let [b, prevBindingEntry] of effects.modifiedBindings.entries()) {
         if (b.environment.id >= minEnvId) continue;
-        if (prevBindingEntry && prevBindingEntry.previousValue === b.value && !b.hasLeaked) continue;
+        if (prevBindingEntry && prevBindingEntry.value === b.value && !b.hasLeaked) continue;
         pure = false;
         break;
       }
     }
     if (pure && !(thisArgument === realm.$GlobalObject && staticInfo.names.has("this"))) {
       let cost = estimateCreatedGraphCost(retObj, effects.createdObjects, F, minEnvId);
-      let profitable = cost.retainsCallee
-        ? cost.bytes > 512
-        : cost.bytes > Math.max(codeBytes * 2.2, codeBytes + 250);
+      let profitable = cost.retainsCallee ? cost.bytes > 512 : cost.bytes > Math.max(codeBytes * 2.2, codeBytes + 250);
       if (profitable) {
         getCallMap(realm).set(retObj, {
           kind: "call",
@@ -638,7 +646,11 @@ function isEmptyContainerBeforeLoop(realm: Realm, obj: ObjectValue): void | { is
     }
     let lenPb = obj.properties.get("length");
     let lenDesc = lenPb && lenPb.descriptor;
-    if (!(lenDesc instanceof PropertyDescriptor) || !(lenDesc.value instanceof NumberValue) || lenDesc.value.value !== 0) {
+    if (
+      !(lenDesc instanceof PropertyDescriptor) ||
+      !(lenDesc.value instanceof NumberValue) ||
+      lenDesc.value.value !== 0
+    ) {
       return undefined;
     }
     return { isArray: true };
@@ -672,7 +684,8 @@ export function prepareLoopRecomputeBeforeApply(
   }
   let gRec = realm.$GlobalEnv.environmentRecord;
   invariant(gRec instanceof GlobalEnvironmentRecord);
-  if (Object.keys(gRec.$DeclarativeRecord.bindings).length > 0) {
+  let declRec: any = gRec.$DeclarativeRecord;
+  if (declRec.bindings && Object.keys(declRec.bindings).length > 0) {
     // Avoid shadowing hazards with global let/const bindings
     for (let b of effects.modifiedBindings.keys()) {
       if (b.environment.id < minEnvId) return undefined;
@@ -695,14 +708,15 @@ export function prepareLoopRecomputeBeforeApply(
     if (ObjectValue.refuseSerializationOnPropertyBinding(pb)) continue;
     if (pb.object === realm.$GlobalObject) {
       if (typeof pb.key !== "string") return undefined;
-      if (!mutatedGlobalsPre.has(pb.key)) {
-        let curPb = realm.$GlobalObject.properties.get(pb.key);
+      let pbKey = pb.key;
+      if (!mutatedGlobalsPre.has(pbKey)) {
+        let curPb = getGlobalPropertyBinding(realm, pbKey);
         let curDesc = curPb && curPb.descriptor;
         let preVal =
           curDesc instanceof PropertyDescriptor && curDesc.value instanceof Value
             ? curDesc.value
             : realm.intrinsics.undefined;
-        mutatedGlobalsPre.set(pb.key, preVal);
+        mutatedGlobalsPre.set(pbKey, preVal);
       }
       continue;
     }
@@ -726,7 +740,7 @@ export function prepareLoopRecomputeBeforeApply(
   let targetGlobalName: void | string;
   for (let name of freeInfo.names) {
     if (mutatedGlobalsPre.has(name)) continue;
-    let pb = realm.$GlobalObject.properties.get(name);
+    let pb = getGlobalPropertyBinding(realm, name);
     let desc = pb && pb.descriptor;
     if (desc instanceof PropertyDescriptor && desc.value === targetObj) {
       targetGlobalName = name;
@@ -760,7 +774,7 @@ export function finalizeLoopRecomputeAfterApply(realm: Realm, token: void | PreL
   for (let k of mutatedGlobalsPre.keys()) allNames.add(k);
 
   for (let name of allNames) {
-    let pb = realm.$GlobalObject.properties.get(name);
+    let pb = getGlobalPropertyBinding(realm, name);
     let tok = descriptorToken(pb === undefined ? undefined : pb.descriptor);
     globalSnapshots.push([name, tok]);
     if (
@@ -809,7 +823,7 @@ export function getVerifiedRecomputeRecipes(realm: Realm): Map<ObjectValue, Reco
     }
     if (valid) {
       for (let [name, tokAtCall, allowSelf] of recipe.globalSnapshots) {
-        let pb = realm.$GlobalObject.properties.get(name);
+        let pb = getGlobalPropertyBinding(realm, name);
         let curTok = descriptorToken(pb === undefined ? undefined : pb.descriptor);
         if (curTok === tokAtCall) continue;
         if (allowSelf && curTok === target) continue;
@@ -839,7 +853,7 @@ export function getVerifiedRecomputeRecipes(realm: Realm): Map<ObjectValue, Reco
   for (let [target, recipe] of getLoopMap(realm)) {
     let valid = true;
     for (let [name, expectedTok] of recipe.globalSnapshots) {
-      let pb = realm.$GlobalObject.properties.get(name);
+      let pb = getGlobalPropertyBinding(realm, name);
       let curTok = descriptorToken(pb === undefined ? undefined : pb.descriptor);
       if (curTok !== expectedTok) {
         valid = false;
@@ -910,7 +924,7 @@ export function buildRecomputeLoopStatements(
     return copy;
   };
 
-  let clonedFor: BabelNodeForStatement = t.cloneDeep(recipe.ast);
+  let clonedFor: any = t.cloneDeep(recipe.ast);
   if (clonedFor.init && clonedFor.init.type === "VariableDeclaration" && clonedFor.init.kind === "var") {
     let exprs = [];
     for (let decl of clonedFor.init.declarations) {
@@ -923,7 +937,11 @@ export function buildRecomputeLoopStatements(
       }
     }
     clonedFor.init = exprs.length === 0 ? null : exprs.length === 1 ? exprs[0] : t.sequenceExpression(exprs);
-  } else if (clonedFor.init && clonedFor.init.type === "AssignmentExpression" && clonedFor.init.left.type === "Identifier") {
+  } else if (
+    clonedFor.init &&
+    clonedFor.init.type === "AssignmentExpression" &&
+    clonedFor.init.left.type === "Identifier"
+  ) {
     initializedInHeader.add(clonedFor.init.left.name);
   }
   clonedFor.body = cloneAndRewriteVars(clonedFor.body);

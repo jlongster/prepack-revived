@@ -317,7 +317,9 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
           return AbstractValue.createFromConditionalOp(realm, cond, consTypeVal, altTypeVal, loc, isCondition);
         }
       }
-      return x.equals(x0) ? value : AbstractValue.createFromUnaryOp(realm, "typeof", (x: any), true, loc, isCondition, true);
+      return x.equals(x0)
+        ? value
+        : AbstractValue.createFromUnaryOp(realm, "typeof", (x: any), true, loc, isCondition, true);
     }
     case "conditional": {
       let [c0, x0, y0] = value.args;

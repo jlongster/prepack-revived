@@ -786,7 +786,12 @@ export default class AbstractValue extends Value {
           let tag;
           if (a instanceof AbstractValue && a.kind === "typeof" && a.args[0] === target && b instanceof StringValue)
             tag = b.value;
-          else if (b instanceof AbstractValue && b.kind === "typeof" && b.args[0] === target && a instanceof StringValue)
+          else if (
+            b instanceof AbstractValue &&
+            b.kind === "typeof" &&
+            b.args[0] === target &&
+            a instanceof StringValue
+          )
             tag = a.value;
           if (tag === "string") return StringValue;
           if (tag === "number") return NumberValue;

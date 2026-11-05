@@ -1212,10 +1212,7 @@ export class Generator {
             }
             continue;
           }
-          if (
-            next instanceof TemporalOperationEntry &&
-            next.operationDescriptor.type === "GET_BINDING"
-          ) {
+          if (next instanceof TemporalOperationEntry && next.operationDescriptor.type === "GET_BINDING") {
             if (next.operationDescriptor.data.binding === target) {
               next.args = [entry.value];
               next.operationDescriptor = createOperationDescriptor("SINGLE_ARG");
