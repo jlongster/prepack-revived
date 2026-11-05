@@ -55,7 +55,7 @@ const indexShape = new ShapeInformation({ kind: "scalar", jsType: "integral" }, 
 
 // Shapes of the (element, index) arguments of a callback invoked on the elements of an abstract
 // input array whose shape is known.
-function callbackArgShapes(O: ObjectValue): void | Array<void | ShapeInformationInterface> {
+function callbackArgShapes(O: ObjectValue | AbstractObjectValue): void | Array<void | ShapeInformationInterface> {
   if (!(O instanceof ArrayValue) || O.shape === undefined) return undefined;
   return [O.shape.getPropertyShape("0"), indexShape];
 }
@@ -509,7 +509,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
         callbackArgShapes(O)
       );
       // The elements of the filtered array are elements of O.
-      filtered.shape = O.shape;
+      if (O instanceof ArrayValue) filtered.shape = O.shape;
       return filtered;
     }
 

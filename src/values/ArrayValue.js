@@ -63,10 +63,6 @@ function evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
         // where the calls we specialize depend on the specialization context.
         // TODO: #2454
         // TODO: Implement context-sensitive specialization instead of giving up
-        if (process.env.PREPACK_DEBUG_NESTED) {
-          // eslint-disable-next-line no-console
-          console.error("nested optimized function called in multiple contexts");
-        }
         funcToModel.isCalledInMultipleContexts = true;
         Leak.value(realm, func);
         return;
@@ -81,11 +77,7 @@ function evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
         "temporalArray nestedOptimizedFunction"
       );
       Utils.dropNetZeroModifications(effects, func);
-      Utils.reportSideEffectsFromEffects(realm, effects, func, (type, binding) => {
-        if (process.env.PREPACK_DEBUG_NESTED) {
-          // eslint-disable-next-line no-console
-          console.error("nested optimized function side effect", type, binding && (binding.name || binding.key));
-        }
+      Utils.reportSideEffectsFromEffects(realm, effects, func, () => {
         throw new NestedOptimizedFunctionSideEffect();
       });
       return effects;

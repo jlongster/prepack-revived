@@ -68,7 +68,7 @@ export class ShapeInformation implements ShapeInformationInterface {
     return Utils.getTypeFromName(this._descriptor.jsType) || Value;
   }
 
-  getVariants(): void | Array<ShapeInformation> {
+  getVariants(): void | Array<ShapeInformationInterface> {
     let descriptor = this._descriptor;
     if (descriptor.kind !== "union") return undefined;
     let result = [];

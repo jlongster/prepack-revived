@@ -442,18 +442,32 @@ export default function(realm: Realm): void {
   global.$DefineOwnProperty(
     "__residual_pure",
     new PropertyDescriptor({
-      value: new NativeFunctionValue(realm, "global.__residual_pure", "__residual_pure", 2, (context, [typeName, f, ...args]) => {
-        if (!realm.useAbstractInterpretation) {
-          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "realm is not partial");
+      value: new NativeFunctionValue(
+        realm,
+        "global.__residual_pure",
+        "__residual_pure",
+        2,
+        (context, [typeName, f, ...args]) => {
+          if (!realm.useAbstractInterpretation) {
+            throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "realm is not partial");
+          }
+          let { type, template } = parseTypeNameOrTemplate(realm, typeName);
+          if (template !== undefined || !(f instanceof FunctionValue)) {
+            throw realm.createErrorThrowCompletion(
+              realm.intrinsics.TypeError,
+              "__residual_pure expects a type name and a function"
+            );
+          }
+          f.isResidual = true;
+          f.isUnsafeResidual = true;
+          return AbstractValue.createFromBuildFunction(
+            realm,
+            type,
+            [f].concat(args),
+            createOperationDescriptor("RESIDUAL_CALL")
+          );
         }
-        let { type, template } = parseTypeNameOrTemplate(realm, typeName);
-        if (template !== undefined || !(f instanceof FunctionValue)) {
-          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "__residual_pure expects a type name and a function");
-        }
-        f.isResidual = true;
-        f.isUnsafeResidual = true;
-        return AbstractValue.createFromBuildFunction(realm, type, [f].concat(args), createOperationDescriptor("RESIDUAL_CALL"));
-      }),
+      ),
       writable: true,
       enumerable: false,
       configurable: true,
@@ -748,7 +762,12 @@ export default function(realm: Realm): void {
           else kinds.add("unknown");
         };
         visit(value, 0);
-        return new StringValue(realm, Array.from(kinds).sort().join(","));
+        return new StringValue(
+          realm,
+          Array.from(kinds)
+            .sort()
+            .join(",")
+        );
       }),
       writable: true,
       enumerable: false,
@@ -762,15 +781,21 @@ export default function(realm: Realm): void {
   global.$DefineOwnProperty(
     "__conditionalParts",
     new PropertyDescriptor({
-      value: new NativeFunctionValue(realm, "global.__conditionalParts", "__conditionalParts", 1, (context, [value]) => {
-        if (!(value instanceof AbstractValue)) return realm.intrinsics.undefined;
-        let parts;
-        if (value.kind === "conditional") parts = [value.args[0], value.args[1], value.args[2]];
-        else if (value.kind === "||") parts = [value.args[0], value.args[0], value.args[1]];
-        else if (value.kind === "&&") parts = [value.args[0], value.args[1], value.args[0]];
-        else return realm.intrinsics.undefined;
-        return Create.CreateArrayFromList(realm, parts);
-      }),
+      value: new NativeFunctionValue(
+        realm,
+        "global.__conditionalParts",
+        "__conditionalParts",
+        1,
+        (context, [value]) => {
+          if (!(value instanceof AbstractValue)) return realm.intrinsics.undefined;
+          let parts;
+          if (value.kind === "conditional") parts = [value.args[0], value.args[1], value.args[2]];
+          else if (value.kind === "||") parts = [value.args[0], value.args[0], value.args[1]];
+          else if (value.kind === "&&") parts = [value.args[0], value.args[1], value.args[0]];
+          else return realm.intrinsics.undefined;
+          return Create.CreateArrayFromList(realm, parts);
+        }
+      ),
       writable: true,
       enumerable: false,
       configurable: true,

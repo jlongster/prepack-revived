@@ -19,7 +19,8 @@ export default function(realm: Realm): NativeFunctionValue {
     // ToBoolean of an abstract value has no side effects: Boolean(x) is !!x.
     if (!NewTarget && value instanceof AbstractValue && value.mightNotBeTrue() && value.mightNotBeFalse()) {
       let negated = AbstractValue.createFromUnaryOp(realm, "!", value, true, undefined, true);
-      if (negated instanceof AbstractValue) return AbstractValue.createFromUnaryOp(realm, "!", negated, true, undefined, true);
+      if (negated instanceof AbstractValue)
+        return AbstractValue.createFromUnaryOp(realm, "!", negated, true, undefined, true);
       if (negated instanceof BooleanValue) return new BooleanValue(realm, !negated.value);
     }
 

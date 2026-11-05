@@ -260,7 +260,9 @@ function tryResidualizeLoopingCall(
     let residual = tryEmitPureResidualCall(realm, F, thisArgument, argsList);
     if (residual instanceof AbstractValue) {
       let precise =
-        resultType === StringValue || resultType === BooleanValue || Value.isTypeCompatibleWith(resultType, NumberValue);
+        resultType === StringValue ||
+        resultType === BooleanValue ||
+        Value.isTypeCompatibleWith(resultType, NumberValue);
       return precise ? AbstractValue.createShapeView(realm, residual, resultType, undefined) : residual;
     }
   }
