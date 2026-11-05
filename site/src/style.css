@@ -239,6 +239,8 @@ sup { line-height: 0; }
 .grid > .cover-fig { grid-column: 2 / 10; grid-row: 3; margin: 0; }
 .grid > .cover-main { grid-column: 2 / 10; grid-row: 2; }
 .cover-main .dek { margin-bottom: 3rem; }
+.cover-links { display: flex; flex-wrap: wrap; gap: 0.35rem 1.75rem; margin-top: 1.25rem; font-family: var(--sans); font-size: 0.95rem; line-height: 1.5; color: var(--ink-3, var(--ink-2)); }
+.cover-links a { color: var(--accent); }
 .cover-stats .stat-row { margin: 0; }
 .grid > .contents { grid-column: 10 / 14; grid-row: 2 / span 2; font-family: var(--sans); border-top: 2px solid var(--ink); padding-top: 0.75rem; align-self: start; margin-top: 0.4rem; }
 .contents-title { font-size: 0.8rem; font-weight: 600; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.08em; }

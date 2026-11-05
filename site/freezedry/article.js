@@ -340,7 +340,9 @@ the shared <code>react-bench</code> harness.</p>
   <div class="cover-main">
   <p class="dek">Run a JavaScript bundle’s initialization once, in the real engine, and ship JavaScript that rebuilds
     the heap it left behind, with a guard for everything the build machine can’t know and a verifier that checks the
-    result object by object.</p>
+    result object by object.
+    <span class="cover-links"><span>Code: <a href="${REPO}">github.com/jlongster/freezedry</a></span>
+    <span>Live demo: <a href="https://jamesbox.exe.xyz/northstar/hybrid/">a React storefront rendered by freezedry</a></span></span></p>
   <div class="cover-stats">
     <div class="stat-row">
       <div class="stat"><span class="stat-num accent">${verified}</span><span class="stat-label">of 22 real libraries rebuilt heap-identical, checked by an independent verifier</span></div>

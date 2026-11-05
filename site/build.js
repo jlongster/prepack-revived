@@ -71,7 +71,9 @@ render({
   </div>
   <p class="dek">Facebook set down its JavaScript partial evaluator in 2018, leaving behind problems its own
     authors called hard, undecidable and “a bridge too far.” We went back in with AI agents, an SMT solver and a
-    fuzzer. This is what worked, what didn’t, and what it cost.</p>
+    fuzzer. This is what worked, what didn’t, and what it cost.
+    <span class="cover-links"><span>Code: <a href="https://github.com/jlongster/prepack-revived">github.com/jlongster/prepack-revived</a></span>
+    <span>Live demo: <a href="https://jamesbox.exe.xyz/northstar/prepack/">a React storefront rendered by the revived Prepack</a></span></span></p>
   <figure class="cover-fig">
     <div class="waffles">
       <div class="waffle-col">
