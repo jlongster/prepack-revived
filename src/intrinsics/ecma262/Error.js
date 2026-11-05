@@ -156,8 +156,11 @@ export function build(name: string, realm: Realm, inheritError?: boolean = true)
     }
 
     // Build a text description of the stack.
+    let stackVal = buildStack(realm, O);
+    invariant(O.$ErrorData);
+    O.$ErrorData.defaultStack = stackVal;
     let stackDesc = new PropertyDescriptor({
-      value: buildStack(realm, O),
+      value: stackVal,
       enumerable: false,
       configurable: true,
       writable: true,
