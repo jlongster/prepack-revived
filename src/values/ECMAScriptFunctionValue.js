@@ -25,4 +25,7 @@ export default class ECMAScriptFunctionValue extends FunctionValue {
   $HomeObject: void | ObjectValue;
   $FunctionKind: "normal" | "classConstructor" | "generator";
   isCalledInMultipleContexts: boolean;
+  // Names given to the parameters of an optimized nested function (instead of their source names)
+  // so that they cannot be captured by the parameters of other nested functions in the output.
+  residualParameterNames: void | Array<string>;
 }

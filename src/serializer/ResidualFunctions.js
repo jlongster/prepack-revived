@@ -586,6 +586,12 @@ export class ResidualFunctions {
       let params = functionValue.$FormalParameters;
       let isLexical = functionValue.$ThisMode === "lexical";
       invariant(params !== undefined);
+      let residualParameterNames = functionValue.residualParameterNames;
+      if (residualParameterNames !== undefined) {
+        params = params.map((p, i) =>
+          t.isIdentifier(p) && residualParameterNames[i] !== undefined ? t.identifier(residualParameterNames[i]) : p
+        );
+      }
 
       let rewrittenBody = rewrittenAdditionalFunctions.get(funcValue);
       invariant(rewrittenBody);

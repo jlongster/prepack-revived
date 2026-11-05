@@ -22,6 +22,8 @@
 //   str(fn, a, b, c)       residual call fn(a, b, c) whose result is a string
 //   bool(fn, a, b)         residual call fn(a, b) whose result is a boolean
 //   num(fn, a, b, c)       residual call fn(a, b, c) whose result is a number
+//   widen(array)           a view of an array of unknown length whose map callbacks get
+//                          specialized (undefined if impossible)
 //   bail(message)          refuse to specialize (Prepack: fatal diagnostic; Node: throws)
 
 var __SSR = (function (HOST) {
@@ -1171,7 +1173,9 @@ var __SSR = (function (HOST) {
   // callback of a residual `array.map(...).join("")`. The callback restores all render state it
   // changes, so it has no net effect on the state (which Prepack requires of such callbacks). The
   // text separator state after an item must not depend on the item, see below.
-  function renderAbstractArray(array, fn) {
+  function renderAbstractArray(abstractArray, fn) {
+    var array = HOST.widen(abstractArray);
+    if (array === undefined) HOST.bail("cannot iterate over an array of unknown length here");
     var totalChildren = array.length;
     var before = state.lastText;
     var html = array

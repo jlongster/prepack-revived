@@ -13,6 +13,7 @@ import type { Realm } from "../../realm.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  ArrayValue,
   BooleanValue,
   BoundFunctionValue,
   ConcreteValue,
@@ -744,6 +745,32 @@ export default function(realm: Realm): void {
         else if (value.kind === "&&") parts = [value.args[0], value.args[1], value.args[0]];
         else return realm.intrinsics.undefined;
         return Create.CreateArrayFromList(realm, parts);
+      }),
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
+  // __widenArray(array) returns a view of an array of unknown length (for example one built by a
+  // residual loop) as an array with widened numeric properties, whose callbacks for map and filter
+  // are specialized as nested optimized functions. The array must not be mutated afterwards.
+  // Arrays of known length are returned unchanged; returns undefined if no such view can be made.
+  global.$DefineOwnProperty(
+    "__widenArray",
+    new PropertyDescriptor({
+      value: new NativeFunctionValue(realm, "global.__widenArray", "__widenArray", 1, (context, [array]) => {
+        if (ArrayValue.isIntrinsicAndHasWidenedNumericProperty(array)) return array;
+        if (array instanceof ArrayValue && !(array.$Get("length", array) instanceof AbstractValue)) return array;
+        let isArray =
+          array instanceof ArrayValue ||
+          (array instanceof AbstractObjectValue && Value.isTypeCompatibleWith(array.getType(), ArrayValue));
+        if (!realm.isInPureScope() || !isArray) return realm.intrinsics.undefined;
+        return ArrayValue.createTemporalWithWidenedNumericProperty(
+          realm,
+          [array],
+          createOperationDescriptor("SINGLE_ARG")
+        );
       }),
       writable: true,
       enumerable: false,

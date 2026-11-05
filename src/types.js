@@ -1009,10 +1009,12 @@ export type UtilsType = {|
     FunctionValue,
     void | string | ArgModel,
     void | Value,
-    void | Array<void | ShapeInformationInterface>
+    void | Array<void | ShapeInformationInterface>,
+    void | boolean
   ) => void => Value,
   isBindingMutationOutsideFunction: (binding: Binding, bindingEntry: BindingEntry, F: FunctionValue) => boolean,
   areEffectsPure: (realm: Realm, effects: Effects, F: FunctionValue) => boolean,
+  dropNetZeroModifications: (effects: Effects, F: FunctionValue) => void,
   reportSideEffectsFromEffects: (
     realm: Realm,
     effects: Effects,

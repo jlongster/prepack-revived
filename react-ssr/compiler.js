@@ -183,6 +183,7 @@ const PREPACK_HOST = `var __SSR_HOST = {
   str: function (f, a, b, c) { return __residual_unsafe("string", f, a, b, c); },
   bool: function (f, a, b) { return __residual_unsafe("boolean", f, a, b); },
   num: function (f, a, b, c) { return __residual_unsafe("number", f, a, b, c); },
+  widen: function (a) { return __widenArray(a); },
   bail: function (message) { __bailout(message); }
 };`;
 
@@ -193,6 +194,7 @@ const NODE_HOST = `var __SSR_HOST = {
   str: function (f, a, b, c) { return f(a, b, c); },
   bool: function (f, a, b) { return f(a, b); },
   num: function (f, a, b, c) { return f(a, b, c); },
+  widen: function (a) { return a; },
   bail: function (message) { throw new Error("react-ssr bailout: " + message); }
 };`;
 

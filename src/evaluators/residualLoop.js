@@ -725,6 +725,10 @@ export function residualizeLoop(
   labelSet: ?Array<string>,
   reason: string
 ): Value {
+  if (process.env.PREPACK_DEBUG_LOOPS) {
+    // eslint-disable-next-line no-console
+    console.error("residual loop", ast.loc && ast.loc.start, reason);
+  }
   ast = evaluateForInit(realm, ast, strictCode, env);
   let transformed = transformLoop(ast, labelSet);
   let state = transformed.state;

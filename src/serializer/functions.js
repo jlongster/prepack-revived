@@ -240,14 +240,15 @@ export class Functions {
         realm.handleError(error);
       };
       const functionCall = () =>
-        realm.evaluateFunctionForPureEffectsInGlobalEnv(
-          functionValue,
-          call,
-          (sideEffectType, binding, expressionLocation) =>
-            handleReportedSideEffect(logCompilerDiagnostic, sideEffectType, binding, expressionLocation),
-          undefined,
-          "additional function"
-        );
+        realm.wrapInGlobalEnv(() => {
+          let functionEffects = realm.evaluateForEffects(call, undefined, "additional function");
+          // Temporary changes that are undone before the function returns are not side effects.
+          Utils.dropNetZeroModifications(functionEffects, functionValue);
+          Utils.reportSideEffectsFromEffects(realm, functionEffects, functionValue, (sideEffectType, binding, loc) =>
+            handleReportedSideEffect(logCompilerDiagnostic, sideEffectType, binding, loc)
+          );
+          return functionEffects;
+        });
       let effects: Effects = realm.isInPureScope() ? functionCall() : realm.evaluateWithPureScope(functionCall);
       invariant(effects);
       let additionalFunctionEffects = createAdditionalEffects(
