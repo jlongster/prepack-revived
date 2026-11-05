@@ -1,0 +1,613 @@
+{
+ "date": "2026-11-05T19:46:48.675Z",
+ "node": "v26.7.0",
+ "coldBaselineMs": 27.125,
+ "summary": {
+  "total": 22,
+  "standardCount": 15,
+  "largeCount": 7,
+  "librariesCount": 17,
+  "appsCount": 5,
+  "defaultOk": 15,
+  "bestOk": 18,
+  "wrong": 0,
+  "fail": 4,
+  "timeout": 0
+ },
+ "runs": {
+  "FAIL": 36,
+  "OK": 96
+ },
+ "workloads": [
+  {
+   "id": "lodash",
+   "kb": 533.1,
+   "tier": "standard",
+   "defaultStatus": "FAIL",
+   "status": "OK",
+   "okProfiles": [
+    "browser-opt",
+    "browser-seed",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 3896,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 24.5,
+    "gzipKB": 23.9,
+    "gzipRatio": 0.977,
+    "terserRatio": 1.061,
+    "coldOrigMs": 16.178,
+    "coldMs": 17.02,
+    "coldSpeedup": 0.951,
+    "codeCacheOrigMs": 3.168,
+    "codeCacheMs": 3.437,
+    "codeCacheSpeedup": 0.922,
+    "execSpeedup": 1.039
+   }
+  },
+  {
+   "id": "underscore",
+   "kb": 67.3,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 1296,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 7.2,
+    "gzipKB": 8.1,
+    "gzipRatio": 1.123,
+    "terserRatio": 1.777,
+    "coldOrigMs": 0.992,
+    "coldMs": 0.933,
+    "coldSpeedup": 1.063,
+    "codeCacheOrigMs": 0.615,
+    "codeCacheMs": 0.594,
+    "codeCacheSpeedup": 1.035,
+    "execSpeedup": 1.035
+   }
+  },
+  {
+   "id": "ramda",
+   "kb": 342.9,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 1035,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 14.1,
+    "gzipKB": 15.6,
+    "gzipRatio": 1.102,
+    "terserRatio": 1.249,
+    "coldOrigMs": 4.337,
+    "coldMs": 3.691,
+    "coldSpeedup": 1.175,
+    "codeCacheOrigMs": 0.822,
+    "codeCacheMs": 0.447,
+    "codeCacheSpeedup": 1.839,
+    "execSpeedup": 1.888
+   }
+  },
+  {
+   "id": "immutable",
+   "kb": 175.4,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 1137,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 18,
+    "gzipKB": 17.9,
+    "gzipRatio": 0.994,
+    "terserRatio": 0.975,
+    "coldOrigMs": 6.921,
+    "coldMs": 6.481,
+    "coldSpeedup": 1.068,
+    "codeCacheOrigMs": 1.404,
+    "codeCacheMs": 1.25,
+    "codeCacheSpeedup": 1.123,
+    "execSpeedup": 1.118
+   }
+  },
+  {
+   "id": "moment",
+   "kb": 637.8,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 6906,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 74.3,
+    "gzipKB": 98.4,
+    "gzipRatio": 1.324,
+    "terserRatio": 1.159,
+    "coldOrigMs": 25.497,
+    "coldMs": 26.35,
+    "coldSpeedup": 0.968,
+    "codeCacheOrigMs": 11.614,
+    "codeCacheMs": 2.711,
+    "codeCacheSpeedup": 4.284,
+    "execSpeedup": 4.32
+   }
+  },
+  {
+   "id": "chroma-js",
+   "kb": 109.2,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 635,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 15.4,
+    "gzipKB": 14.5,
+    "gzipRatio": 0.94,
+    "terserRatio": 0.956,
+    "coldOrigMs": 3.384,
+    "coldMs": 2.272,
+    "coldSpeedup": 1.489,
+    "codeCacheOrigMs": 0.966,
+    "codeCacheMs": 0.904,
+    "codeCacheSpeedup": 1.069,
+    "execSpeedup": 1.058
+   }
+  },
+  {
+   "id": "acorn",
+   "kb": 240.9,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 1154,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 33.9,
+    "gzipKB": 36.5,
+    "gzipRatio": 1.075,
+    "terserRatio": 1.322,
+    "coldOrigMs": 7.909,
+    "coldMs": 7.718,
+    "coldSpeedup": 1.025,
+    "codeCacheOrigMs": 1.855,
+    "codeCacheMs": 1.523,
+    "codeCacheSpeedup": 1.218,
+    "execSpeedup": 1.267
+   }
+  },
+  {
+   "id": "crc-32",
+   "kb": 3.6,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 568,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 0.8,
+    "gzipKB": 44,
+    "gzipRatio": 55.122,
+    "terserRatio": 46.87,
+    "coldOrigMs": 0,
+    "coldMs": 0,
+    "coldSpeedup": null,
+    "codeCacheOrigMs": 0.336,
+    "codeCacheMs": 0.221,
+    "codeCacheSpeedup": 1.52,
+    "execSpeedup": 1.694
+   }
+  },
+  {
+   "id": "marked",
+   "kb": 49.4,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 771,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 14.5,
+    "gzipKB": 14.4,
+    "gzipRatio": 0.995,
+    "terserRatio": 0.997,
+    "coldOrigMs": 35.458,
+    "coldMs": 36.35,
+    "coldSpeedup": 0.975,
+    "codeCacheOrigMs": 1.214,
+    "codeCacheMs": 1.223,
+    "codeCacheSpeedup": 0.993,
+    "execSpeedup": 1.007
+   }
+  },
+  {
+   "id": "d3-scale",
+   "kb": 148.9,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 1178,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 23,
+    "gzipKB": 28.8,
+    "gzipRatio": 1.249,
+    "terserRatio": 1.263,
+    "coldOrigMs": 4.782,
+    "coldMs": 6.023,
+    "coldSpeedup": 0.794,
+    "codeCacheOrigMs": 0.975,
+    "codeCacheMs": 0.612,
+    "codeCacheSpeedup": 1.593,
+    "execSpeedup": 1.695
+   }
+  },
+  {
+   "id": "redux",
+   "kb": 18.1,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 453,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 3.3,
+    "gzipKB": 3,
+    "gzipRatio": 0.889,
+    "terserRatio": 0.86,
+    "coldOrigMs": 0,
+    "coldMs": 0,
+    "coldSpeedup": null,
+    "codeCacheOrigMs": 0.329,
+    "codeCacheMs": 0.278,
+    "codeCacheSpeedup": 1.183,
+    "execSpeedup": 1.193
+   }
+  },
+  {
+   "id": "handlebars-app",
+   "kb": 211.9,
+   "tier": "standard",
+   "defaultStatus": "FAIL",
+   "status": "OK",
+   "okProfiles": [
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 3875,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 26.3,
+    "gzipKB": 26.7,
+    "gzipRatio": 1.018,
+    "terserRatio": 1.101,
+    "coldOrigMs": 16.44,
+    "coldMs": 4.237,
+    "coldSpeedup": 3.88,
+    "codeCacheOrigMs": 3.355,
+    "codeCacheMs": 1.072,
+    "codeCacheSpeedup": 3.13,
+    "execSpeedup": 3.027
+   }
+  },
+  {
+   "id": "preact-ssr-app",
+   "kb": 22,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 463,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 8.6,
+    "gzipKB": 8.8,
+    "gzipRatio": 1.015,
+    "terserRatio": 1.043,
+    "coldOrigMs": 0.019,
+    "coldMs": 1.177,
+    "coldSpeedup": 0.016,
+    "codeCacheOrigMs": 0.413,
+    "codeCacheMs": 0.359,
+    "codeCacheSpeedup": 1.15,
+    "execSpeedup": 1.115
+   }
+  },
+  {
+   "id": "react-ssr-app",
+   "kb": 47,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 1510,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 15.2,
+    "gzipKB": 17.8,
+    "gzipRatio": 1.172,
+    "terserRatio": 1.254,
+    "coldOrigMs": 3.735,
+    "coldMs": 4.552,
+    "coldSpeedup": 0.821,
+    "codeCacheOrigMs": 0.889,
+    "codeCacheMs": 0.593,
+    "codeCacheSpeedup": 1.499,
+    "execSpeedup": 1.518
+   }
+  },
+  {
+   "id": "yaml-router-app",
+   "kb": 157.1,
+   "tier": "standard",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 2701,
+   "perf": {
+    "n": 30,
+    "gzipOrigKB": 17.2,
+    "gzipKB": 17.6,
+    "gzipRatio": 1.024,
+    "terserRatio": 1.115,
+    "coldOrigMs": 6.507,
+    "coldMs": 3.198,
+    "coldSpeedup": 2.035,
+    "codeCacheOrigMs": 1.817,
+    "codeCacheMs": 0.616,
+    "codeCacheSpeedup": 2.95,
+    "execSpeedup": 2.603
+   }
+  },
+  {
+   "id": "moment-timezone",
+   "kb": 913.3,
+   "tier": "large",
+   "defaultStatus": "FAIL",
+   "status": "OK",
+   "okProfiles": [
+    "browser-opt",
+    "browser-seed",
+    "jsc",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 2289,
+   "perf": {
+    "n": 15,
+    "gzipOrigKB": 55,
+    "gzipKB": 73.8,
+    "gzipRatio": 1.343,
+    "terserRatio": 1.101,
+    "coldOrigMs": 23.548,
+    "coldMs": 20.249,
+    "coldSpeedup": 1.163,
+    "codeCacheOrigMs": 7.809,
+    "codeCacheMs": 5.421,
+    "codeCacheSpeedup": 1.441,
+    "execSpeedup": 1.374
+   }
+  },
+  {
+   "id": "prettier",
+   "kb": 1065.6,
+   "tier": "large",
+   "defaultStatus": "FAIL",
+   "status": "FAIL",
+   "okProfiles": [],
+   "blocker": "PP0001: This operation is not yet supported on abstract value global",
+   "compileMs": null,
+   "perf": null
+  },
+  {
+   "id": "highlight-js",
+   "kb": 1834.5,
+   "tier": "large",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 8388,
+   "perf": {
+    "n": 15,
+    "gzipOrigKB": 299.3,
+    "gzipKB": 622.4,
+    "gzipRatio": 2.079,
+    "terserRatio": 2.052,
+    "coldOrigMs": 90.277,
+    "coldMs": 96.964,
+    "coldSpeedup": 0.931,
+    "codeCacheOrigMs": 15.899,
+    "codeCacheMs": 12.254,
+    "codeCacheSpeedup": 1.297,
+    "execSpeedup": 1.311
+   }
+  },
+  {
+   "id": "three",
+   "kb": 1914.4,
+   "tier": "large",
+   "defaultStatus": "OK",
+   "status": "OK",
+   "okProfiles": [
+    "default",
+    "browser-opt",
+    "browser-seed",
+    "node-react",
+    "lazy-objects"
+   ],
+   "blocker": null,
+   "compileMs": 4863,
+   "perf": {
+    "n": 15,
+    "gzipOrigKB": 183.2,
+    "gzipKB": 216,
+    "gzipRatio": 1.179,
+    "terserRatio": 1.162,
+    "coldOrigMs": 34.641,
+    "coldMs": 31.439,
+    "coldSpeedup": 1.102,
+    "codeCacheOrigMs": 4.665,
+    "codeCacheMs": 3.481,
+    "codeCacheSpeedup": 1.34,
+    "execSpeedup": 1.365
+   }
+  },
+  {
+   "id": "mathjs",
+   "kb": 2117.9,
+   "tier": "large",
+   "defaultStatus": "FAIL",
+   "status": "FAIL",
+   "okProfiles": [],
+   "blocker": "PP0001: This operation is not yet supported on abstract value",
+   "compileMs": null,
+   "perf": null
+  },
+  {
+   "id": "babel-standalone",
+   "kb": 5248.9,
+   "tier": "large",
+   "defaultStatus": "FAIL",
+   "status": "FAIL",
+   "okProfiles": [],
+   "blocker": "PP0001: This operation is not yet supported on abstract value",
+   "compileMs": null,
+   "perf": null
+  },
+  {
+   "id": "typescript",
+   "kb": 8899.1,
+   "tier": "large",
+   "defaultStatus": "FAIL",
+   "status": "FAIL",
+   "okProfiles": [],
+   "blocker": "PP0001: This operation is not yet supported on abstract value",
+   "compileMs": null,
+   "perf": null
+  }
+ ]
+}
