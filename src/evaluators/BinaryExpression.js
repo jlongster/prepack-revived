@@ -46,6 +46,9 @@ export default function(
   // evaluate right
   let rref = env.evaluate(ast.right, strictCode);
   let rval = Environment.GetValue(realm, rref);
+  if (ast.operator === "in" && realm.persistentReadTracker !== undefined && rval instanceof ObjectValue) {
+    realm.recordPersistentObjectKeyRead(rval, lval instanceof StringValue ? lval.value : "*");
+  }
 
   return computeBinary(realm, ast.operator, lval, rval, ast.left.loc, ast.right.loc, ast.loc);
 }

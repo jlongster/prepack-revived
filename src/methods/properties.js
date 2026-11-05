@@ -268,6 +268,10 @@ export class PropertiesImplementation {
   // ECMA262 9.1.9.1
   OrdinarySet(realm: Realm, O: ObjectValue, P: PropertyKeyValue, V: Value, Receiver: Value): boolean {
     ensureIsNotFinal(realm, O, P);
+    if (O === realm.$GlobalObject && realm.persistentReadTracker !== undefined) {
+      let keyName = typeof P === "string" ? P : P instanceof StringValue ? P.value : undefined;
+      if (keyName !== undefined) realm.recordPersistentGlobalWrite(keyName);
+    }
     if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
       // Leaking is transitive, hence writing a value to a leaked object leaks the value
       Leak.value(realm, V);
@@ -2054,6 +2058,7 @@ export class PropertiesImplementation {
       throw new FatalError();
     });
     realm.callReportObjectGetOwnProperties(O);
+    realm.recordPersistentObjectKeyRead(O, "*");
     return keyArray;
   }
 }

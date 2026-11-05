@@ -97,6 +97,9 @@ export function OrdinaryGet(
   Receiver: Value,
   dataOnly?: boolean
 ): Value {
+  if (realm.persistentReadTracker !== undefined) {
+    realm.recordPersistentObjectKeyRead(O, typeof P === "string" ? P : P instanceof StringValue ? P.value : "*");
+  }
   // First deal with potential unknown properties.
   let prop = O.unknownProperty;
   if (prop !== undefined && prop.descriptor !== undefined && O.$GetOwnProperty(P) === undefined) {
@@ -363,6 +366,9 @@ export function OrdinaryGetPartial(
   }
 
   if (!(P instanceof AbstractValue)) return O.$Get(P, Receiver);
+  if (realm.persistentReadTracker !== undefined) {
+    realm.recordPersistentObjectKeyRead(O, "*");
+  }
 
   // If the key can only be one of a few strings or numbers, read each of them under the
   // condition that the key has that value.

@@ -225,8 +225,26 @@ function ForBodyEvaluation(
         failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
       }
     }
+    if (realm.useAbstractInterpretation && countCompletionNodes(realm.savedCompletion, 257) > 256) {
+      failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
+    }
   }
   invariant(false);
+
+  function countCompletionNodes(c: void | Completion | Value, limit: number): number {
+    if (!(c instanceof Completion)) return 0;
+    let count = 1;
+    if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
+      count += countCompletionNodes(c.consequent, limit - count);
+      if (count >= limit) return count;
+      count += countCompletionNodes(c.alternate, limit - count);
+      if (count >= limit) return count;
+      if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
+        count += countCompletionNodes(c.composedWith, limit - count);
+      }
+    }
+    return count;
+  }
 
   function failIfContainsBreakOrReturnOrThrowCompletion(c: void | Completion | Value) {
     if (c === undefined) return;
@@ -243,6 +261,9 @@ function ForBodyEvaluation(
     if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
       failIfContainsBreakOrReturnOrThrowCompletion(c.consequent);
       failIfContainsBreakOrReturnOrThrowCompletion(c.alternate);
+      if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
+        failIfContainsBreakOrReturnOrThrowCompletion(c.composedWith);
+      }
     }
   }
 }

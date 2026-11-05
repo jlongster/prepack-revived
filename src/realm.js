@@ -91,6 +91,14 @@ import {
 import type { BabelNode, BabelNodeSourceLocation, BabelNodeLVal } from "@babel/types";
 export type BindingEntry = { hasLeaked: boolean, value: void | Value };
 export type Bindings = Map<Binding, BindingEntry>;
+export type PersistentReadTracker = {
+  entryPathConditions: PathConditions,
+  definitelyWrittenBindings: Set<Binding>,
+  definitelyWrittenGlobalProps: Set<string>,
+  readBindings: Set<Binding>,
+  readGlobalProps: Set<string>,
+  readObjectKeys: Map<ObjectValue, Set<string>>,
+};
 export type EvaluationResult = Completion | Reference;
 export type PropertyBindings = Map<PropertyBinding, void | Descriptor>;
 
@@ -382,6 +390,7 @@ export class Realm {
   abstractValueImpliesCounter: number;
   impliesCounterOverflowed: boolean;
   inSimplificationPath: boolean;
+  _implicationUsedLeaf: boolean;
 
   modifiedBindings: void | Bindings;
   modifiedProperties: void | PropertyBindings;
@@ -390,6 +399,8 @@ export class Realm {
   createdAbstracts: void | CreatedAbstracts;
   reportObjectGetOwnProperties: void | ((ObjectValue | AbstractObjectValue) => void);
   reportPropertyAccess: void | ((PropertyBinding, boolean) => void);
+  persistentReadTracker: void | PersistentReadTracker;
+  liveOuterBindings: void | Set<Binding>;
   savedCompletion: void | JoinedNormalAndAbruptCompletions;
 
   activeLexicalEnvironments: Set<LexicalEnvironment>;
@@ -1591,6 +1602,36 @@ export class Realm {
   callReportPropertyAccess(binding: PropertyBinding, isWrite: boolean): void {
     if (this.reportPropertyAccess !== undefined) {
       this.reportPropertyAccess(binding, isWrite);
+    }
+  }
+
+  recordPersistentObjectKeyRead(ob: ObjectValue, key: string): void {
+    let tracker = this.persistentReadTracker;
+    if (tracker === undefined) return;
+    if (ob === this.$GlobalObject) {
+      if (key !== "*" && !tracker.definitelyWrittenGlobalProps.has(key)) {
+        tracker.readGlobalProps.add(key);
+      }
+      return;
+    }
+    if (ob.isIntrinsic()) return;
+    let keys = tracker.readObjectKeys.get(ob);
+    if (keys === undefined) {
+      keys = new Set();
+      tracker.readObjectKeys.set(ob, keys);
+    }
+    keys.add(key);
+  }
+
+  recordPersistentGlobalWrite(key: string): void {
+    let tracker = this.persistentReadTracker;
+    if (
+      tracker !== undefined &&
+      this.savedCompletion === undefined &&
+      this.pathConditions === tracker.entryPathConditions &&
+      !tracker.readGlobalProps.has(key)
+    ) {
+      tracker.definitelyWrittenGlobalProps.add(key);
     }
   }
 

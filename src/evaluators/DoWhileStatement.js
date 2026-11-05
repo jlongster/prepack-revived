@@ -129,6 +129,9 @@ export default function(
       if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
         failIfContainsBreakOrReturnOrThrowCompletion(c.consequent);
         failIfContainsBreakOrReturnOrThrowCompletion(c.alternate);
+        if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
+          failIfContainsBreakOrReturnOrThrowCompletion(c.composedWith);
+        }
       }
     }
   });

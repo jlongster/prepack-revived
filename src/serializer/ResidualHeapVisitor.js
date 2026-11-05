@@ -1244,6 +1244,26 @@ export class ResidualHeapVisitor {
         return this.visitEquivalentValue(value);
       },
       visitLeakedBinding: (binding: Binding) => {
+        if (
+          additionalFunctionInfo !== undefined &&
+          !binding.hasLeaked &&
+          binding.environment.creatingOptimizedFunction !== additionalFunctionInfo.functionValue
+        ) {
+          let residualBinding = this.getBinding(binding.environment, binding.name);
+          residualBinding.modified = true;
+          let funcInstance = additionalFunctionInfo.instance;
+          if (funcInstance !== undefined) {
+            funcInstance.residualFunctionBindings.set(residualBinding.name, residualBinding);
+          }
+          additionalFunctionInfo.modifiedBindings.set(binding, residualBinding);
+          if (residualBinding.potentialReferentializationScopes.size === 0) {
+            this._enqueueWithUnrelatedScope(this.globalGenerator, () => {
+              this.visitBinding(this.globalGenerator, residualBinding);
+            });
+          }
+          residualBinding.potentialReferentializationScopes.add("GLOBAL");
+          return;
+        }
         let residualBinding = this.getBinding(binding.environment, binding.name);
         residualBinding.modified = true;
         residualBinding.hasLeaked = true;

@@ -31,14 +31,18 @@ export class PathConditionsImplementation extends PathConditions {
   _baseConditions: void | PathConditionsImplementation;
   _impliedConditions: void | Set<AbstractValue>;
   _impliedNegatives: void | Set<AbstractValue>;
-  _failedImplications: void | Map<AbstractValue, number>;
-  _failedNegativeImplications: void | Map<AbstractValue, number>;
+  _failedImplications: void | Set<AbstractValue>;
+  _failedImplicationsDeep: void | Set<AbstractValue>;
+  _failedNegativeImplications: void | Set<AbstractValue>;
+  _failedNegativeImplicationsDeep: void | Set<AbstractValue>;
 
   add(c: AbstractValue): void {
     invariant(!this._readonly);
     this._assumedConditions.add(c);
     this._failedImplications = undefined;
+    this._failedImplicationsDeep = undefined;
     this._failedNegativeImplications = undefined;
+    this._failedNegativeImplicationsDeep = undefined;
   }
 
   // It makes the strong assumption that, in order for 2 path conditions to be equal,
@@ -76,59 +80,66 @@ export class PathConditionsImplementation extends PathConditions {
     if (!e.mightNotBeTrue()) return true;
     if (!e.mightNotBeFalse()) return false;
     invariant(e instanceof AbstractValue);
+    let realm = e.$Realm;
+    let root = realm.pathConditions;
     if (this._assumedConditions.has(e)) return true;
     if (this._impliedConditions !== undefined && this._impliedConditions.has(e)) return true;
     if (this._impliedNegatives !== undefined && this._impliedNegatives.has(e)) return false;
-    if (this._failedImplications !== undefined) {
-      let failedDepth = this._failedImplications.get(e);
-      if (failedDepth !== undefined && failedDepth <= depth) return false;
-    }
+    if (this._failedImplications !== undefined && this._failedImplications.has(e)) return false;
+    if (depth > 0 && this._failedImplicationsDeep !== undefined && this._failedImplicationsDeep.has(e)) return false;
     if (depth > 10) return false;
-    if (this._baseConditions !== undefined && this._baseConditions.implies(e, depth + 1)) return true;
-    for (let assumedCondition of this._assumedConditions) {
-      if (assumedCondition.implies(e, depth + 1)) return this.cacheImplicationSuccess(e);
-    }
-    if (e.kind === "||") {
-      let [x, y] = e.args;
-      // this => x || true, regardless of the value of x
-      // this => true || y, regardless of the value of y
-      if (!x.mightNotBeTrue() || !y.mightNotBeTrue()) return this.cacheImplicationSuccess(e);
-      // this => false || y, if this => y
-      if (!x.mightNotBeFalse() && this.implies(y, depth + 1)) return this.cacheImplicationSuccess(e);
-      // this => x || false if this => x
-      if (!y.mightNotBeFalse() && this.implies(x, depth + 1)) return this.cacheImplicationSuccess(e);
-      // this => x || y if this => x
-      if (this.implies(x, depth + 1)) return this.cacheImplicationSuccess(e);
-      // this => x || y if this => y
-      if (this.implies(y, depth + 1)) return this.cacheImplicationSuccess(e);
-    }
-    if (e.kind === "!==" || e.kind === "!=") {
-      let [x, y] = e.args;
-      if (x instanceof AbstractValue) {
-        // this => x !== null && x !== undefined, if this => x
-        // this => x != null && x != undefined, if this => x
-        if ((y instanceof NullValue || y instanceof UndefinedValue) && this.implies(x, depth + 1))
-          return this.cacheImplicationSuccess(e);
-      } else {
-        invariant(y instanceof AbstractValue); // otherwise e would have been simplied
-        // this => null !== y && undefined !== y, if this => y
-        // this => null != y && undefined != y, if this => y
-        if ((x instanceof NullValue || x instanceof UndefinedValue) && this.implies(y, depth + 1))
-          return this.cacheImplicationSuccess(e);
+    let savedUsedLeaf = realm._implicationUsedLeaf;
+    if (this !== root) realm._implicationUsedLeaf = false;
+    try {
+      if (this._baseConditions !== undefined && this._baseConditions.implies(e, depth + 1)) {
+        return this.cacheImplicationSuccess(e);
       }
+      for (let assumedCondition of this._assumedConditions) {
+        if (assumedCondition.implies(e, depth + 1)) return this.cacheImplicationSuccess(e);
+      }
+      if (e.kind === "||") {
+        let [x, y] = e.args;
+        if (!x.mightNotBeTrue() || !y.mightNotBeTrue()) return this.cacheImplicationSuccess(e);
+        if (!x.mightNotBeFalse() && this.implies(y, depth + 1)) return this.cacheImplicationSuccess(e);
+        if (!y.mightNotBeFalse() && this.implies(x, depth + 1)) return this.cacheImplicationSuccess(e);
+        if (this.implies(x, depth + 1)) return this.cacheImplicationSuccess(e);
+        if (this.implies(y, depth + 1)) return this.cacheImplicationSuccess(e);
+      }
+      if (e.kind === "!==" || e.kind === "!=") {
+        let [x, y] = e.args;
+        if (x instanceof AbstractValue) {
+          if ((y instanceof NullValue || y instanceof UndefinedValue) && this.implies(x, depth + 1))
+            return this.cacheImplicationSuccess(e);
+        } else {
+          invariant(y instanceof AbstractValue);
+          if ((x instanceof NullValue || x instanceof UndefinedValue) && this.implies(y, depth + 1))
+            return this.cacheImplicationSuccess(e);
+        }
+      }
+      if (e.kind === "!") {
+        let [x] = e.args;
+        if (this.impliesNot(x, depth + 1)) return this.cacheImplicationSuccess(e);
+      }
+      let target = this !== root && realm._implicationUsedLeaf ? root : this;
+      if (depth === 0) {
+        if (target._failedImplications === undefined) target._failedImplications = new Set();
+        target._failedImplications.add(e);
+      } else {
+        if (target._failedImplicationsDeep === undefined) target._failedImplicationsDeep = new Set();
+        target._failedImplicationsDeep.add(e);
+      }
+      return false;
+    } finally {
+      if (this !== root) realm._implicationUsedLeaf = savedUsedLeaf || realm._implicationUsedLeaf;
     }
-    if (e.kind === "!") {
-      let [x] = e.args;
-      if (this.impliesNot(x, depth + 1)) return this.cacheImplicationSuccess(e);
-    }
-    if (this._failedImplications === undefined) this._failedImplications = new Map();
-    this._failedImplications.set(e, depth);
-    return false;
   }
 
   cacheImplicationSuccess(e: AbstractValue): true {
-    if (this._impliedConditions === undefined) this._impliedConditions = new Set();
-    this._impliedConditions.add(e);
+    let realm = e.$Realm;
+    let root = realm.pathConditions;
+    let target = this !== root && realm._implicationUsedLeaf ? root : this;
+    if (target._impliedConditions === undefined) target._impliedConditions = new Set();
+    target._impliedConditions.add(e);
     return true;
   }
 
@@ -137,59 +148,67 @@ export class PathConditionsImplementation extends PathConditions {
     if (!e.mightNotBeTrue()) return false;
     if (!e.mightNotBeFalse()) return true;
     invariant(e instanceof AbstractValue);
+    let realm = e.$Realm;
+    let root = realm.pathConditions;
     if (this._assumedConditions.has(e)) return false;
     if (this._impliedConditions !== undefined && this._impliedConditions.has(e)) return false;
     if (this._impliedNegatives !== undefined && this._impliedNegatives.has(e)) return true;
-    if (this._failedNegativeImplications !== undefined) {
-      let failedDepth = this._failedNegativeImplications.get(e);
-      if (failedDepth !== undefined && failedDepth <= depth) return false;
-    }
+    if (this._failedNegativeImplications !== undefined && this._failedNegativeImplications.has(e)) return false;
+    if (depth > 0 && this._failedNegativeImplicationsDeep !== undefined && this._failedNegativeImplicationsDeep.has(e))
+      return false;
     if (depth > 10) return false;
-    if (this._baseConditions !== undefined && this._baseConditions.impliesNot(e, depth + 1)) return true;
-    for (let assumedCondition of this._assumedConditions) {
-      if (assumedCondition.impliesNot(e, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
-    }
-    if (e.kind === "&&") {
-      let [x, y] = e.args;
-      // this => !(false && y) regardless of the value of y
-      // this => !(x && false) regardless of the value of x
-      if (!x.mightNotBeFalse() || !y.mightNotBeFalse()) return this.cacheNegativeImplicationSuccess(e);
-      // this => !(true && y), if this => !y
-      if (!x.mightNotBeTrue() && this.impliesNot(y, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
-      // this => !(x && true) if this => !x
-      if (!y.mightNotBeTrue() && this.impliesNot(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
-      // this => !(x && y) if this => !x
-      if (this.impliesNot(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
-      // this => !(x && y) if this => !y
-      if (this.impliesNot(y, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
-    }
-    if (e.kind === "===" || e.kind === "==") {
-      let [x, y] = e.args;
-      if (x instanceof AbstractValue) {
-        // this => !(x === null) && !(x === undefined), if this => x
-        // this => !(x == null) && !(x == undefined), if this => x
-        if ((y instanceof NullValue || y instanceof UndefinedValue) && this.implies(x, depth + 1))
-          return this.cacheNegativeImplicationSuccess(e);
-      } else {
-        invariant(y instanceof AbstractValue); // otherwise e would have been simplied
-        // this => !(null === y) && !(undefined === y), if this => y
-        // this => !(null == y) && !(undefined == y), if this => y
-        if ((x instanceof NullValue || x instanceof UndefinedValue) && this.implies(y, depth + 1))
-          return this.cacheNegativeImplicationSuccess(e);
+    let savedUsedLeaf = realm._implicationUsedLeaf;
+    if (this !== root) realm._implicationUsedLeaf = false;
+    try {
+      if (this._baseConditions !== undefined && this._baseConditions.impliesNot(e, depth + 1)) {
+        return this.cacheNegativeImplicationSuccess(e);
       }
+      for (let assumedCondition of this._assumedConditions) {
+        if (assumedCondition.impliesNot(e, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
+      }
+      if (e.kind === "&&") {
+        let [x, y] = e.args;
+        if (!x.mightNotBeFalse() || !y.mightNotBeFalse()) return this.cacheNegativeImplicationSuccess(e);
+        if (!x.mightNotBeTrue() && this.impliesNot(y, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
+        if (!y.mightNotBeTrue() && this.impliesNot(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
+        if (this.impliesNot(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
+        if (this.impliesNot(y, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
+      }
+      if (e.kind === "===" || e.kind === "==") {
+        let [x, y] = e.args;
+        if (x instanceof AbstractValue) {
+          if ((y instanceof NullValue || y instanceof UndefinedValue) && this.implies(x, depth + 1))
+            return this.cacheNegativeImplicationSuccess(e);
+        } else {
+          invariant(y instanceof AbstractValue);
+          if ((x instanceof NullValue || x instanceof UndefinedValue) && this.implies(y, depth + 1))
+            return this.cacheNegativeImplicationSuccess(e);
+        }
+      }
+      if (e.kind === "!") {
+        let [x] = e.args;
+        if (this.implies(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
+      }
+      let target = this !== root && realm._implicationUsedLeaf ? root : this;
+      if (depth === 0) {
+        if (target._failedNegativeImplications === undefined) target._failedNegativeImplications = new Set();
+        target._failedNegativeImplications.add(e);
+      } else {
+        if (target._failedNegativeImplicationsDeep === undefined) target._failedNegativeImplicationsDeep = new Set();
+        target._failedNegativeImplicationsDeep.add(e);
+      }
+      return false;
+    } finally {
+      if (this !== root) realm._implicationUsedLeaf = savedUsedLeaf || realm._implicationUsedLeaf;
     }
-    if (e.kind === "!") {
-      let [x] = e.args;
-      if (this.implies(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
-    }
-    if (this._failedNegativeImplications === undefined) this._failedNegativeImplications = new Map();
-    this._failedNegativeImplications.set(e, depth);
-    return false;
   }
 
   cacheNegativeImplicationSuccess(e: AbstractValue): true {
-    if (this._impliedNegatives === undefined) this._impliedNegatives = new Set();
-    this._impliedNegatives.add(e);
+    let realm = e.$Realm;
+    let root = realm.pathConditions;
+    let target = this !== root && realm._implicationUsedLeaf ? root : this;
+    if (target._impliedNegatives === undefined) target._impliedNegatives = new Set();
+    target._impliedNegatives.add(e);
     return true;
   }
 
@@ -226,20 +245,35 @@ export class PathConditionsImplementation extends PathConditions {
       };
       if (this._baseConditions !== undefined) {
         let savedBaseConditions = this._baseConditions;
+        let savedFailed = this._failedImplications;
+        let savedFailedNeg = this._failedNegativeImplications;
+        let ranRefine = false;
         try {
-          this._baseConditions = undefined;
           for (let assumedCondition of savedBaseConditions._assumedConditions) {
             if (assumedCondition.kind === "||") {
               if (++total > 4) break;
+              if (!ranRefine) {
+                this._baseConditions = undefined;
+                this._failedImplications = undefined;
+                this._failedNegativeImplications = undefined;
+                ranRefine = true;
+              }
               refine(assumedCondition);
             }
           }
         } finally {
-          this._baseConditions = savedBaseConditions;
-          this._failedImplications = undefined;
-          this._failedNegativeImplications = undefined;
+          if (ranRefine) {
+            this._baseConditions = savedBaseConditions;
+            if (this !== refinementTarget) {
+              this._failedImplications = savedFailed;
+              this._failedNegativeImplications = savedFailedNeg;
+            } else {
+              this._failedImplications = undefined;
+              this._failedNegativeImplications = undefined;
+            }
+          }
         }
-        savedBaseConditions.refineBaseConditons(realm, total, refinementTarget);
+        if (total <= 4) savedBaseConditions.refineBaseConditons(realm, total, refinementTarget);
       }
     } finally {
       refinementTarget._readonly = true;
@@ -253,7 +287,14 @@ export class PathImplementation {
     if (!condition.mightNotBeTrue()) return true; // any path implies true
     if (!condition.mightNotBeFalse()) return false; // no path condition is false
     invariant(condition instanceof AbstractValue);
-    return condition.$Realm.pathConditions.implies(condition, depth);
+    let realm = condition.$Realm;
+    let resetCounter = depth === 0 && !realm.inSimplificationPath;
+    if (resetCounter) realm.abstractValueImpliesCounter = 0;
+    try {
+      return realm.pathConditions.implies(condition, depth);
+    } finally {
+      if (resetCounter) realm.abstractValueImpliesCounter = 0;
+    }
   }
 
   // this => !val. A false value does not imply that !(this => !val).
@@ -261,7 +302,14 @@ export class PathImplementation {
     if (!condition.mightNotBeFalse()) return true; // any path implies !false
     if (!condition.mightNotBeTrue()) return false; // no path condition is false, so none can imply !true
     invariant(condition instanceof AbstractValue);
-    return condition.$Realm.pathConditions.impliesNot(condition, depth);
+    let realm = condition.$Realm;
+    let resetCounter = depth === 0 && !realm.inSimplificationPath;
+    if (resetCounter) realm.abstractValueImpliesCounter = 0;
+    try {
+      return realm.pathConditions.impliesNot(condition, depth);
+    } finally {
+      if (resetCounter) realm.abstractValueImpliesCounter = 0;
+    }
   }
 
   withCondition<T>(condition: Value, evaluate: () => T): T {
