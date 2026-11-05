@@ -95,7 +95,7 @@ export class PathConditionsImplementation extends PathConditions {
     if (depth > 10) return false;
     if (this._baseConditions !== undefined && this._baseConditions.implies(e, depth + 1)) return true;
     for (let assumedCondition of this._assumedConditions) {
-      if (assumedCondition.implies(e, depth + 1)) return this.cacheImplicationSuccess(e);
+      if (assumedCondition.implies(e, depth + 1, this)) return this.cacheImplicationSuccess(e);
     }
     if (e.kind === "||") {
       let [x, y] = e.args;
@@ -153,7 +153,7 @@ export class PathConditionsImplementation extends PathConditions {
     if (depth > 10) return false;
     if (this._baseConditions !== undefined && this._baseConditions.impliesNot(e, depth + 1)) return true;
     for (let assumedCondition of this._assumedConditions) {
-      if (assumedCondition.impliesNot(e, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
+      if (assumedCondition.impliesNot(e, depth + 1, this)) return this.cacheNegativeImplicationSuccess(e);
     }
     if (e.kind === "&&") {
       let [x, y] = e.args;
@@ -239,8 +239,12 @@ export class PathConditionsImplementation extends PathConditions {
       };
       if (this._baseConditions !== undefined) {
         let savedBaseConditions = this._baseConditions;
+        let savedImplied = this._impliedConditions;
+        let savedImpliedNegatives = this._impliedNegatives;
         try {
           this._baseConditions = undefined;
+          this._impliedConditions = undefined;
+          this._impliedNegatives = undefined;
           for (let assumedCondition of savedBaseConditions._assumedConditions) {
             if (assumedCondition.kind === "||") {
               if (++total > 4) break;
@@ -249,6 +253,8 @@ export class PathConditionsImplementation extends PathConditions {
           }
         } finally {
           this._baseConditions = savedBaseConditions;
+          this._impliedConditions = savedImplied;
+          this._impliedNegatives = savedImpliedNegatives;
         }
         savedBaseConditions.refineBaseConditons(realm, total, refinementTarget);
       }
