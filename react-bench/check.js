@@ -10,7 +10,7 @@
 const fs = require("fs");
 const path = require("path");
 const { React, ReactDOMServer } = require("./react-deps");
-const { getCheckCorpus } = require("./data");
+const { getCheckCorpus, corpusFingerprint } = require("./data");
 const {
   APP_JS_PATH,
   loadImpl,
@@ -105,6 +105,7 @@ function main() {
   const summary = {
     impl: impl.name,
     implPath: impl.implPath,
+    corpusFingerprint: corpusFingerprint(getCheckCorpus()),
     total: corpus.length,
     pass,
     fail: failures.length,
@@ -120,6 +121,7 @@ function main() {
   console.log("");
   console.log(`impl:            ${summary.impl}  (${path.relative(process.cwd(), impl.implPath)})`);
   console.log(`result:          ${pass}/${corpus.length} byte-identical` + (failures.length ? `  (${summary.mismatches} mismatches, ${summary.throws} throws)` : "  OK"));
+  console.log(`corpus:          ${getCheckCorpus().length} inputs, fingerprint ${summary.corpusFingerprint}`);
   console.log(`prepare():       ${summary.prepareMs} ms`);
   console.log(
     `generated code:  ${size.bytes} bytes (${size.gzipBytes} gzip, ${size.lines} lines) [${prepared.codeSource}]` +

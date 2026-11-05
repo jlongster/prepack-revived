@@ -3,14 +3,12 @@
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
-const {
-  React,
-  ReactDOMServer,
-  reactNodeModules,
-  reactRequire,
-  REACT_BENCH_DIR,
-} = require("./react-deps");
-const { generateRequest } = require("./data");
+const { generateRequest, getTrainingCorpus } = require("./data");
+
+// React is loaded lazily (only when an implementation touches opts.React etc.), so cold-start
+// measurements of implementations that do not need React at runtime do not pay for loading it.
+const REACT_BENCH_DIR = __dirname;
+const reactDeps = () => require("./react-deps");
 
 const APP_JS_PATH = path.join(REACT_BENCH_DIR, "app", "app.js");
 const APP_JSX_PATH = path.join(REACT_BENCH_DIR, "app", "app.jsx");
@@ -53,20 +51,27 @@ function loadImpl(spec) {
 }
 
 function makePrepareOpts(extra = {}) {
-  return Object.assign(
-    {
-      appPath: APP_JS_PATH,
-      jsxPath: APP_JSX_PATH,
-      reactBenchDir: REACT_BENCH_DIR,
-      reactNodeModules,
-      require: reactRequire,
-      React,
-      ReactDOMServer,
-      rootProp: "data",
-      generateSampleInput: generateRequest,
-    },
-    extra
-  );
+  const opts = {
+    appPath: APP_JS_PATH,
+    jsxPath: APP_JSX_PATH,
+    reactBenchDir: REACT_BENCH_DIR,
+    rootProp: "data",
+    generateSampleInput: generateRequest,
+    trainingInputs: getTrainingCorpus,
+  };
+  const lazy = {
+    reactNodeModules: () => reactDeps().reactNodeModules,
+    require: () => reactDeps().reactRequire,
+    React: () => reactDeps().React,
+    ReactDOMServer: () => reactDeps().ReactDOMServer,
+  };
+  for (const key of Object.keys(lazy)) {
+    Object.defineProperty(opts, key, { enumerable: true, configurable: true, get: lazy[key] });
+  }
+  for (const key of Object.keys(extra)) {
+    Object.defineProperty(opts, key, { enumerable: true, configurable: true, writable: true, value: extra[key] });
+  }
+  return opts;
 }
 
 function unwrapPrepared(prepared) {

@@ -654,8 +654,38 @@ function getCheckCorpus() {
   return _checkCorpus;
 }
 
+// Inputs for implementations that want to "train" (trace, profile, collect shapes) before
+// being checked. Seeds are disjoint from the check/perf corpora.
+const TRAIN_SEED_BASE = 0x54524e00; // "TRN\0"
+function getTrainingCorpus(count = 50, variant = "small") {
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    out.push(generateRequest(TRAIN_SEED_BASE + i * 31337 + (variant === "large" ? 1 : 0), variant));
+  }
+  return out;
+}
+
+// Stable fingerprint of a corpus (JSON with undefined made explicit), printed by check.js so
+// that agents on different branches can confirm they test against the same inputs.
+function corpusFingerprint(corpus) {
+  const json = JSON.stringify(corpus, (_k, v) => (v === undefined ? "__undefined__" : v));
+  return require("crypto").createHash("sha256").update(json).digest("hex").slice(0, 16);
+}
+
+if (require.main === module) {
+  // node react-bench/data.js [--dump out.json]   (JSON drops undefined-valued keys)
+  const corpus = getCheckCorpus();
+  const i = process.argv.indexOf("--dump");
+  if (i !== -1) {
+    require("fs").writeFileSync(process.argv[i + 1], JSON.stringify(corpus, null, 1) + "\n");
+  }
+  console.log(`check corpus: ${corpus.length} inputs, fingerprint ${corpusFingerprint(corpus)}`);
+}
+
 module.exports = {
   CORPUS_SIZE,
+  getTrainingCorpus,
+  corpusFingerprint,
   mulberry32,
   generateRequest,
   buildEdgeCaseInputs,
