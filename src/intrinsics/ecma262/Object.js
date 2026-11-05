@@ -572,6 +572,9 @@ export default function(realm: Realm): NativeFunctionValue {
     // If we're in pure scope and the items are completely abstract,
     // then create an abstract temporal with an array kind
     if (realm.isInPureScope() && obj instanceof AbstractObjectValue) {
+      // The abstract object might be one of several concrete objects (e.g. a conditional). They are read
+      // at this point, so their current properties must be emitted and later writes tracked.
+      Leak.value(realm, obj);
       let array = ArrayValue.createTemporalWithWidenedNumericProperty(
         realm,
         [objectKeys, obj],
@@ -603,6 +606,9 @@ export default function(realm: Realm): NativeFunctionValue {
         // If we're in pure scope and the items are completely abstract,
         // then create an abstract temporal with an array kind
         if (obj instanceof AbstractObjectValue) {
+          // The abstract object might be one of several concrete objects (e.g. a conditional). They are read
+          // at this point, so their current properties must be emitted and later writes tracked.
+          Leak.value(realm, obj);
           let array = ArrayValue.createTemporalWithWidenedNumericProperty(
             realm,
             [objectValues, obj],
@@ -635,6 +641,9 @@ export default function(realm: Realm): NativeFunctionValue {
       // If we're in pure scope and the items are completely abstract,
       // then create an abstract temporal with an array kind
       if (realm.isInPureScope() && obj instanceof AbstractObjectValue) {
+        // The abstract object might be one of several concrete objects (e.g. a conditional). They are read
+        // at this point, so their current properties must be emitted and later writes tracked.
+        Leak.value(realm, obj);
         let array = ArrayValue.createTemporalWithWidenedNumericProperty(
           realm,
           [objectEntries, obj],

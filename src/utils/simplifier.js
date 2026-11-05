@@ -258,11 +258,11 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
           return AbstractValue.createFromConditionalOp(realm, c, x, z, value.expressionLocation, isCondition, true);
       }
       if (isCondition || (x.getType() === BooleanValue && y.getType() === BooleanValue)) {
-        // c ? true : false <=> c
-        if (!x.mightNotBeTrue() && !y.mightNotBeFalse()) return c;
+        // c ? true : false <=> c (when used as a condition or c is boolean; otherwise !!c)
+        if (!x.mightNotBeTrue() && !y.mightNotBeFalse()) return isCondition ? c : makeBoolean(realm, c, loc);
         // c ? false : true <=> !c
         if (!x.mightNotBeFalse() && !y.mightNotBeTrue())
-          return AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, true);
+          return AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, isCondition);
       }
       if (c.equals(c0) && x.equals(x0) && y.equals(y0)) return value;
       return AbstractValue.createFromConditionalOp(realm, c, x, y, value.expressionLocation, isCondition, true);

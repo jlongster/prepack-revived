@@ -39,7 +39,7 @@ import {
   Get,
   HasSomeCompatibleType,
 } from "../../methods/index.js";
-import { Create, Join, Properties, To } from "../../singletons.js";
+import { Create, Join, Leak, Properties, To } from "../../singletons.js";
 import { createOperationDescriptor } from "../../utils/generator.js";
 
 export default function(realm: Realm, obj: ObjectValue): void {
@@ -168,7 +168,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
         }
         AbstractValue.createTemporalFromBuildFunction(
           realm,
-          BooleanValue,
+          Value,
           args,
           createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
         );
@@ -292,7 +292,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("every") === undefined
     ) {
       let args = [O, new StringValue(realm, "every"), callbackfn];
+      Leak.value(realm, callbackfn);
       if (thisArg) {
+        Leak.value(realm, thisArg);
         args.push(thisArg);
       }
       return AbstractValue.createTemporalFromBuildFunction(
@@ -423,8 +425,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
       // If callbackfn is a native function, it cannot be optimized, and cannot alias locations
       // other than ones accesible via global, which leaked value analysis disregards.
-      if (!(callbackfn instanceof NativeFunctionValue)) {
-        invariant(callbackfn instanceof ECMAScriptSourceFunctionValue || callbackfn instanceof BoundFunctionValue);
+      if (callbackfn instanceof ECMAScriptSourceFunctionValue || callbackfn instanceof BoundFunctionValue) {
         possibleNestedOptimizedFunctions = [
           {
             func: callbackfn,
@@ -432,6 +433,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
             kind: "filter",
           },
         ];
+      } else if (!(callbackfn instanceof NativeFunctionValue)) {
+        Leak.value(realm, callbackfn);
+        if (thisArg) Leak.value(realm, thisArg);
       }
       return ArrayValue.createTemporalWithWidenedNumericProperty(
         realm,
@@ -509,7 +513,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("find") === undefined
     ) {
       let args = [O, new StringValue(realm, "find"), predicate];
+      Leak.value(realm, predicate);
       if (thisArg) {
+        Leak.value(realm, thisArg);
         args.push(thisArg);
       }
       return AbstractValue.createTemporalFromBuildFunction(
@@ -570,7 +576,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("findIndex") === undefined
     ) {
       let args = [O, new StringValue(realm, "findIndex"), predicate];
+      Leak.value(realm, predicate);
       if (thisArg) {
+        Leak.value(realm, thisArg);
         args.push(thisArg);
       }
       return AbstractValue.createTemporalFromBuildFunction(
@@ -631,12 +639,14 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("forEach") === undefined
     ) {
       let args = [O, new StringValue(realm, "forEach"), callbackfn];
+      Leak.value(realm, callbackfn);
       if (thisArg) {
+        Leak.value(realm, thisArg);
         args.push(thisArg);
       }
       AbstractValue.createTemporalFromBuildFunction(
         realm,
-        BooleanValue,
+        UndefinedValue,
         args,
         createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
       );
@@ -1009,10 +1019,15 @@ export default function(realm: Realm, obj: ObjectValue): void {
       if (thisArg) {
         args.push(thisArg);
       }
-      invariant(callbackfn instanceof ECMAScriptSourceFunctionValue || callbackfn instanceof BoundFunctionValue);
-      let possibleNestedOptimizedFunctions = [
-        { func: callbackfn, thisValue: thisArg || realm.intrinsics.undefined, kind: "map" },
-      ];
+      let possibleNestedOptimizedFunctions;
+      if (callbackfn instanceof ECMAScriptSourceFunctionValue || callbackfn instanceof BoundFunctionValue) {
+        possibleNestedOptimizedFunctions = [
+          { func: callbackfn, thisValue: thisArg || realm.intrinsics.undefined, kind: "map" },
+        ];
+      } else if (!(callbackfn instanceof NativeFunctionValue)) {
+        Leak.value(realm, callbackfn);
+        if (thisArg) Leak.value(realm, thisArg);
+      }
       return ArrayValue.createTemporalWithWidenedNumericProperty(
         realm,
         args,
@@ -1210,7 +1225,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("reduce") === undefined
     ) {
       let args = [O, new StringValue(realm, "reduce"), callbackfn];
+      Leak.value(realm, callbackfn);
       if (initialValue) {
+        Leak.value(realm, initialValue);
         args.push(initialValue);
       }
       return AbstractValue.createTemporalFromBuildFunction(
@@ -1317,7 +1334,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("reduceRight") === undefined
     ) {
       let args = [O, new StringValue(realm, "reduceRight"), callbackfn];
+      Leak.value(realm, callbackfn);
       if (initialValue) {
+        Leak.value(realm, initialValue);
         args.push(initialValue);
       }
       return AbstractValue.createTemporalFromBuildFunction(
@@ -1675,7 +1694,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("some") === undefined
     ) {
       let args = [O, new StringValue(realm, "some"), callbackfn];
+      Leak.value(realm, callbackfn);
       if (thisArg) {
+        Leak.value(realm, thisArg);
         args.push(thisArg);
       }
       return AbstractValue.createTemporalFromBuildFunction(
@@ -1745,6 +1766,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
       O.$GetOwnProperty("sort") === undefined
     ) {
       let args = [O, new StringValue(realm, "sort"), comparefn];
+      Leak.value(realm, comparefn);
       AbstractValue.createTemporalFromBuildFunction(
         realm,
         Value,
