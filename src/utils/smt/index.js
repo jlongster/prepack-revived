@@ -211,9 +211,15 @@ export function auditRewrite(
   isCondition: boolean
 ): void {
   stats.auditChecks++;
-  let cex = findCounterexample(conditions, t =>
-    isCondition ? `(not (= ${t.truthy(from)} ${t.truthy(to)}))` : `(not (same ${t.term(from)} ${t.term(to)}))`
-  );
+  let cex = findCounterexample(conditions, t => {
+    if (isCondition) return `(not (= ${t.truthy(from)} ${t.truthy(to)}))`;
+    let a = t.term(from);
+    let b = t.term(to);
+    if (!to.mightHaveBeenDeleted()) {
+      a = `(ite ((_ is Empty) ${a}) Undef ${a})`;
+    }
+    return `(not (same ${a} ${b}))`;
+  });
   if (cex === undefined) return;
   report(realm, {
     kind: isCondition ? "rewrite (as condition)" : "rewrite",

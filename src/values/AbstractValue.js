@@ -281,11 +281,6 @@ export default class AbstractValue extends Value {
         if (c.implies(val, depth + 1)) return true;
         if (x.implies(val, depth + 1)) return true;
       }
-    } else if (this.kind === "!==") {
-      // (0 !== x) => x since undefined, null, false, 0, NaN and "" are excluded by the !== and all other values are thruthy
-      let [x, y] = this.args;
-      if (x instanceof NumberValue && x.value === 0) return y.equals(val);
-      if (y instanceof NumberValue && y.value === 0) return x.equals(val);
     } else if ((this.kind === "===" || this.kind === "==") && (val.kind === "===" || val.kind === "==")) {
       let [x, y] = this.args;
       let [vx, vy] = val.args;
@@ -295,7 +290,7 @@ export default class AbstractValue extends Value {
           if (vx instanceof NullValue || vx instanceof UndefinedValue) return y.equals(vy);
           // null/undefined === y && vx === null/undefined && y === vx => null/undefined == vx
           if (vy instanceof NullValue || vy instanceof UndefinedValue) return y.equals(vx);
-        } else {
+        } else if (this.kind === "===") {
           invariant(val.kind === "===");
           // null === y && null === vy && y === vy => null === vy
           // undefined === y && undefined === vy && y === vy => undefined === vy
@@ -311,12 +306,12 @@ export default class AbstractValue extends Value {
           if (vx instanceof NullValue || vx instanceof UndefinedValue) return x.equals(vy);
           // x === null/undefined && vx === null/undefined && x === vx => null/undefined == vx
           if (vy instanceof NullValue || vy instanceof UndefinedValue) return x.equals(vx);
-        } else {
+        } else if (this.kind === "===") {
           invariant(val.kind === "===");
           // x === null && null === vy && x === vy => null === vy
-          // x == undefined && undefined === vy && x === vy => undefined === vy
+          // x === undefined && undefined === vy && x === vy => undefined === vy
           if (y.equals(vx)) return x.equals(vy);
-          // x === null && vx === null && x === vx => null == vy
+          // x === null && vx === null && x === vx => vx === null
           // x === undefined && vx === undefined && x === vx => vx === undefined
           if (y.equals(vy)) return x.equals(vx);
         }
@@ -394,9 +389,12 @@ export default class AbstractValue extends Value {
       // x === y and y !== z => !(x === z)
       let [x1, y1] = this.args;
       let [x2, y2] = val.args;
-      if (x1.equals(x2) && y1 instanceof ConcreteValue && y2 instanceof ConcreteValue && !y1.equals(y2)) return true;
+      let sameConcrete = (a: ConcreteValue, b: ConcreteValue) =>
+        a instanceof NumberValue && b instanceof NumberValue ? a.value === b.value : a.equals(b);
+      if (x1.equals(x2) && y1 instanceof ConcreteValue && y2 instanceof ConcreteValue && !sameConcrete(y1, y2))
+        return true;
       // x === y and x !== z => !(z === y)
-      if (y1.equals(y2) && x1 instanceof ConcreteValue && x2 instanceof ConcreteValue && !x1.equals(x2)) {
+      if (y1.equals(y2) && x1 instanceof ConcreteValue && x2 instanceof ConcreteValue && !sameConcrete(x1, x2)) {
         return true;
       }
     }

@@ -19,14 +19,19 @@ import { Path, To } from "../singletons.js";
 import EmptyValue from "../values/EmptyValue.js";
 import { createOperationDescriptor } from "./generator.js";
 import { NullValue, NumberValue, ObjectValue, PrimitiveValue, UndefinedValue } from "../values/index.js";
-import { auditRewrite, smtAuditing } from "./smt/index.js";
+import { auditRewrite, smtAuditing, smtEnabled } from "./smt/index.js";
 
 export default function simplifyAndRefineAbstractValue(
   realm: Realm,
   isCondition: boolean, // The value is only used after converting it to a Boolean
   value: AbstractValue
 ): Value {
-  if (value.intrinsicName !== undefined) return value;
+  if (
+    value.intrinsicName !== undefined &&
+    (realm.pathConditions.isEmpty() || (!isCondition && value.getType() !== BooleanValue))
+  ) {
+    return value;
+  }
   let savedHandler = realm.errorHandler;
   let savedIsReadOnly = realm.isReadOnly;
   realm.isReadOnly = true;
@@ -77,6 +82,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     if (Path.implies(value, depth + 1)) return realm.intrinsics.true;
     if (Path.impliesNot(value, depth + 1)) return realm.intrinsics.false;
   }
+  if (value.intrinsicName !== undefined) return value;
   let loc = value.expressionLocation;
   let op = value.kind;
   switch (op) {
@@ -95,14 +101,27 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     case "&&": {
       let [x0, y0] = value.args;
       let x = simplify(realm, x0, isCondition, depth + 1);
-      let y = simplify(realm, y0, isCondition, depth + 1);
-      if (x instanceof AbstractValue && x.equals(y)) return x;
       // true && y <=> y
       // true || y <=> true
-      if (!x.mightNotBeTrue()) return op === "&&" ? y : x;
+      if (!x.mightNotBeTrue()) return op === "&&" ? simplify(realm, y0, isCondition, depth + 1) : x;
       // (x == false) && y <=> x
       // false || y <=> y
-      if (!x.mightNotBeFalse()) return op === "||" ? y : x;
+      if (!x.mightNotBeFalse()) return op === "||" ? simplify(realm, y0, isCondition, depth + 1) : x;
+      let y;
+      if (smtEnabled(realm) && depth <= 2 && x instanceof AbstractValue) {
+        try {
+          y =
+            op === "&&"
+              ? Path.withCondition(x, () => simplify(realm, y0, isCondition, depth + 1))
+              : Path.withInverseCondition(x, () => simplify(realm, y0, isCondition, depth + 1));
+        } catch (e) {
+          if (e instanceof InfeasiblePathError) return x;
+          throw e;
+        }
+      } else {
+        y = simplify(realm, y0, isCondition, depth + 1);
+      }
+      if (x instanceof AbstractValue && x.equals(y)) return x;
       if (isCondition || (x.getType() === BooleanValue && y.getType() === BooleanValue)) {
         // (x: boolean) && true <=> x
         // x || true <=> true
@@ -110,6 +129,19 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         // (x: boolean) && false <=> false
         // (x: boolean) || false <=> x
         if (!y.mightNotBeFalse()) return op === "||" ? x : realm.intrinsics.false;
+        if (smtEnabled(realm) && depth <= 2 && x instanceof AbstractValue && y instanceof AbstractValue) {
+          try {
+            x =
+              op === "&&"
+                ? Path.withCondition(y, () => simplify(realm, x, isCondition, depth + 1))
+                : Path.withInverseCondition(y, () => simplify(realm, x, isCondition, depth + 1));
+          } catch (e) {
+            if (e instanceof InfeasiblePathError) return op === "&&" ? realm.intrinsics.false : x;
+            throw e;
+          }
+          if (!x.mightNotBeTrue()) return op === "&&" ? y : realm.intrinsics.true;
+          if (!x.mightNotBeFalse()) return op === "||" ? y : realm.intrinsics.false;
+        }
       }
       if (op === "||") {
         if (y instanceof AbstractValue && y.kind === "||") {
@@ -172,7 +204,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
               return AbstractValue.createFromBuildFunction(
                 realm,
                 BooleanValue,
-                [xa],
+                [z],
                 createOperationDescriptor("CANNOT_BECOME_OBJECT"),
                 { kind: "global.__cannotBecomeObject(A)" }
               );
@@ -264,11 +296,13 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
           return AbstractValue.createFromConditionalOp(realm, c, x, z, value.expressionLocation, isCondition, true);
       }
       if (isCondition || (x.getType() === BooleanValue && y.getType() === BooleanValue)) {
-        // c ? true : false <=> c
-        if (!x.mightNotBeTrue() && !y.mightNotBeFalse()) return c;
+        // c ? true : false <=> c (when used as a condition or when c is already boolean; otherwise !!c)
+        if (!x.mightNotBeTrue() && !y.mightNotBeFalse()) {
+          return isCondition || c.getType() === BooleanValue ? c : makeBoolean(realm, c, loc);
+        }
         // c ? false : true <=> !c
         if (!x.mightNotBeFalse() && !y.mightNotBeTrue())
-          return AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, true);
+          return AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, isCondition);
       }
       if (c.equals(c0) && x.equals(x0) && y.equals(y0)) return value;
       return AbstractValue.createFromConditionalOp(realm, c, x, y, value.expressionLocation, isCondition, true);
@@ -447,7 +481,7 @@ function simplifyEquality(realm: Realm, equality: AbstractValue, depth: number):
   let loc = equality.expressionLocation;
   let op = equality.kind;
   let [x, y] = equality.args;
-  if (y instanceof EmptyValue) return equality;
+  if (x instanceof EmptyValue || y instanceof EmptyValue) return equality;
   if (x instanceof ConcreteValue) [x, y] = [y, x];
   if (op === "===" || op === "==" || op === "!==" || op === "==") {
     if (!x.mightNotBeNull()) {
@@ -470,26 +504,33 @@ function simplifyEquality(realm: Realm, equality: AbstractValue, depth: number):
   if (op === "===") {
     let xType = x.getType();
     let yType = y.getType();
-    if (xType !== yType) {
-      if (xType === Value || xType === PrimitiveValue || yType === Value || yType === PrimitiveValue) return equality;
-      if (
-        (Value.isTypeCompatibleWith(xType, NumberValue) && Value.isTypeCompatibleWith(yType, NumberValue)) ||
-        (Value.isTypeCompatibleWith(xType, ObjectValue) && Value.isTypeCompatibleWith(yType, ObjectValue))
-      )
-        return equality;
+    if (
+      xType !== yType &&
+      xType !== Value &&
+      xType !== PrimitiveValue &&
+      yType !== Value &&
+      yType !== PrimitiveValue &&
+      !(Value.isTypeCompatibleWith(xType, NumberValue) && Value.isTypeCompatibleWith(yType, NumberValue)) &&
+      !(Value.isTypeCompatibleWith(xType, ObjectValue) && Value.isTypeCompatibleWith(yType, ObjectValue))
+    ) {
       return realm.intrinsics.false;
-    } else if (x instanceof AbstractValue && x.kind === "conditional") {
+    }
+    if (x instanceof AbstractValue && x.kind === "conditional") {
       let [cond, xx, xy] = x.args;
-      // ((cond ? xx : xy) === y) && xx === y && xy !== y <=> cond
-      if (xx.equals(y) && !xy.equals(y)) return cond;
-      // ((!cond ? xx : xy) === y) && xx !== y && xy === y <=> !cond
-      if (!xx.equals(y) && xy.equals(y)) return negate(realm, cond, depth + 1, loc);
+      // ((cond ? xx : xy) === y) && xx === y && xy !== y <=> Boolean(cond)
+      if (strictlyAlwaysEqual(realm, xx, y, depth) && strictlyAlwaysNotEqual(realm, xy, y, depth))
+        return makeBoolean(realm, cond, loc);
+      // ((cond ? xx : xy) === y) && xx !== y && xy === y <=> !cond
+      if (strictlyAlwaysNotEqual(realm, xx, y, depth) && strictlyAlwaysEqual(realm, xy, y, depth))
+        return negate(realm, cond, depth + 1, loc);
     } else if (y instanceof AbstractValue && y.kind === "conditional") {
       let [cond, yx, yy] = y.args;
-      // (x === (cond ? yx : yy) === y) && x === yx && x !== yy <=> cond
-      if (yx.equals(x) && !yy.equals(x)) return cond;
-      // (x === (!cond ? yx : yy) === y) && x !== yx && x === yy <=> !cond
-      if (!x.equals(yx) && x.equals(yy)) return negate(realm, cond, depth + 1, loc);
+      // (x === (cond ? yx : yy)) && x === yx && x !== yy <=> Boolean(cond)
+      if (strictlyAlwaysEqual(realm, yx, x, depth) && strictlyAlwaysNotEqual(realm, yy, x, depth))
+        return makeBoolean(realm, cond, loc);
+      // (x === (cond ? yx : yy)) && x !== yx && x === yy <=> !cond
+      if (strictlyAlwaysNotEqual(realm, x, yx, depth) && strictlyAlwaysEqual(realm, x, yy, depth))
+        return negate(realm, cond, depth + 1, loc);
     }
   } else if (op === "==") {
     let xType = x.getType();
@@ -534,7 +575,7 @@ function negate(
   invariant(value instanceof AbstractValue);
   if (value.kind === "!") {
     let [x] = value.args;
-    if (isCondition || x.getType() === BooleanValue) return simplify(realm, x, true, depth + 1);
+    if (isCondition || x.getType() === BooleanValue) return simplify(realm, x, !!isCondition, depth + 1);
     if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
     return makeBoolean(realm, x, loc);
   }
@@ -586,18 +627,64 @@ function negate(
         break;
     }
     if (invertedLogicalOp !== undefined) {
-      let left = negate(realm, value.args[0], depth + 1);
-      let right = negate(realm, value.args[1], depth + 1);
+      let left = negate(realm, value.args[0], depth + 1, undefined, undefined, isCondition);
+      let right = negate(realm, value.args[1], depth + 1, undefined, undefined, isCondition);
       return AbstractValue.createFromLogicalOp(
         realm,
         invertedLogicalOp,
         left,
         right,
         loc || value.expressionLocation,
-        true
+        isCondition
       );
     }
   }
   if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
-  return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, true);
+  return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, isCondition);
+}
+
+function cannotBeNaN(v: Value): boolean {
+  if (!v.mightBeNumber()) return true;
+  if (v instanceof NumberValue) return !Number.isNaN(v.value);
+  if (v instanceof AbstractValue && !v.values.isTop()) {
+    for (let e of v.values.getElements()) {
+      if (e instanceof NumberValue && Number.isNaN(e.value)) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+function strictlyAlwaysEqual(realm: Realm, u: Value, v: Value, depth: number): boolean {
+  if (u instanceof ConcreteValue && v instanceof ConcreteValue) {
+    return u instanceof NumberValue && v instanceof NumberValue ? u.value === v.value : u.equals(v);
+  }
+  if (u.equals(v)) {
+    if (cannotBeNaN(v)) return true;
+    let selfEq = AbstractValue.createFromBinaryOp(realm, "===", v, v, undefined, undefined, true, true);
+    return Path.implies(selfEq, depth + 1);
+  }
+  let eq = AbstractValue.createFromBinaryOp(realm, "===", u, v, undefined, undefined, true, true);
+  return Path.implies(eq, depth + 1);
+}
+
+function strictlyAlwaysNotEqual(realm: Realm, u: Value, v: Value, depth: number): boolean {
+  if (u instanceof ConcreteValue && v instanceof ConcreteValue) {
+    return !(u instanceof NumberValue && v instanceof NumberValue ? u.value === v.value : u.equals(v));
+  }
+  let uType = u.getType();
+  let vType = v.getType();
+  if (
+    uType !== vType &&
+    uType !== Value &&
+    uType !== PrimitiveValue &&
+    vType !== Value &&
+    vType !== PrimitiveValue &&
+    !(Value.isTypeCompatibleWith(uType, NumberValue) && Value.isTypeCompatibleWith(vType, NumberValue)) &&
+    !(Value.isTypeCompatibleWith(uType, ObjectValue) && Value.isTypeCompatibleWith(vType, ObjectValue))
+  ) {
+    return true;
+  }
+  let neq = AbstractValue.createFromBinaryOp(realm, "!==", u, v, undefined, undefined, true, true);
+  return Path.implies(neq, depth + 1);
 }

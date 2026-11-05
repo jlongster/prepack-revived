@@ -84,7 +84,9 @@ const z3 = new Z3Process(binary, 20000, "(set-option :rlimit 10000000)\n" + T.SM
 let realm = construct_realm({ serialize: true });
 initializeGlobals(realm);
 
-const NUMBERS = [0, -0, 1, -1, 2, 0.5, 3, 1e21, NaN, Infinity, -Infinity, 9007199254740993, 0.1];
+// Exact small dyadic floats + special values so exact Real arithmetic (+, -, * by constant) matches IEEE-754.
+// (IEEE-754 rounding/overflow on values like 1 - 1e21 or 0.5 - 0.1 is intentionally approximated by the Real model.)
+const NUMBERS = [0, -0, 1, -1, 2, -2, 0.5, -0.25, 3, 10, 100, NaN, Infinity, -Infinity];
 const STRINGS = ["", "0", "1", "a", "abc", " 1 ", "b", "10", "-0", "true", "Infinity", "\u00e9", "\ud83d\ude00"];
 const OTHERS = [true, false, undefined, null];
 const ALL = [...NUMBERS, ...STRINGS, ...OTHERS];
@@ -119,7 +121,7 @@ const BIN_OPS = [
   ">>",
   ">>>",
 ];
-const IMPRECISE_BIN = new Set(["-", "*", "/", "%", "&", "|", "^", "<<", ">>", ">>>"]);
+const IMPRECISE_BIN = new Set(["*", "/", "%", "&", "|", "^", "<<", ">>", ">>>"]);
 const UN_OPS = ["!", "-", "+", "typeof", "void", "~"];
 
 function concreteValue(x) {

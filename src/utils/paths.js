@@ -13,7 +13,7 @@ import { InfeasiblePathError } from "../errors.js";
 import invariant from "../invariant.js";
 import { Realm } from "../realm.js";
 import { PathConditions } from "../types.js";
-import { AbstractValue, ConcreteValue, NullValue, UndefinedValue, Value } from "../values/index.js";
+import { AbstractValue, ConcreteValue, NullValue, NumberValue, UndefinedValue, Value } from "../values/index.js";
 import {
   auditDerivedCondition,
   auditImplication,
@@ -307,8 +307,7 @@ export class PathImplementation {
   withCondition<T>(condition: Value, evaluate: () => T): T {
     let realm = condition.$Realm;
     if (!condition.mightNotBeFalse()) {
-      if (realm.impliesCounterOverflowed) throw new InfeasiblePathError();
-      invariant(false, "assuming that false equals true is asking for trouble");
+      throw new InfeasiblePathError();
     }
     let savedPath = realm.pathConditions;
     realm.pathConditions = new PathConditionsImplementation(savedPath);
@@ -334,8 +333,7 @@ export class PathImplementation {
   withInverseCondition<T>(condition: Value, evaluate: () => T): T {
     let realm = condition.$Realm;
     if (!condition.mightNotBeTrue()) {
-      if (realm.impliesCounterOverflowed) throw new InfeasiblePathError();
-      invariant(false, "assuming that false equals true is asking for trouble");
+      throw new InfeasiblePathError();
     }
     let savedPath = realm.pathConditions;
     realm.pathConditions = new PathConditionsImplementation(savedPath);
@@ -407,8 +405,7 @@ function pushPathCondition(condition: Value): void {
   let realm = condition.$Realm;
   if (realm.pathConditions.isReadOnly()) realm.pathConditions = new PathConditionsImplementation(realm.pathConditions);
   if (!condition.mightNotBeFalse()) {
-    if (realm.impliesCounterOverflowed) throw new InfeasiblePathError();
-    invariant(false, "assuming that false equals true is asking for trouble");
+    throw new InfeasiblePathError();
   }
   if (condition instanceof ConcreteValue) return;
   if (!condition.mightNotBeTrue()) return;
@@ -421,13 +418,13 @@ function pushPathCondition(condition: Value): void {
     pushPathCondition(right);
   } else if (condition.kind === "===") {
     let [left, right] = condition.args;
-    if (right instanceof AbstractValue && right.kind === "conditional") [left, right] === [right, left];
+    if (right instanceof AbstractValue && right.kind === "conditional") [left, right] = [right, left];
     if (left instanceof AbstractValue && left.kind === "conditional") {
       let [cond, x, y] = left.args;
       if (right instanceof ConcreteValue && x instanceof ConcreteValue && y instanceof ConcreteValue) {
-        if (right.equals(x) && !right.equals(y)) {
+        if (concreteStrictEqual(right, x) && !concreteStrictEqual(right, y)) {
           pushPathCondition(cond);
-        } else if (!right.equals(x) && right.equals(y)) {
+        } else if (!concreteStrictEqual(right, x) && concreteStrictEqual(right, y)) {
           pushInversePathCondition(cond);
         }
       }
@@ -439,24 +436,7 @@ function pushPathCondition(condition: Value): void {
       let right = condition.args[1];
       if (left instanceof ConcreteValue && right instanceof AbstractValue) [left, right] = [right, left];
       if (left instanceof AbstractValue && (right instanceof UndefinedValue || right instanceof NullValue)) {
-        if (condition.kind === "!=") {
-          // x != null => x!==null && x!==undefined
-          pushPathCondition(left);
-          let leftNeNull = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.null);
-          let leftNeUndefined = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.undefined);
-          pushPathCondition(leftNeNull);
-          pushPathCondition(leftNeUndefined);
-        } else if (condition.kind === "==") {
-          // x == null => x===null || x===undefined
-          pushInversePathCondition(left);
-          let leftEqNull = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.null);
-          let leftEqUndefined = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.undefined);
-          let c;
-          if (!leftEqNull.mightNotBeFalse()) c = leftEqUndefined;
-          else if (!leftEqUndefined.mightNotBeFalse()) c = leftEqNull;
-          else c = AbstractValue.createFromLogicalOp(realm, "||", leftEqNull, leftEqUndefined);
-          pushPathCondition(c);
-        }
+        pushNullishCheck(realm, left, condition.kind === "==");
         return;
       }
     }
@@ -469,8 +449,7 @@ function pushInversePathCondition(condition: Value): void {
   let realm = condition.$Realm;
   if (realm.pathConditions.isReadOnly()) realm.pathConditions = new PathConditionsImplementation(realm.pathConditions);
   if (!condition.mightNotBeTrue()) {
-    if (realm.impliesCounterOverflowed) throw new InfeasiblePathError();
-    invariant(false, "assuming that false equals true is asking for trouble");
+    throw new InfeasiblePathError();
   }
   if (condition instanceof ConcreteValue) return;
   invariant(condition instanceof AbstractValue);
@@ -487,13 +466,7 @@ function pushInversePathCondition(condition: Value): void {
       let right = condition.args[1];
       if (left instanceof ConcreteValue && right instanceof AbstractValue) [left, right] = [right, left];
       if (left instanceof AbstractValue && (right instanceof UndefinedValue || right instanceof NullValue)) {
-        let op = condition.kind === "!=" ? "===" : "!==";
-        if (op === "!==") pushPathCondition(left);
-        else pushInversePathCondition(left);
-        let leftEqNull = AbstractValue.createFromBinaryOp(realm, op, left, realm.intrinsics.null);
-        if (leftEqNull.mightNotBeFalse()) pushPathCondition(leftEqNull);
-        let leftEqUndefined = AbstractValue.createFromBinaryOp(realm, op, left, realm.intrinsics.undefined);
-        if (leftEqUndefined.mightNotBeFalse()) pushPathCondition(leftEqUndefined);
+        pushNullishCheck(realm, left, condition.kind === "!=");
         return;
       }
     }
@@ -503,5 +476,41 @@ function pushInversePathCondition(condition: Value): void {
       let simplifiedInverseCondition = realm.simplifyAndRefineAbstractCondition(inverseCondition);
       if (!simplifiedInverseCondition.equals(inverseCondition)) pushPathCondition(simplifiedInverseCondition);
     }
+  }
+}
+
+function concreteStrictEqual(a: ConcreteValue, b: ConcreteValue): boolean {
+  return a instanceof NumberValue && b instanceof NumberValue ? a.value === b.value : a.equals(b);
+}
+
+// True only when `null` and `undefined` are the sole falsy runtime values `v` can take (so `v != null` implies `!!v`).
+function onlyNullOrUndefinedCanBeFalsy(v: AbstractValue): boolean {
+  if (!v.mightBeFalse()) return true;
+  if (v.kind === "abstractConcreteUnion" && v.args.length > 1) {
+    return (
+      !v.args[0].mightBeFalse() && v.args.slice(1).every(c => c instanceof NullValue || c instanceof UndefinedValue)
+    );
+  }
+  return false;
+}
+
+function pushNullishCheck(realm: Realm, left: AbstractValue, isNullish: boolean): void {
+  if (isNullish) {
+    // left == null => !left && (left === null || left === undefined)
+    pushInversePathCondition(left);
+    let leftEqNull = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.null);
+    let leftEqUndefined = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.undefined);
+    let c;
+    if (!leftEqNull.mightNotBeFalse()) c = leftEqUndefined;
+    else if (!leftEqUndefined.mightNotBeFalse()) c = leftEqNull;
+    else c = AbstractValue.createFromLogicalOp(realm, "||", leftEqNull, leftEqUndefined);
+    pushPathCondition(c);
+  } else {
+    // left != null => left !== null && left !== undefined (and left is truthy only when no other falsy value is possible)
+    if (onlyNullOrUndefinedCanBeFalsy(left)) pushPathCondition(left);
+    let leftNeNull = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.null);
+    let leftNeUndefined = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.undefined);
+    pushPathCondition(leftNeNull);
+    pushPathCondition(leftNeUndefined);
   }
 }
