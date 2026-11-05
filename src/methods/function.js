@@ -39,6 +39,7 @@ import {
 import { OrdinaryCallEvaluateBody, OrdinaryCallBindThis, PrepareForOrdinaryCall, Call } from "./call.js";
 import { tryResidualizeRecursiveCall, withActivation } from "./recursion.js";
 import { evaluateCallWithRecomputeTracking } from "./recompute.js";
+import { tryAvoidInliningExplosion } from "./inlining.js";
 import { SameValue } from "../methods/abstract.js";
 import { Construct } from "../methods/construct.js";
 import { UpdateEmpty } from "../methods/index.js";
@@ -101,6 +102,9 @@ function InternalCall(
     // Recursion driven by abstract values becomes a residual call instead of being unrolled.
     let residualCall = tryResidualizeRecursiveCall(realm, F, thisArgument, argsList);
     if (residualCall !== undefined) return residualCall;
+
+    let uninlinedCall = tryAvoidInliningExplosion(realm, F, thisArgument, argsList);
+    if (uninlinedCall !== undefined) return uninlinedCall;
 
     return evaluateCallWithRecomputeTracking(realm, F, thisArgument, argsList, () => {
       // 3. Let callerContext be the running execution context.

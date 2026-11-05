@@ -1,0 +1,206 @@
+/**
+ * Copyright (c) 2017-present, Facebook, Inc.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree. An additional grant
+ * of patent rights can be found in the PATENTS file in the same directory.
+ */
+
+/* @flow strict-local */
+
+import type { Realm } from "../realm.js";
+import type { CompilerDiagnostic, ErrorHandlerResult } from "../errors.js";
+import { FatalError } from "../errors.js";
+import { PropertyDescriptor } from "../descriptors.js";
+import { AbstractValue, ECMAScriptSourceFunctionValue, FunctionValue, Value } from "../values/index.js";
+import { Generator, TemporalOperationEntry } from "../utils/generator.js";
+import { isInsidePureProbe, tryEmitPureResidualCall } from "./recursion.js";
+import traverseFast from "../utils/traverse-fast.js";
+import invariant from "../invariant.js";
+import type { BabelNode } from "@babel/types";
+
+let staticCallCountsCache: WeakMap<BabelNode, Map<string, number>> = new WeakMap();
+let dynamicCallCounts: WeakMap<
+  Realm,
+  { optRoot: void | FunctionValue, counts: Map<ECMAScriptSourceFunctionValue, number> }
+> = new WeakMap();
+let speculativeInlineSet: WeakSet<ECMAScriptSourceFunctionValue> = new WeakSet();
+
+function getStaticCallCounts(code: BabelNode): Map<string, number> {
+  let cached = staticCallCountsCache.get(code);
+  if (cached !== undefined) return cached;
+  let counts: Map<string, number> = new Map();
+  traverseFast(code, (node: any) => {
+    if (node.type === "CallExpression" && node.callee && node.callee.type === "Identifier") {
+      let name = node.callee.name;
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return false;
+  });
+  staticCallCountsCache.set(code, counts);
+  return counts;
+}
+
+export function isRetainedOnGlobalObject(realm: Realm, fn: FunctionValue): boolean {
+  if (fn.__originalName !== undefined) {
+    let pb = realm.$GlobalObject.properties.get(fn.__originalName);
+    let desc = pb && pb.descriptor;
+    if (desc instanceof PropertyDescriptor && desc.value === fn) return true;
+  }
+  for (let pb of realm.$GlobalObject.properties.values()) {
+    let desc = pb && pb.descriptor;
+    if (desc instanceof PropertyDescriptor && desc.value === fn) return true;
+  }
+  return false;
+}
+
+function generatorContainsResidualLoop(gen: Generator): boolean {
+  for (let entry of gen._entries) {
+    if (entry instanceof TemporalOperationEntry) {
+      if (entry.operationDescriptor.type === "FOR_STATEMENT_FUNC") return true;
+      let deps = entry.getDependencies();
+      if (deps !== undefined) {
+        for (let dep of deps) {
+          if (generatorContainsResidualLoop(dep)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function countGeneratorOperations(gen: Generator): number {
+  let total = 0;
+  for (let entry of gen._entries) {
+    total++;
+    if (entry instanceof TemporalOperationEntry) {
+      let deps = entry.getDependencies();
+      if (deps !== undefined) {
+        for (let dep of deps) total += countGeneratorOperations(dep);
+      }
+    }
+  }
+  return total;
+}
+
+export function tryAvoidInliningExplosion(
+  realm: Realm,
+  F: FunctionValue,
+  thisArgument: Value,
+  argsList: Array<Value>
+): void | Value {
+  if (
+    !realm.useAbstractInterpretation ||
+    !realm.isInPureScope() ||
+    realm.instantRender.enabled ||
+    realm.react.enabled ||
+    isInsidePureProbe(realm) ||
+    !(F instanceof ECMAScriptSourceFunctionValue) ||
+    F.$FunctionKind !== "normal" ||
+    speculativeInlineSet.has(F)
+  ) {
+    return undefined;
+  }
+
+  let optRoot = realm.currentOptimizedFunction;
+  if (F === optRoot || realm.getRunningContext().function === undefined) {
+    return undefined;
+  }
+
+  let hasAbstractArg = argsList.some(arg => arg instanceof AbstractValue);
+  if (!hasAbstractArg) return undefined;
+
+  let code = F.$ECMAScriptCode;
+  if (!code || !code.start || !code.end) return undefined;
+  let bodyBytes = code.end - code.start;
+  if (bodyBytes < 100) return undefined;
+
+  // Track dynamic call count of F within the current optimized root evaluation.
+  let tracker = dynamicCallCounts.get(realm);
+  if (tracker === undefined || tracker.optRoot !== optRoot) {
+    tracker = { optRoot, counts: new Map() };
+    dynamicCallCounts.set(realm, tracker);
+  }
+  let dynCount = (tracker.counts.get(F) || 0) + 1;
+  tracker.counts.set(F, dynCount);
+
+  // Heuristic 1 (#2140): Repeated calls to a branching helper with abstract arguments.
+  let staticCalls = 0;
+  if (
+    optRoot instanceof ECMAScriptSourceFunctionValue &&
+    optRoot.$ECMAScriptCode &&
+    F.__originalName !== undefined
+  ) {
+    staticCalls = getStaticCallCounts(optRoot.$ECMAScriptCode).get(F.__originalName) || 0;
+  }
+  if ((staticCalls >= 4 && staticCalls * bodyBytes >= 750) || (dynCount >= 3 && dynCount * bodyBytes >= 750)) {
+    let residual = tryEmitPureResidualCall(realm, F, thisArgument, argsList);
+    if (residual !== undefined) return residual;
+  }
+
+  // Heuristic 2 (#1959): Large helper already retained on global object, called with all-abstract
+  // arguments, whose specialization still emits a residual loop and substantial branching prelude.
+  if (
+    bodyBytes >= 240 &&
+    argsList.length > 0 &&
+    argsList.every(arg => arg instanceof AbstractValue) &&
+    isRetainedOnGlobalObject(realm, F)
+  ) {
+    let call = F.$Call;
+    invariant(call !== undefined);
+    let savedErrorHandler = realm.errorHandler;
+    let bufferedDiagnostics: Array<[CompilerDiagnostic, boolean]> = [];
+    realm.errorHandler = (diagnostic, suppress): ErrorHandlerResult => {
+      bufferedDiagnostics.push([diagnostic, suppress]);
+      if (diagnostic.severity === "Information" || diagnostic.severity === "Warning") return "Recover";
+      return "Fail";
+    };
+    speculativeInlineSet.add(F);
+    let effects;
+    try {
+      effects = realm.evaluateForEffects(
+        () => call(thisArgument, argsList),
+        undefined,
+        "speculative inlining cost check"
+      );
+    } catch (e) {
+      speculativeInlineSet.delete(F);
+      realm.errorHandler = savedErrorHandler;
+      if (e instanceof FatalError) {
+        let savedSuppress = realm.suppressDiagnostics;
+        try {
+          for (let [d, sup] of bufferedDiagnostics) {
+            realm.suppressDiagnostics = sup;
+            realm.handleError(d);
+          }
+        } finally {
+          realm.suppressDiagnostics = savedSuppress;
+        }
+      }
+      throw e;
+    } finally {
+      speculativeInlineSet.delete(F);
+      realm.errorHandler = savedErrorHandler;
+    }
+
+    if (generatorContainsResidualLoop(effects.generator) && countGeneratorOperations(effects.generator) >= 3) {
+      let residual = tryEmitPureResidualCall(realm, F, thisArgument, argsList);
+      if (residual !== undefined) return residual;
+    }
+
+    let savedSuppress = realm.suppressDiagnostics;
+    try {
+      for (let [d, sup] of bufferedDiagnostics) {
+        realm.suppressDiagnostics = sup;
+        if (realm.handleError(d) === "Fail") throw new FatalError();
+      }
+    } finally {
+      realm.suppressDiagnostics = savedSuppress;
+    }
+    realm.applyEffects(effects);
+    return realm.returnOrThrowCompletion(effects.result);
+  }
+
+  return undefined;
+}

@@ -2071,6 +2071,11 @@ export class ResidualHeapSerializer {
     );
     let serializedProto = this.serializeValue(classConstructor ? classConstructor : proto);
     if (val.temporalAlias === undefined) {
+      if (!this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) && !this.realm.isCompatibleWith("mobile")) {
+        return t.callExpression(this.preludeGenerator.memoizeReference("Object.create"), [
+          classConstructor ? t.memberExpression(serializedProto, t.identifier("prototype")) : serializedProto,
+        ]);
+      }
       this.needsAuxiliaryConstructor = true;
       return t.sequenceExpression([
         t.assignmentExpression(
