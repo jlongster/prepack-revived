@@ -896,7 +896,7 @@ export class Generator {
   }
 
   emitConditionalThrow(value: Value): void {
-    if (value instanceof EmptyValue) return;
+    if (value instanceof EmptyValue || value === this.realm.intrinsics.__bottomValue) return;
     this._issueThrowCompilerDiagnostic(value);
     let args = [];
     function collectArgs(val: Value): void {

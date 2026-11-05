@@ -17,6 +17,7 @@ import {
   ArrayValue,
   BooleanValue,
   ConcreteValue,
+  EmptyValue,
   NullValue,
   NumberValue,
   ObjectValue,
@@ -606,22 +607,24 @@ export class PropertiesImplementation {
     realm.recordModifiedProperty(prop);
     let desc = prop.descriptor;
     if (desc === undefined) {
-      let newVal = V;
-      if (!(V instanceof UndefinedValue) && !isWidenedValue(P)) {
-        // join V with sentinel, using a property name test as the condition
-        let cond = createTemplate(P);
-        let sentinel = AbstractValue.createFromType(realm, Value, "template for prototype member expression", [
-          Receiver,
-          P,
-        ]);
-        newVal = AbstractValue.createFromConditionalOp(realm, cond, V, sentinel);
+      if (!(V instanceof EmptyValue)) {
+        let newVal = V;
+        if (!isWidenedValue(P)) {
+          // join V with sentinel, using a property name test as the condition
+          let cond = createTemplate(P);
+          let sentinel = AbstractValue.createFromType(realm, Value, "template for prototype member expression", [
+            Receiver,
+            P,
+          ]);
+          newVal = AbstractValue.createFromConditionalOp(realm, cond, V, sentinel);
+        }
+        prop.descriptor = new PropertyDescriptor({
+          writable: true,
+          enumerable: true,
+          configurable: true,
+          value: newVal,
+        });
       }
-      prop.descriptor = new PropertyDescriptor({
-        writable: true,
-        enumerable: true,
-        configurable: true,
-        value: newVal,
-      });
     } else {
       invariant(
         desc instanceof PropertyDescriptor,
@@ -631,7 +634,7 @@ export class PropertiesImplementation {
       let oldVal = desc.value;
       invariant(oldVal);
       let newVal = oldVal;
-      if (!(V instanceof UndefinedValue)) {
+      if (!(V instanceof EmptyValue)) {
         if (isWidenedValue(P)) {
           newVal = V; // It will be widened later on
         } else {
@@ -1496,8 +1499,7 @@ export class PropertiesImplementation {
         realm,
         Value,
         [O._templateFor || O, propName],
-        createOperationDescriptor("ABSTRACT_PROPERTY"),
-        { isPure: true }
+        createOperationDescriptor("ABSTRACT_PROPERTY")
       );
       // TODO: We can't be sure what the descriptor will be, but the value will be abstract.
       return new PropertyDescriptor({ configurable: true, enumerable: true, value: absVal, writable: true });

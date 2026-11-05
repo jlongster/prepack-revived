@@ -44,7 +44,7 @@ import type { BabelNodeTemplateLiteral } from "@babel/types";
 import { createOperationDescriptor } from "../utils/generator.js";
 import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js";
 import { IsArrayIndex } from "./is.js";
-import { IntervalDomain } from "../domains/index.js";
+import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
 import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
 
 // ECMA262 7.3.22
@@ -402,12 +402,33 @@ export function OrdinaryGetPartial(
       // this name on other parts of the prototype chain.
       // TODO #1675: A fix to 1675 needs to take this into account.
       Leak.value(realm, Receiver);
-      return AbstractValue.createTemporalFromBuildFunction(
-        realm,
-        Value,
-        [Receiver, P],
-        createOperationDescriptor("OBJECT_GET_PARTIAL"),
-        { skipInvariant: true, isPure: true }
+      let isPureWrapperGet =
+        !O.mightBeLeakedObject() &&
+        Receiver instanceof Value &&
+        !Receiver.mightBeObject() &&
+        !Receiver.mightBeNull() &&
+        !Receiver.mightBeUndefined() &&
+        !P.mightBeObject();
+      if (isPureWrapperGet) {
+        return AbstractValue.createTemporalFromBuildFunction(
+          realm,
+          Value,
+          [Receiver, P],
+          createOperationDescriptor("OBJECT_GET_PARTIAL"),
+          { skipInvariant: true, isPure: true }
+        );
+      }
+      return realm.evaluateWithPossibleThrowCompletion(
+        () =>
+          AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            Value,
+            [Receiver, P],
+            createOperationDescriptor("OBJECT_GET_PARTIAL"),
+            { skipInvariant: true }
+          ),
+        TypesDomain.topVal,
+        ValuesDomain.topVal
       );
     } else {
       let error = new CompilerDiagnostic(

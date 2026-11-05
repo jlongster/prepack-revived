@@ -9,7 +9,6 @@
 
 /* @flow strict-local */
 
-import { SimpleNormalCompletion } from "../completions.js";
 import type { Realm } from "../realm.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import type { LexicalEnvironment } from "../environment.js";
@@ -311,7 +310,7 @@ export function computeBinary(
 
     if (isPure && effects) {
       realm.applyEffects(effects);
-      if (effects.result instanceof SimpleNormalCompletion) return effects.result.value;
+      return realm.returnOrThrowCompletion(effects.result);
     }
 
     // If this ended up reporting an error, it might not be pure, so we'll leave it in
@@ -323,18 +322,38 @@ export function computeBinary(
       // The "in" operator have side-effects on its right val other than throw.
       Leak.value(realm, rval, loc);
     }
+    let fallbackType = resultType || getBinaryFallbackResultType(op, lval, rval);
     return realm.evaluateWithPossibleThrowCompletion(
       () =>
         AbstractValue.createTemporalFromBuildFunction(
           realm,
-          resultType,
+          fallbackType,
           [lval, rval],
-          createOperationDescriptor("BINARY_EXPRESSION", { binaryOperator: op }),
-          { isPure: true }
+          createOperationDescriptor("BINARY_EXPRESSION", { binaryOperator: op })
         ),
       TypesDomain.topVal,
       ValuesDomain.topVal
     );
   }
   return compute();
+}
+
+function getBinaryFallbackResultType(op: BabelBinaryOperator, lval: Value, rval: Value): typeof Value {
+  switch (op) {
+    case "===":
+    case "!==":
+    case "==":
+    case "!=":
+    case "<":
+    case "<=":
+    case ">":
+    case ">=":
+    case "in":
+    case "instanceof":
+      return BooleanValue;
+    case "+":
+      return lval.getType() === StringValue || rval.getType() === StringValue ? StringValue : Value;
+    default:
+      return NumberValue;
+  }
 }
