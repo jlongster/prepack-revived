@@ -206,12 +206,8 @@ function createArrayWithWidenedNumericProperty(
 ): ArrayValue {
   let abstractArrayValue = new ArrayValue(realm, intrinsicName);
 
-  if (
-    realm.arrayNestedOptimizedFunctionsEnabled &&
-    (!realm.react.enabled || realm.react.optimizeNestedFunctions) &&
-    possibleNestedOptimizedFunctions !== undefined
-  ) {
-    if (possibleNestedOptimizedFunctions.length > 0) {
+  if (possibleNestedOptimizedFunctions !== undefined && possibleNestedOptimizedFunctions.length > 0) {
+    if (realm.arrayNestedOptimizedFunctionsEnabled && (!realm.react.enabled || realm.react.optimizeNestedFunctions)) {
       evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
         realm,
         abstractArrayValue,
@@ -221,8 +217,9 @@ function createArrayWithWidenedNumericProperty(
       // If nested optimized functions are disabled, we need to fallback to
       // the default behaviour and leaked the nested functions so any bindings
       // within the function properly leak and materialize.
-      for (let { func } of possibleNestedOptimizedFunctions) {
+      for (let { func, thisValue } of possibleNestedOptimizedFunctions) {
         Leak.value(realm, func);
+        Leak.value(realm, thisValue);
       }
     }
   }
