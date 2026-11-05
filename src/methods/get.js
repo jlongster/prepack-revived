@@ -368,6 +368,23 @@ export function OrdinaryGetPartial(
     return AbstractValue.convertToTemporalIfArgsAreTemporal(realm, absVal, [Receiver]);
   }
 
+  // An index of an unknown string: the wrapper object created for the string does not have the
+  // integer-indexed own properties of a String exotic object, so read the character at runtime
+  // (the result is a one character string, or undefined if the index is out of range).
+  if (
+    Receiver instanceof AbstractValue &&
+    Receiver.getType() === StringValue &&
+    O.$StringData === Receiver &&
+    (typeof P === "string" || P instanceof StringValue || (P instanceof AbstractValue && P.mightBeNumber()))
+  ) {
+    let key = P instanceof StringValue ? P.value : P;
+    if (typeof key !== "string" || (key !== "-0" && String(Number(key)) === key && Number(key) >= 0)) {
+      let index = typeof key === "string" ? new NumberValue(realm, Number(key)) : key;
+      let absVal = AbstractValue.createFromTemplate(realm, "(A)[B]", Value, [Receiver, index]);
+      return AbstractValue.convertToTemporalIfArgsAreTemporal(realm, absVal, [Receiver, index]);
+    }
+  }
+
   if (!(P instanceof AbstractValue)) return O.$Get(P, Receiver);
 
   // If the key can only be one of a few strings or numbers, read each of them under the

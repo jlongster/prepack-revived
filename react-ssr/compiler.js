@@ -39,7 +39,7 @@ function transformApp(appSource) {
   traverse(ast, {
     CallExpression(p) {
       const node = p.node;
-      if (!isCreateElementCall(node)) return;
+      if (!isCreateElementCall(node, p.scope)) return;
       if (node.arguments.length < 3 || !t.isStringLiteral(node.arguments[0])) return;
       for (let i = 2; i < node.arguments.length; i++) {
         const child = node.arguments[i];
@@ -64,11 +64,19 @@ function transformApp(appSource) {
   return { code: generate(ast, { retainLines: false, compact: false }).code, rewritten };
 }
 
-function isCreateElementCall(node) {
+function isCreateElementCall(node, scope) {
   const callee = node.callee;
+  if (t.isMemberExpression(callee) && !callee.computed && t.isIdentifier(callee.property, { name: "createElement" })) {
+    return true;
+  }
+  if (!t.isIdentifier(callee)) return false;
+  if (callee.name === "createElement") return true;
+  // An alias such as `var h = React.createElement` (never reassigned).
+  const binding = scope.getBinding(callee.name);
+  if (!binding || !binding.constant || !binding.path.isVariableDeclarator()) return false;
+  const init = binding.path.node.init;
   return (
-    (t.isMemberExpression(callee) && !callee.computed && t.isIdentifier(callee.property, { name: "createElement" })) ||
-    t.isIdentifier(callee, { name: "createElement" })
+    t.isMemberExpression(init) && !init.computed && t.isIdentifier(init.property, { name: "createElement" })
   );
 }
 
