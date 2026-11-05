@@ -34,9 +34,9 @@ import {
   ThrowCompletion,
 } from "../completions.js";
 import { IsDataDescriptor, StrictEqualityComparison } from "../methods/index.js";
-import { Path } from "../singletons.js";
+import { Leak, Path } from "../singletons.js";
 import { Generator } from "../utils/generator.js";
-import { AbstractValue, ConcreteValue, EmptyValue, Value } from "../values/index.js";
+import { AbstractValue, ConcreteValue, EmptyValue, ObjectValue, Value } from "../values/index.js";
 
 import invariant from "../invariant.js";
 
@@ -209,6 +209,14 @@ export class JoinImplementation {
     if (!joinCondition.mightNotBeFalse()) return e2;
     invariant(joinCondition instanceof AbstractValue);
 
+    // Just like bindings (see _joinBindings), an object must either be leaked on both sides or on neither:
+    // the property values tracked for an object that leaked on one side only are stale on that side, and
+    // materializing them later on would overwrite whatever unknown code did to the object.
+    let leakedOnlyIn1 = this._objectsLeakedOnlyInFirst(e1, e2);
+    let leakedOnlyIn2 = this._objectsLeakedOnlyInFirst(e2, e1);
+    if (leakedOnlyIn1.length > 0) e2 = this._leakObjectsAfterEffects(joinCondition.$Realm, e2, leakedOnlyIn1);
+    if (leakedOnlyIn2.length > 0) e1 = this._leakObjectsAfterEffects(joinCondition.$Realm, e1, leakedOnlyIn2);
+
     let {
       result: c1,
       generator: generator1,
@@ -267,6 +275,35 @@ export class JoinImplementation {
     });
 
     return new Effects(c, generator, bindings, properties, createdObjects, createdAbstracts);
+  }
+
+  _objectsLeakedOnlyInFirst(e1: Effects, e2: Effects): Array<ObjectValue> {
+    let result = [];
+    e1.modifiedProperties.forEach((desc, binding) => {
+      if (binding.key !== "_isLeaked" || !binding.internalSlot) return;
+      let object = binding.object;
+      if (!(object instanceof ObjectValue) || e1.createdObjects.has(object)) return;
+      let isLeaked1 = desc instanceof InternalSlotDescriptor ? desc.value : undefined;
+      if (!(isLeaked1 instanceof Value) || isLeaked1.mightNotBeTrue()) return;
+      // The pre-split value of a binding that was not modified by e2 is the current value, since effects are undone.
+      let desc2 = e2.modifiedProperties.has(binding) ? e2.modifiedProperties.get(binding) : binding.descriptor;
+      let isLeaked2 = desc2 instanceof InternalSlotDescriptor ? desc2.value : undefined;
+      if (isLeaked2 instanceof Value && !isLeaked2.mightNotBeTrue()) return;
+      result.push(object);
+    });
+    return result;
+  }
+
+  _leakObjectsAfterEffects(realm: Realm, effects: Effects, objects: Array<ObjectValue>): Effects {
+    return realm.evaluateForEffects(
+      () => {
+        realm.applyEffects(effects);
+        for (let object of objects) Leak.value(realm, object);
+        return effects.result;
+      },
+      undefined,
+      "leakObjectsLeakedInOtherBranch"
+    );
   }
 
   joinValuesOfSelectedCompletions(
