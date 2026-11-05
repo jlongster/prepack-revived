@@ -101,6 +101,7 @@ function evaluateDeleteOperation(expr: Value | Reference, realm: Realm) {
       );
     }
     invariant(base instanceof Value);
+    const baseValue: Value = base;
     if (realm.isInPureScope() && !realm.instantRender.enabled) {
       let savedHandler = realm.errorHandler;
       let savedSuppress = realm.suppressDiagnostics;
@@ -140,7 +141,7 @@ function evaluateDeleteOperation(expr: Value | Reference, realm: Realm) {
           AbstractValue.createTemporalFromBuildFunction(
             realm,
             BooleanValue,
-            [base, propVal],
+            [baseValue, propVal],
             createOperationDescriptor("PROPERTY_DELETE")
           ),
         TypesDomain.topVal,
