@@ -42,6 +42,7 @@ import {
 import { Create, Join, Properties, To } from "../../singletons.js";
 import { createOperationDescriptor } from "../../utils/generator.js";
 import { IntervalDomain } from "../../domains/index.js";
+import { mapCases } from "../../utils/cases.js";
 
 // The maximum number of distinct values an abstract array length may have for array methods to
 // evaluate once per possible length and join the results.
@@ -54,30 +55,8 @@ export default function(realm: Realm, obj: ObjectValue): void {
   function withConcreteLength(lenVal: Value, f: number => Value): Value {
     if (lenVal instanceof AbstractValue) {
       let lengths = IntervalDomain.enumerate(lenVal, MAX_LENGTH_CASES, true);
-      if (lengths !== undefined) {
-        let conditions = new Map();
-        for (let n of lengths) {
-          let v = new NumberValue(realm, n);
-          let condition = AbstractValue.createFromBinaryOp(realm, "===", lenVal, v, lenVal.expressionLocation);
-          if (condition instanceof AbstractValue || condition.mightNotBeFalse()) conditions.set(v, condition);
-        }
-        let values = new Set(conditions.keys());
-        if (values.size === 1) {
-          for (let v of values) return f(To.ToLength(realm, v));
-        }
-        if (values.size > 1 && Array.from(conditions.values()).every(c => c instanceof AbstractValue)) {
-          return Join.mapAndJoin(
-            realm,
-            values,
-            v => {
-              let condition = conditions.get(v);
-              invariant(condition !== undefined);
-              return condition;
-            },
-            v => f(To.ToLength(realm, v))
-          );
-        }
-      }
+      if (lengths !== undefined)
+        return mapCases(realm, lenVal, lengths.map(n => new NumberValue(realm, n)), v => f(To.ToLength(realm, v)));
     }
     return f(To.ToLength(realm, lenVal.throwIfNotConcrete()));
   }

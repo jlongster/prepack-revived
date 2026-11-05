@@ -10,6 +10,7 @@
 /* @flow */
 
 import type { BabelBinaryOperator } from "@babel/types";
+import type { OperationDescriptor } from "../utils/generator.js";
 import invariant from "../invariant.js";
 import { Path } from "../singletons.js";
 import { PathConditionsImplementation } from "../utils/paths.js";
@@ -19,6 +20,7 @@ import {
   ConcreteValue,
   NullValue,
   NumberValue,
+  StringValue,
   UndefinedValue,
   Value,
 } from "../values/index.js";
@@ -184,6 +186,12 @@ export default class IntervalDomain {
     return refineWithPathConditions(value, result);
   }
 
+  // Records how a derived (temporal) value was computed, so that its interval can be derived
+  // from its operands like that of the equivalent non-temporal value.
+  static noteDerivation(value: AbstractValue, args: Array<Value>, operationDescriptor: OperationDescriptor): void {
+    if (operationDescriptor.type === "BINARY_EXPRESSION") derivations.set(value, { args, operationDescriptor });
+  }
+
   // Returns the interval of ToNumber(value) for primitive values whose conversion is pure.
   static ofToNumber(value: Value): IntervalDomain {
     return deriveToNumber(value, 0);
@@ -221,6 +229,25 @@ export default class IntervalDomain {
     let result = [];
     for (let n = range.lo; n <= range.hi; n++) result.push(n);
     return result;
+  }
+
+  // If value can only be one of a few strings or numbers (no NaN), return those values, for use as
+  // property keys. -0 is represented by +0, which is the same property key.
+  static enumeratePropertyKeys(value: AbstractValue, limit: number): void | Array<NumberValue | StringValue> {
+    let realm = value.$Realm;
+    if (!value.mightNotBeNumber()) {
+      let numbers = IntervalDomain.enumerate(value, limit, true);
+      return numbers === undefined ? undefined : numbers.map(n => new NumberValue(realm, n));
+    }
+    if (value.values.isTop()) return undefined;
+    let result = [];
+    for (let v of value.values.getElements()) {
+      if (v instanceof StringValue) result.push(v);
+      else if (v instanceof NumberValue && v.value === v.value)
+        result.push(new NumberValue(realm, v.value === 0 ? 0 : v.value));
+      else return undefined;
+    }
+    return result.length <= limit ? result : undefined;
   }
 }
 
@@ -309,6 +336,7 @@ function factAbout(value: AbstractValue, condition: AbstractValue, integral: boo
 }
 
 const cache: WeakMap<AbstractValue, IntervalDomain | null> = new WeakMap();
+const derivations: WeakMap<AbstractValue, { args: Array<Value>, operationDescriptor: OperationDescriptor }> = new WeakMap();
 
 function derive(value: Value, depth: number): void | IntervalDomain {
   if (value instanceof NumberValue) return IntervalDomain.point(value.value);
@@ -346,6 +374,13 @@ function deriveAbstract(value: AbstractValue, depth: number): IntervalDomain {
   if (fromValues !== undefined) return fromValues;
   let args = value.args;
   let kind = value.kind;
+  // Temporal binary expressions (whose operands might have side effecting conversions) are
+  // derived values; if they produce a value, it is the same as that of the plain expression.
+  let derivation = derivations.get(value);
+  if (derivation !== undefined) {
+    args = derivation.args;
+    kind = derivation.operationDescriptor.data.binaryOperator;
+  }
   let d = depth + 1;
   switch (kind) {
     case "conditional": {

@@ -50,7 +50,8 @@ import type { LexicalEnvironment } from "../environment.js";
 import { Create, Environment, Functions, Leak, Join, Path, To } from "../singletons.js";
 import IsStrict from "../utils/strict.js";
 import { createOperationDescriptor } from "../utils/generator.js";
-import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
+import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
 import { cloneDescriptor, equalDescriptors, PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js";
 
 function StringKey(key: PropertyKeyValue): string {
@@ -480,6 +481,22 @@ export class PropertiesImplementation {
     Receiver: Value
   ): boolean {
     if (!(P instanceof AbstractValue)) return O.$Set(P, V, Receiver);
+
+    // If the key can only be one of a few strings or numbers, write each of them under the
+    // condition that the key has that value.
+    if (O.unknownProperty === undefined && !O.isPartialObject()) {
+      let keys = IntervalDomain.enumeratePropertyKeys(P, MAX_KEY_CASES);
+      if (keys !== undefined) {
+        let succeeded = mapCases(
+          realm,
+          P,
+          keys,
+          k => new BooleanValue(realm, O.$Set(To.ToString(realm, k), V, Receiver))
+        ).throwIfNotConcrete();
+        invariant(succeeded instanceof BooleanValue);
+        return succeeded.value;
+      }
+    }
     let pIsLoopVar = isWidenedValue(P);
     let pIsNumeric = Value.isTypeCompatibleWith(P.getType(), NumberValue);
 

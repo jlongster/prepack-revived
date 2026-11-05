@@ -184,6 +184,18 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       return distributeConditional(realm, value, isCondition, args =>
         AbstractValue.createFromBinaryOp(realm, op, args[0], args[1], loc, undefined, isCondition, true)
       );
+    case "+":
+    case "-":
+    case "*":
+    case "/":
+    case "%":
+    case "&":
+    case "|":
+    case "^":
+    case "<<":
+    case ">>":
+    case ">>>":
+      return foldConditionalArithmetic(realm, value, op);
     case "==":
     case "!=":
     case "===":
@@ -286,6 +298,31 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     default:
       return value;
   }
+}
+
+// (c ? x : y) op z <=> c ? (x op z) : (y op z), if x, y and z are concrete primitives, so that both
+// branches fold to constants. (Keeps numeric facts such as the length of an array after a
+// conditional push precise.)
+function foldConditionalArithmetic(realm: Realm, value: AbstractValue, op: any): Value {
+  if (value.args.length !== 2) return value;
+  let [x, y] = value.args;
+  let condition, left, right;
+  if (x instanceof AbstractValue && x.kind === "conditional" && y instanceof PrimitiveValue) {
+    condition = x.args[0];
+    left = [x.args[1], y];
+    right = [x.args[2], y];
+  } else if (y instanceof AbstractValue && y.kind === "conditional" && x instanceof PrimitiveValue) {
+    condition = y.args[0];
+    left = [x, y.args[1]];
+    right = [x, y.args[2]];
+  } else {
+    return value;
+  }
+  if (!left.concat(right).every(v => v instanceof PrimitiveValue && !(v instanceof EmptyValue))) return value;
+  let l = ValuesDomain.computeBinary(realm, op, (left[0]: any), (left[1]: any));
+  let r = ValuesDomain.computeBinary(realm, op, (right[0]: any), (right[1]: any));
+  if (!(l instanceof PrimitiveValue) || !(r instanceof PrimitiveValue)) return value;
+  return AbstractValue.createFromConditionalOp(realm, condition, l, r, value.expressionLocation);
 }
 
 function distributeConditional(
