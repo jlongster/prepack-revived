@@ -1,6 +1,6 @@
 // abstract effects
 // recover-from-errors
-// expected errors: [{location: {"start":{"line":19,"column":11},"end":{"line":19,"column":15},"identifierName":"obj1","source":"test/error-handler/try-and-access-abstract-property.js"}, errorCode: "PP0021", severity: "RecoverableError", message: "Possible throw inside try/catch is not yet supported"},{location: {"start":{"line":27,"column":11},"end":{"line":27,"column":15},"identifierName":"obj2","source":"test/error-handler/try-and-access-abstract-property.js"}, errorCode: "PP0021", severity: "RecoverableError", message: "Possible throw inside try/catch is not yet supported"}]
+// expected errors: []
 
 let obj1 = global.__abstract
   ? __abstract("object", '({get foo() { return "bar"; }})')

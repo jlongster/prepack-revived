@@ -113,6 +113,15 @@ export class TextPrinter implements Printer {
         this.printGenerator(generator, "body");
         this._unnest();
         break;
+      case "TRY_CATCH":
+        invariant(declared !== undefined);
+        this._print(`${this.describeValue(declared)} = try`);
+        this._nest();
+        const body = data.generator;
+        invariant(body !== undefined);
+        this.printGenerator(body, "body");
+        this._unnest();
+        break;
       case "JOIN_GENERATORS":
         invariant(args.length === 1);
         this._print(`if ${this.describeValue(args[0])}`);

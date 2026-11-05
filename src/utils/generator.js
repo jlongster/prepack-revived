@@ -125,6 +125,7 @@ export type OperationDescriptorType =
   | "RESIDUAL_CALL"
   | "SINGLE_ARG"
   | "THROW"
+  | "TRY_CATCH"
   | "UNARY_EXPRESSION"
   | "UNKNOWN_ARRAY_GET_PARTIAL"
   | "UNKNOWN_ARRAY_LENGTH"
@@ -150,7 +151,7 @@ export type OperationDescriptorData = {
   callFunctionRef?: string, // used by EMIT_CALL and EMIT_CALL_AND_CAPTURE_RESULT
   concreteComparisons?: Array<Value>, // used by FULL_INVARIANT_ABSTRACT
   descriptor?: Descriptor, // used by DEFINE_PROPERTY
-  generator?: Generator, // used by DO_WHILE
+  generator?: Generator, // used by DO_WHILE, TRY_CATCH
   generators?: Array<Generator>, // used by JOIN_GENERATORS
   id?: string, // used by IDENTIFIER
   lh?: BabelNodeVariableDeclaration, // used by FOR_IN
@@ -346,9 +347,6 @@ export class TemporalOperationEntry extends GeneratorEntry {
               if (originalArg === this.operationDescriptor.data.thisArg)
                 this.operationDescriptor.data.thisArg = visitedArg;
               break;
-            case "CONDITIONAL_THROW":
-              this.operationDescriptor.data.value = visitedArg;
-              break;
             default:
               break;
           }
@@ -429,6 +427,10 @@ export class TemporalOperationEntry extends GeneratorEntry {
         let generators = operationDescriptor.data.generators;
         invariant(generators !== undefined);
         return generators;
+      case "TRY_CATCH":
+        let body = operationDescriptor.data.generator;
+        invariant(body !== undefined);
+        return [body];
       default:
         return undefined;
     }
@@ -716,7 +718,7 @@ export class Generator {
       let selector = c =>
         c instanceof ThrowCompletion && c.value !== realm.intrinsics.__bottomValue && !(c.value instanceof EmptyValue);
       output.emitConditionalThrow(Join.joinValuesOfSelectedCompletions(selector, result, true));
-      output.emitReturnValue(result.value);
+      output.emitReturnValue(Join.joinValuesOfSelectedCompletions(c => c instanceof SimpleNormalCompletion, result));
     } else {
       invariant(false);
     }
@@ -889,8 +891,23 @@ export class Generator {
   emitConditionalThrow(value: Value): void {
     if (value instanceof EmptyValue) return;
     this._issueThrowCompilerDiagnostic(value);
+    let args = [];
+    function collectArgs(val: Value): void {
+      if (val instanceof EmptyValue) return;
+      if (!(val instanceof AbstractValue) || val.kind !== "conditional") {
+        args.push(val);
+        return;
+      }
+      let [cond, trueVal, falseVal] = val.args;
+      if (trueVal instanceof EmptyValue && falseVal instanceof EmptyValue) return;
+      args.push(cond);
+      collectArgs(trueVal);
+      collectArgs(falseVal);
+    }
+    collectArgs(value);
+    if (args.length === 0) return;
     this._addEntry({
-      args: [value],
+      args,
       operationDescriptor: createOperationDescriptor("CONDITIONAL_THROW", { value }),
     });
   }
@@ -908,6 +925,18 @@ export class Generator {
     }
     const diagnostic = new CompilerDiagnostic(message, value.expressionLocation, "PP0023", "Warning");
     this.realm.handleError(diagnostic);
+  }
+
+  // Emits the code of body inside a residual try statement. The returned value is undefined if body completes
+  // normally, and an array containing the exception otherwise.
+  emitTryCatch(body: Generator): AbstractValue {
+    return this.deriveAbstract(
+      TypesDomain.topVal,
+      ValuesDomain.topVal,
+      [],
+      createOperationDescriptor("TRY_CATCH", { generator: body }),
+      { skipInvariant: true }
+    );
   }
 
   emitThrow(value: Value): void {

@@ -257,6 +257,7 @@ export class Realm {
     this.useAbstractInterpretation = opts.serialize === true || Array.isArray(opts.check);
     this.ignoreLeakLogic = false;
     this.isInPureTryStatement = false;
+    this.unmodeledThrowsInPureTry = undefined;
     if (opts.mathRandomSeed !== undefined) {
       this.mathRandomGenerator = seedrandom(opts.mathRandomSeed);
     }
@@ -365,6 +366,9 @@ export class Realm {
   useAbstractInterpretation: boolean;
   debugNames: void | boolean;
   isInPureTryStatement: boolean; // TODO(1264): Remove this once we implement proper exception handling in abstract calls.
+  // If defined, counts the operations that might throw an exception that Prepack does not model, inside the try
+  // block that is being evaluated, instead of reporting PP0021.
+  unmodeledThrowsInPureTry: void | number;
   timeout: void | number;
   mathRandomGenerator: void | (() => number);
   strictlyMonotonicDateNow: boolean;
@@ -765,6 +769,11 @@ export class Realm {
   // if they could be caught by an enclosing try statement, the handler would be lost.
   reportPossibleThrowInsideTry(): void {
     if (this.isInPureTryStatement) {
+      if (this.unmodeledThrowsInPureTry !== undefined) {
+        // The enclosing try statement will wrap the code in a residual try statement.
+        this.unmodeledThrowsInPureTry++;
+        return;
+      }
       let diag = new CompilerDiagnostic(
         "Possible throw inside try/catch is not yet supported",
         this.currentLocation,

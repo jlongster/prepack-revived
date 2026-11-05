@@ -315,8 +315,17 @@ export class JoinImplementation {
     let bottom = realm.intrinsics.__bottomValue;
     if (completion instanceof JoinedAbruptCompletions || completion instanceof JoinedNormalAndAbruptCompletions) {
       let joinCondition = completion.joinCondition;
-      let c = this.joinValuesOfSelectedCompletions(selector, completion.consequent);
-      let a = this.joinValuesOfSelectedCompletions(selector, completion.alternate);
+      let c = this.joinValuesOfSelectedCompletions(selector, completion.consequent, keepInfeasiblePaths);
+      let a = this.joinValuesOfSelectedCompletions(selector, completion.alternate, keepInfeasiblePaths);
+      if (c === bottom && a === bottom) {
+        if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
+          let composedWith = completion.composedWith;
+          if (composedWith.containsSelectedCompletion(selector)) {
+            return this.joinValuesOfSelectedCompletions(selector, composedWith, keepInfeasiblePaths);
+          }
+        }
+        return bottom;
+      }
       // do some simplification
       if (c === bottom) {
         // joinCondition will never be true when this completion is reached
@@ -347,7 +356,7 @@ export class JoinImplementation {
       if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
         let composedWith = completion.composedWith;
         if (!composedWith.containsSelectedCompletion(selector)) return jv;
-        let cjv = this.joinValuesOfSelectedCompletions(selector, composedWith);
+        let cjv = this.joinValuesOfSelectedCompletions(selector, composedWith, keepInfeasiblePaths);
         joinCondition = AbstractValue.createJoinConditionForSelectedCompletions(selector, composedWith);
         jv = this.joinValues(realm, jv, cjv, getAbstractValue);
         invariant(jv instanceof Value);
