@@ -227,34 +227,22 @@ function folderTable() {
   return groups;
 }
 
-// Stacked 100% bars, one per milestone.
+// Stacked 100% bars, one per milestone (HTML, so labels stay readable at any width).
 function stackedBars(rows) {
-  const W = 640;
-  const labelW = 0;
-  const barH = 22;
-  const gap = 46;
-  const h = rows.length * gap;
-  const parts = rows
-    .map((r, i) => {
+  return `<div class="bars" role="img" aria-label="Hard-case corpus results at each milestone">${rows
+    .map(r => {
       const total = STATUS_ORDER.reduce((a, s) => a + r[s], 0);
-      let x = labelW;
-      const y = i * gap + 18;
-      const segs = STATUS_ORDER.map(s => {
-        const w = (r[s] / total) * (W - labelW);
-        const seg = `<rect class="w-${s.toLowerCase()}" x="${x.toFixed(1)}" y="${y}" width="${Math.max(0, w - 1).toFixed(1)}" height="${barH}"><title>${
-          STATUS_TEXT[s]
-        }: ${r[s]}</title></rect>${
-          w > 26
-            ? `<text class="seg-num ${s === "PASS" || s === "WRONG" ? "on-dark" : ""}" x="${(x + 6).toFixed(1)}" y="${y + 15}">${r[s]}</text>`
-            : ""
-        }`;
-        x += w;
-        return seg;
-      }).join("");
-      return `<text class="bar-label" x="0" y="${y - 6}">${esc(r.label)} <tspan class="muted">· ${total} tests</tspan></text>${segs}`;
+      const segs = STATUS_ORDER.filter(s => r[s] > 0)
+        .map(
+          s =>
+            `<span class="seg w-${s.toLowerCase()}" style="width:${((r[s] / total) * 100).toFixed(2)}%" title="${STATUS_TEXT[s]}: ${r[s]}">${
+              r[s] / total > 0.045 ? `<span class="seg-num">${r[s]}</span>` : ""
+            }</span>`
+        )
+        .join("");
+      return `<div class="bar-row"><div class="bar-label">${esc(r.label)} <span class="muted">· ${total} cases</span></div><div class="bar">${segs}</div></div>`;
     })
-    .join("");
-  return `<svg class="bars" viewBox="0 0 ${W} ${h}" role="img" aria-label="Hard-case corpus results at each milestone">${parts}</svg>`;
+    .join("")}</div>`;
 }
 
 function timeline(events) {
@@ -266,24 +254,12 @@ function timeline(events) {
 }
 
 function pipeline(steps) {
-  const W = 1000;
-  const n = steps.length;
-  const bw = (W - (n - 1) * 24) / n;
-  const boxes = steps
-    .map((s, i) => {
-      const x = i * (bw + 24);
-      return `<g><rect class="pbox" x="${x}" y="1" width="${bw}" height="132" rx="3"/><text class="pnum" x="${x + 14}" y="28">${i + 1}</text><text class="ptitle" x="${
-        x + 14
-      }" y="54">${esc(s.title)}</text>${s.lines
-        .map((l, j) => `<text class="pline" x="${x + 14}" y="${80 + j * 18}">${esc(l)}</text>`)
-        .join("")}${
-        i < n - 1 ? `<path class="parrow" d="M${x + bw + 4} 60 l14 0 m-5 -5 l5 5 l-5 5"/>` : ""
-      }</g>`;
-    })
-    .join("");
-  return `<svg class="pipeline" viewBox="0 0 ${W} 135" role="img" aria-label="Hybrid pipeline: ${steps
-    .map(s => s.title)
-    .join(", ")}">${boxes}</svg>`;
+  return `<ol class="pipeline">${steps
+    .map(
+      (st, i) =>
+        `<li><span class="pnum">${i + 1}</span><span class="ptitle">${esc(st.title)}</span><span class="pline">${esc(st.lines.join(" "))}</span></li>`
+    )
+    .join("")}</ol>`;
 }
 
 module.exports = {

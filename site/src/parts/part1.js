@@ -124,6 +124,7 @@ developers’ own words.</p>
     <a href="${c.SRC("src/methods/call.js", 400)}">switched off</a> (${I(1586)}). The most-upvoted bug in the tracker,
     ${I(543)} with 121 reactions, is a one-line change that turned a recursive call into 1,065 lines of output.</p>
     ${quote("tillmann-1586")}
+    ${quote("tillmann-520")}
   </section>
   <section class="problem" id="p3">
     <h4><span class="pn">P3</span> Joining control flow</h4>
@@ -170,8 +171,10 @@ developers’ own words.</p>
 
 <p>One more problem sat outside the list because it is “only” spec work: modern language features. Prepack predates
 <code>class</code> fields, <code>??</code> and optional chaining, and never implemented generators. The design
-discussion in ${I(712)} ended with Venter’s question, which turns out to be the crux of abstract interpretation:</p>
+discussion in ${I(712)} ran into the crux of abstract interpretation: suspending a computation in the middle of
+exploring both sides of an unknown branch.</p>
 
-${quote("venter-712-explode", { pull: true })}
+${quote("venter-712-iterate", { pull: true })}
+${quote("venter-712-explode")}
 `;
 };

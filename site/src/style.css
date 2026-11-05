@@ -379,23 +379,31 @@ details.all-cases summary { cursor: pointer; font-weight: 600; font-size: 0.95re
 /* ---------- charts ---------- */
 
 .chart { margin: 2rem 0 2.5rem; }
-.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
-svg text { font-family: var(--sans); fill: var(--ink); }
-.bars .bar-label { font-size: 13px; font-weight: 500; }
-.bars .muted { fill: var(--muted); font-weight: 400; }
-.bars .seg-num { font-size: 11.5px; fill: var(--ink); font-weight: 600; }
-.bars .seg-num.on-dark { fill: var(--bg); }
+.bars { font-family: var(--sans); }
+.bar-row { margin-bottom: 0.9rem; }
+.bar-label { font-size: 0.85rem; font-weight: 500; margin-bottom: 0.3rem; }
+.bar-label .muted { font-weight: 400; }
+.bar { display: flex; height: 1.6rem; }
+.seg { display: block; height: 100%; border-right: 1px solid var(--bg); overflow: hidden; }
+.seg:last-child { border-right: 0; }
+.seg-num { display: block; font-size: 0.75rem; font-weight: 600; line-height: 1.6rem; padding-left: 0.4rem; color: var(--ink); }
+.seg.w-pass .seg-num, .seg.w-wrong .seg-num { color: var(--bg); }
 .timeline { list-style: none; padding: 0; margin: 1.5rem 0 2.5rem; font-family: var(--sans); font-size: 0.92rem; line-height: 1.45; border-left: 1px solid var(--rule-strong); }
 .timeline li { position: relative; display: grid; grid-template-columns: 6.5rem 1fr; gap: 1rem; padding: 0.4rem 0 0.4rem 1.25rem; }
 .timeline li::before { content: ""; position: absolute; left: -4px; top: 0.85rem; width: 7px; height: 7px; border-radius: 50%; background: var(--bg); border: 1px solid var(--ink); }
 .timeline li.key::before { background: var(--accent); border-color: var(--accent); }
 .timeline .tl-date { color: var(--muted); font-variant-numeric: tabular-nums; }
 .timeline li.key .tl-text { font-weight: 600; }
-.pipeline .pbox { fill: var(--panel); stroke: var(--panel-border); }
-.pipeline .pnum { font-size: 13px; fill: var(--accent); font-weight: 600; }
-.pipeline .ptitle { font-size: 17px; font-weight: 600; }
-.pipeline .pline { font-size: 12px; fill: var(--muted); }
-.pipeline .parrow { stroke: var(--ink); fill: none; stroke-width: 1.3; }
+.pipeline { list-style: none; padding: 0; margin: 0 0 0.9rem; display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; font-family: var(--sans); counter-reset: none; }
+.pipeline li { position: relative; background: var(--panel); border: 1px solid var(--panel-border); border-radius: 6px; padding: 0.8rem 0.9rem 0.9rem; }
+.pipeline li + li::before { content: "→"; position: absolute; left: -0.72rem; top: 1.6rem; width: 0.75rem; text-align: center; color: var(--muted); font-size: 0.85rem; }
+.pipeline .pnum { display: block; font-size: 0.78rem; font-weight: 600; color: var(--accent); }
+.pipeline .ptitle { display: block; font-size: 1.05rem; font-weight: 600; margin: 0.15rem 0 0.35rem; }
+.pipeline .pline { display: block; font-size: 0.82rem; line-height: 1.45; color: var(--muted); }
+@media (max-width: 760px) {
+  .pipeline { grid-template-columns: 1fr; }
+  .pipeline li + li::before { content: "↓"; left: 50%; top: -0.78rem; }
+}
 
 /* ---------- code comparisons ---------- */
 

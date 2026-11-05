@@ -62,10 +62,10 @@ itself.</p>
 <figure class="w chart">
 ${stackedBars([
   { label: "Phase 0 baseline (local build of the original)", PASS: 38, BLOAT: 16, CRASH: 63, WRONG: 16 },
-  { label: "After Phase 1 tracks merged", PASS: 104, BLOAT: 24, CRASH: 16, WRONG: 15 },
+  { label: "Mid-project, before the size track", PASS: 104, BLOAT: 24, CRASH: 16, WRONG: 15 },
   { label: "After the size cost model", PASS: 128, BLOAT: 1, CRASH: 15, WRONG: 15 },
   { label: "After environment modeling", PASS: 150, BLOAT: 1, CRASH: 15, WRONG: 9 },
-  { label: "After correctness round 2 and language work", PASS: 187, BLOAT: 0, CRASH: 6, WRONG: 1 },
+  { label: "After correctness round 2", PASS: 187, BLOAT: 0, CRASH: 6, WRONG: 1 },
   { label: "Final", PASS: r.PASS, BLOAT: r.BLOAT, CRASH: r.CRASH, WRONG: r.WRONG },
 ])}
 ${c.legend()}
@@ -224,7 +224,10 @@ abstract-length arrays. Along the way it turned up a bug unrelated to abstract v
 
 <h3 id="a-havoc">P6 · Built-ins and the outer fixed point</h3>
 
-<p>${I(2319)} listed Facebook’s top built-in bail-outs: <code>RegExp.prototype.test</code> (275),
+${quote("venter-1891")}
+
+<p>That was the bind: anything handed to code Prepack couldn’t see had to be havoced, and havocing too much makes the
+analysis useless. ${I(2319)} listed Facebook’s top built-in bail-outs: <code>RegExp.prototype.test</code> (275),
 <code>Array.prototype.indexOf</code> (201), <code>parseInt</code> (176) and <code>Math.abs</code> (58). This is the
 kind of work an AI agent is good at and a small team never has time for: 81 built-ins now carry declarative effect
 summaries (what they coerce, whether they can throw, whether they can run user code), each with a differential test.</p>
@@ -286,7 +289,8 @@ that is mostly transcription. The parser now accepts ES2022 class fields and pri
 lowered to a state machine and run, and settled Promises are serialized as <code>Promise.resolve(…)</code> after
 draining a real job queue. A generator still <em>suspended</em> at the end of initialization is refused on purpose:
 its state lives in lowered closures with no equivalent in the source, and emitting a runtime to resume it would trade
-fidelity for coverage.</p>
+fidelity for coverage. Venter’s question from ${I(712)}, how to iterate a generator through an <code>if</code> whose
+condition is abstract, is still open: generators run at build time only when everything about them is concrete.</p>
 
 ${example("hyb-class", { tools: ["orig", "revived"], caption: "A class with private members. 0.2.54 prints a program that is a SyntaxError. (The hybrid’s output for this input is in Part 4.)" })}
 
