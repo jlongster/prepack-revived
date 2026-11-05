@@ -217,7 +217,7 @@ export class Serializer {
           this.options,
           preludeGenerator.createNameGenerator("__scope_"),
           preludeGenerator.createNameGenerator("__get_scope_binding_"),
-          preludeGenerator.createNameGenerator("__leaked_"),
+          preludeGenerator.createNameGenerator("__l"),
           residualOptimizedFunctions
         );
         statistics.referentialization.measure(() => {
