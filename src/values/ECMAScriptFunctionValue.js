@@ -11,8 +11,7 @@
 
 import type { Realm } from "../realm.js";
 import type { ObjectValue } from "./index.js";
-import { FunctionValue, Value } from "./index.js";
-import type { BabelNodeSourceLocation } from "@babel/types";
+import { FunctionValue } from "./index.js";
 
 /* Abstract base class for non-exotic function objects(either with source or built-in) */
 export default class ECMAScriptFunctionValue extends FunctionValue {
@@ -25,7 +24,5 @@ export default class ECMAScriptFunctionValue extends FunctionValue {
   $ThisMode: "lexical" | "strict" | "global";
   $HomeObject: void | ObjectValue;
   $FunctionKind: "normal" | "classConstructor" | "generator";
-  activeArguments: void | Map<BabelNodeSourceLocation, [number, Array<Value>]>;
-  isSelfRecursive: boolean;
   isCalledInMultipleContexts: boolean;
 }

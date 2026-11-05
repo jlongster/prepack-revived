@@ -39,6 +39,7 @@ import { ObjectValue, Value, FunctionValue } from "../values/index.js";
 import { Properties } from "../singletons.js";
 import { PropertyDescriptor } from "../descriptors.js";
 import { ResidualOptimizedFunctions } from "./ResidualOptimizedFunctions";
+import { checkResidualRecursionSnapshots } from "../methods/recursion.js";
 
 export class Serializer {
   constructor(realm: Realm, serializerOptions: SerializerOptions = {}) {
@@ -180,6 +181,8 @@ export class Serializer {
       for (let [functionId, moduleIdOfFunction] of this.realm.moduleFactoryFunctionsToRemove) {
         if (!this.modules.initializedModules.has(moduleIdOfFunction)) moduleFactoryFunctionsToRemove.delete(functionId);
       }
+
+      checkResidualRecursionSnapshots(this.realm);
 
       let heapGraph;
       let ast = (() => {

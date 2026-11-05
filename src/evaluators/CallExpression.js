@@ -30,6 +30,7 @@ import {
 } from "../values/index.js";
 import { Reference } from "../environment.js";
 import { Environment, Functions, Leak } from "../singletons.js";
+import { isUnsoundResidualRecursionError } from "../methods/recursion.js";
 import {
   ArgumentListEvaluation,
   EvaluateDirectCall,
@@ -273,6 +274,7 @@ function tryToEvaluateCallOrLeaveAsAbstract(
   } catch (error) {
     if (error instanceof FatalError) {
       if (func instanceof NativeFunctionValue && func.name === "__fatal") throw error;
+      if (isUnsoundResidualRecursionError(error)) throw error;
       realm.suppressDiagnostics = savedSuppressDiagnostics;
       Leak.value(realm, func, ast.loc);
       return realm.evaluateWithPossibleThrowCompletion(

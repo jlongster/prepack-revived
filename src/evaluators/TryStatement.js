@@ -20,6 +20,7 @@ import {
 } from "../completions.js";
 import { UpdateEmpty } from "../methods/index.js";
 import { InfeasiblePathError } from "../errors.js";
+import { enterTryBlock, exitTryBlock } from "../methods/recursion.js";
 import { construct_empty_effects } from "../realm.js";
 import { Functions, Join, Path } from "../singletons.js";
 import { AbstractValue, Value } from "../values/index.js";
@@ -61,7 +62,13 @@ function joinTryBlockWithHandlers(
     // then we might need it to know whether we should bother tracking error handling.
     realm.isInPureTryStatement = true;
   }
-  let blockRes = env.evaluateCompletionDeref(ast.block, strictCode);
+  let blockRes;
+  enterTryBlock(realm);
+  try {
+    blockRes = env.evaluateCompletionDeref(ast.block, strictCode);
+  } finally {
+    exitTryBlock(realm);
+  }
   // this is a join point for break and continue completions
   blockRes = Functions.incorporateSavedCompletion(realm, blockRes);
   invariant(blockRes !== undefined);
