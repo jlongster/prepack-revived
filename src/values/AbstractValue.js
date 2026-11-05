@@ -564,6 +564,16 @@ export default class AbstractValue extends Value {
   promoteEmptyToUndefined(): Value {
     if (this.values.isTop()) return this;
     if (!this.mightBeEmpty) return this;
+    if (this.kind === "conditional") {
+      let [c, x, y] = this.args;
+      return AbstractValue.createFromConditionalOp(
+        this.$Realm,
+        c,
+        x.promoteEmptyToUndefined(),
+        y.promoteEmptyToUndefined(),
+        this.expressionLocation
+      );
+    }
     let cond = AbstractValue.createFromBinaryOp(this.$Realm, "===", this, this.$Realm.intrinsics.empty);
     let result = AbstractValue.createFromConditionalOp(this.$Realm, cond, this.$Realm.intrinsics.undefined, this);
     if (result instanceof AbstractValue) result.values = this.values.promoteEmptyToUndefined();

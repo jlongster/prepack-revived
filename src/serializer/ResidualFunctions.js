@@ -66,7 +66,8 @@ export class ResidualFunctions {
     residualClassMethodInstances: Map<FunctionValue, ClassMethodInstance>,
     additionalFunctionValueInfos: Map<FunctionValue, AdditionalFunctionInfo>,
     additionalFunctionValueNestedFunctions: Set<FunctionValue>,
-    referentializer: Referentializer
+    referentializer: Referentializer,
+    embeddedFunctionNames?: Map<FunctionValue, string>
   ) {
     this.realm = realm;
     this.modules = modules;
@@ -85,6 +86,7 @@ export class ResidualFunctions {
     this.residualClassMethodInstances = residualClassMethodInstances;
     this.additionalFunctionValueInfos = additionalFunctionValueInfos;
     this.referentializer = referentializer;
+    this.embeddedFunctionNames = embeddedFunctionNames || new Map();
     for (let instance of residualFunctionInstances.values()) {
       invariant(instance !== undefined);
       if (!additionalFunctionValueInfos.has(instance.functionValue)) this.addFunctionInstance(instance);
@@ -114,6 +116,7 @@ export class ResidualFunctions {
   additionalFunctionValueInfos: Map<FunctionValue, AdditionalFunctionInfo>;
   additionalFunctionValueNestedFunctions: Set<FunctionValue>;
   referentializer: Referentializer;
+  embeddedFunctionNames: Map<FunctionValue, string>;
   additionalFunctionPreludes: Map<FunctionValue, Array<BabelNodeStatement>>;
 
   getStatistics(): SerializerStatistics {
@@ -553,6 +556,10 @@ export class ResidualFunctions {
           }
           let id = this.locationService.getLocation(functionValue);
           invariant(id !== undefined);
+          let embeddedName = this.embeddedFunctionNames.get(functionValue);
+          if (embeddedName !== undefined && t.isFunctionExpression(funcOrClassNode)) {
+            ((funcOrClassNode: any): BabelNodeFunctionExpression).id = t.identifier(embeddedName);
+          }
 
           registerFunctionStrictness(funcOrClassNode, functionValue.$Strict);
           invariant(id !== undefined);
@@ -695,7 +702,12 @@ export class ResidualFunctions {
 
             let childBody = t.blockStatement([t.returnStatement(t.callExpression(callee, callArgs))]);
 
-            funcNode = t.functionExpression(null, params, childBody);
+            let embeddedName = this.embeddedFunctionNames.get(functionValue);
+            funcNode = t.functionExpression(
+              embeddedName !== undefined ? t.identifier(embeddedName) : null,
+              params,
+              childBody
+            );
             registerFunctionStrictness(funcNode, functionValue.$Strict);
           } else {
             funcNode = t.callExpression(

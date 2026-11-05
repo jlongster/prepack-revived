@@ -53,7 +53,7 @@ import type {
 import { ClosureRefVisitor } from "./visitors.js";
 import { Logger } from "../utils/logger.js";
 import { Modules } from "../utils/modules.js";
-import { HeapInspector } from "../utils/HeapInspector.js";
+import { HeapInspector, getNativeErrorConstructorName } from "../utils/HeapInspector.js";
 import {
   canIgnoreClassLengthProperty,
   ClassPropertiesToIgnore,
@@ -344,6 +344,7 @@ export class ResidualHeapVisitor {
   visitObjectPrototype(obj: ObjectValue): void {
     let proto = obj.$Prototype;
 
+    if (getNativeErrorConstructorName(this.realm, obj) !== undefined) return;
     let kind = obj.getKind();
     if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
 

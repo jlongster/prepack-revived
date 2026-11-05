@@ -60,7 +60,7 @@ import { type Scope, BodyReference, type ResidualHeapInfo } from "./types.js";
 import { SerializerStatistics } from "./statistics.js";
 import { Logger } from "../utils/logger.js";
 import { Modules } from "../utils/modules.js";
-import { HeapInspector } from "../utils/HeapInspector.js";
+import { HeapInspector, getNativeErrorConstructorName } from "../utils/HeapInspector.js";
 import { ResidualFunctions } from "./ResidualFunctions.js";
 import { factorifyObjects } from "./factorify.js";
 import { voidExpression, emptyExpression, constructorExpression, protoExpression } from "../utils/babelhelpers.js";
@@ -153,6 +153,8 @@ export class ResidualHeapSerializer {
     this.initializerNameGenerator = this.preludeGenerator.createNameGenerator("__init_");
     this.requireReturns = new Map();
     this.serializedValues = new Set();
+    this._ignoredSerializedValues = new Set();
+    this.embeddedFunctionNames = new Map();
     this._serializedValueWithIdentifiers = new Set();
     this.additionalFunctionValueNestedFunctions = new Set();
     this.residualReactElementSerializer = new ResidualReactElementSerializer(
@@ -193,7 +195,8 @@ export class ResidualHeapSerializer {
       residualHeapInfo.classMethodInstances,
       residualHeapInfo.additionalFunctionValueInfos,
       this.additionalFunctionValueNestedFunctions,
-      referentializer
+      referentializer,
+      this.embeddedFunctionNames
     );
     this.emitter = new Emitter(
       this.residualFunctions,
@@ -255,6 +258,8 @@ export class ResidualHeapSerializer {
   residualClassMethodInstances: Map<FunctionValue, ClassMethodInstance>;
   residualFunctionInfos: Map<BabelNodeBlockStatement, FunctionInfo>;
   serializedValues: Set<Value>;
+  _ignoredSerializedValues: Set<Value>;
+  embeddedFunctionNames: Map<FunctionValue, string>;
   _serializedValueWithIdentifiers: Set<Value>;
   residualFunctions: ResidualFunctions;
   _options: SerializerOptions;
@@ -340,6 +345,13 @@ export class ResidualHeapSerializer {
 
       if (desc === undefined) continue; //deleted
       if (this.residualHeapInspector.canIgnoreProperty(obj, key)) continue;
+      if (
+        key === "name" &&
+        obj instanceof ECMAScriptSourceFunctionValue &&
+        this._tryEmbedFunctionName(obj, desc)
+      ) {
+        continue;
+      }
       invariant(desc !== undefined);
       let semaphore = this._acquireOneObjectSemaphore(obj);
       let body = this.emitter.getBody();
@@ -1212,6 +1224,33 @@ export class ResidualHeapSerializer {
     );
   }
 
+  _tryEmbedFunctionName(fn: ECMAScriptSourceFunctionValue, desc: Descriptor): boolean {
+    if (this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) || this.realm.isCompatibleWith("mobile"))
+      return false;
+    if (
+      fn.$ThisMode === "lexical" ||
+      fn.$FunctionKind !== "normal" ||
+      this.residualClassMethodInstances.has(fn) ||
+      this.additionalFunctionValueInfos.has(fn)
+    ) {
+      return false;
+    }
+    if (!(desc instanceof PropertyDescriptor) || desc.get !== undefined || desc.set !== undefined) return false;
+    let targetDescriptor = this.residualHeapInspector.getTargetIntegrityDescriptor(fn);
+    if (desc.writable !== false || desc.enumerable !== false || desc.configurable !== targetDescriptor.configurable)
+      return false;
+    let val = desc.value;
+    if (!(val instanceof StringValue)) return false;
+    let fnName = val.value;
+    if (!t.isValidIdentifier(fnName)) return false;
+    let code = fn.$ECMAScriptCode;
+    let info = code ? this.residualFunctionInfos.get(code) : undefined;
+    if (info !== undefined && info.unbound.has(fnName)) return false;
+    this.embeddedFunctionNames.set(fn, fnName);
+    this._ignoredSerializedValues.add(val);
+    return true;
+  }
+
   _getPropertyAssignmentStatement(
     location: BabelNodeLVal,
     value: Value,
@@ -1220,16 +1259,14 @@ export class ResidualHeapSerializer {
   ): BabelNodeStatement {
     if (mightHaveBeenDeleted) {
       invariant(value.mightHaveBeenDeleted());
-
-      // We always need to serialize this value in order to keep the invariants happy,
-      // as the visitor hasn't been taught about the following peephole optimization.
-      let serializedValue = this.serializeValue(value);
+      let origValue = value;
 
       // Let's find the relevant value taking into account conditions implied by path conditions
       while (value instanceof AbstractValue && value.kind === "conditional") {
         let cf = this.conditionalFeasibility.get(value);
         invariant(cf !== undefined);
         if (cf.t && cf.f) break;
+        this._ignoredSerializedValues.add(value);
         if (cf.t) value = value.args[1];
         else {
           invariant(cf.f);
@@ -1237,22 +1274,36 @@ export class ResidualHeapSerializer {
         }
       }
       if (value instanceof EmptyValue) {
+        this._ignoredSerializedValues.add(origValue);
+        this._ignoredSerializedValues.add(value);
         return t.expressionStatement(t.unaryExpression("delete", ((location: any): BabelNodeMemberExpression), true));
       } else if (value.mightHaveBeenDeleted()) {
         // Let's try for a little peephole optimization, if __empty is a branch of a conditional, and the other side cannot be __empty
         let condition;
+        let serializedValue;
         if (value instanceof AbstractValue && value.kind === "conditional") {
           let [c, x, y] = value.args;
           if (x instanceof EmptyValue && !y.mightHaveBeenDeleted()) {
-            if (c instanceof AbstractValue && c.kind === "!") condition = this.serializeValue(c.args[0]);
-            else condition = t.unaryExpression("!", this.serializeValue(c));
+            this._ignoredSerializedValues.add(origValue);
+            this._ignoredSerializedValues.add(value);
+            this._ignoredSerializedValues.add(x);
+            if (c instanceof AbstractValue && c.kind === "!") {
+              this._ignoredSerializedValues.add(c);
+              condition = this.serializeValue(c.args[0]);
+            } else {
+              condition = t.unaryExpression("!", this.serializeValue(c));
+            }
             serializedValue = this.serializeValue(y);
           } else if (y instanceof EmptyValue && !x.mightHaveBeenDeleted()) {
+            this._ignoredSerializedValues.add(origValue);
+            this._ignoredSerializedValues.add(value);
+            this._ignoredSerializedValues.add(y);
             condition = this.serializeValue(c);
             serializedValue = this.serializeValue(x);
           }
         }
-        if (condition === undefined) {
+        if (condition === undefined || serializedValue === undefined) {
+          serializedValue = this.serializeValue(origValue);
           condition = t.binaryExpression("!==", serializedValue, this._serializeEmptyValue());
         }
         let assignment = t.expressionStatement(t.assignmentExpression("=", location, serializedValue));
@@ -1264,6 +1315,8 @@ export class ResidualHeapSerializer {
           );
         }
         return t.ifStatement(condition, assignment, deletion);
+      } else {
+        this._ignoredSerializedValues.add(this.realm.intrinsics.empty);
       }
     }
 
@@ -1779,7 +1832,31 @@ export class ResidualHeapSerializer {
     if (val.temporalAlias !== undefined) {
       return t.objectExpression(props);
     } else {
-      for (let [key, propertyBinding] of val.properties) {
+      let instantRenderMode = this.realm.instantRender.enabled;
+      let propEntries = Array.from(val.properties.entries());
+      let lastEmbeddedIdx = -1;
+      for (let idx = 0; idx < propEntries.length; idx++) {
+        let [key, propertyBinding] = propEntries[idx];
+        if (propertyBinding.descriptor !== undefined && shouldDropAsAssignedProp(propertyBinding.descriptor)) continue;
+        if (propertyBinding.pathNode !== undefined) continue;
+        let descriptor = propertyBinding.descriptor;
+        if (descriptor === undefined || !(descriptor instanceof PropertyDescriptor) || descriptor.value === undefined)
+          continue;
+        if (this._canEmbedProperty(val, key, descriptor)) {
+          let propValue = descriptor.value;
+          invariant(propValue instanceof Value);
+          if (this.residualHeapInspector.canIgnoreProperty(val, key)) continue;
+          let mightHaveBeenDeleted = propValue.mightHaveBeenDeleted();
+          let delayReason = instantRenderMode
+            ? undefined
+            : this.emitter.getReasonToWaitForDependencies(propValue) ||
+              this.emitter.getReasonToWaitForActiveValue(val, mightHaveBeenDeleted);
+          if (!delayReason) lastEmbeddedIdx = idx;
+        }
+      }
+
+      for (let idx = 0; idx < propEntries.length; idx++) {
+        let [key, propertyBinding] = propEntries[idx];
         if (propertyBinding.descriptor !== undefined && shouldDropAsAssignedProp(propertyBinding.descriptor)) {
           remainingProperties.delete(key);
           continue;
@@ -1797,8 +1874,6 @@ export class ResidualHeapSerializer {
           if (this.residualHeapInspector.canIgnoreProperty(val, key)) continue;
           let mightHaveBeenDeleted = propValue.mightHaveBeenDeleted();
 
-          let instantRenderMode = this.realm.instantRender.enabled;
-
           let delayReason;
           if (instantRenderMode) {
             if (this.emitter.getReasonToWaitForDependencies(propValue)) {
@@ -1814,20 +1889,24 @@ export class ResidualHeapSerializer {
               this.emitter.getReasonToWaitForActiveValue(val, mightHaveBeenDeleted);
           }
 
-          // Although the property needs to be delayed, we still want to emit dummy "undefined"
-          // value as part of the object literal to ensure a consistent property ordering.
-          let serializedValue = !instantRenderMode ? voidExpression : emptyExpression;
           if (delayReason) {
-            // May need to be cleaned up later.
-            dummyProperties.add(key);
+            // Only emit a dummy property if a later property is embedded in the literal
+            // (so property enumeration order is preserved).
+            if (idx < lastEmbeddedIdx) {
+              let serializedValue = !instantRenderMode ? voidExpression : emptyExpression;
+              dummyProperties.add(key);
+              props.push(t.objectProperty(serializedKey, serializedValue));
+            }
           } else {
             remainingProperties.delete(key);
-            serializedValue = this.serializeValue(propValue);
+            let serializedValue = this.serializeValue(propValue);
+            props.push(t.objectProperty(serializedKey, serializedValue));
           }
-          props.push(t.objectProperty(serializedKey, serializedValue));
         } else if (descriptor.value instanceof Value && descriptor.value.mightHaveBeenDeleted()) {
-          dummyProperties.add(key);
-          props.push(t.objectProperty(serializedKey, voidExpression));
+          if (idx < lastEmbeddedIdx) {
+            dummyProperties.add(key);
+            props.push(t.objectProperty(serializedKey, voidExpression));
+          }
         }
       }
     }
@@ -1841,6 +1920,90 @@ export class ResidualHeapSerializer {
     );
 
     return t.objectExpression(props);
+  }
+
+  _serializeValueNativeError(val: ObjectValue, ctorName: string): BabelNodeExpression {
+    let remainingProperties = new Map(val.properties);
+    let args = [];
+    let msgBinding = remainingProperties.get("message");
+    let targetDescriptor = this.residualHeapInspector.getTargetIntegrityDescriptor(val);
+    if (msgBinding !== undefined) {
+      let desc = msgBinding.descriptor;
+      if (desc === undefined) {
+        remainingProperties.delete("message");
+      } else if (
+        desc instanceof PropertyDescriptor &&
+        desc.writable === targetDescriptor.writable &&
+        !desc.enumerable &&
+        desc.configurable === targetDescriptor.configurable &&
+        desc.get === undefined &&
+        desc.set === undefined &&
+        desc.value !== undefined
+      ) {
+        let msgVal = desc.value;
+        if (
+          (msgVal instanceof StringValue || (msgVal instanceof AbstractValue && msgVal.getType() === StringValue)) &&
+          !this.emitter.getReasonToWaitForDependencies(msgVal) &&
+          !this.emitter.getReasonToWaitForActiveValue(val, false)
+        ) {
+          args = [this.serializeValue(msgVal)];
+          remainingProperties.delete("message");
+        }
+      }
+    }
+    this._emitObjectProperties(
+      val,
+      remainingProperties,
+      /*objectPrototypeAlreadyEstablished*/ true,
+      undefined,
+      /*skipPrototype*/ true
+    );
+    return t.newExpression(this.preludeGenerator.memoizeReference(ctorName), args);
+  }
+
+  _serializeStringValue(str: string): BabelNodeExpression {
+    if (
+      str.length < 24 ||
+      this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) ||
+      this.realm.isCompatibleWith("mobile")
+    ) {
+      return t.stringLiteral(str);
+    }
+    let repeatProp = this.realm.intrinsics.StringPrototype.properties.get("repeat");
+    let repeatDesc = repeatProp && repeatProp.descriptor;
+    if (!(repeatDesc instanceof PropertyDescriptor) || !(repeatDesc.value instanceof NativeFunctionValue)) {
+      return t.stringLiteral(str);
+    }
+    let parts = [];
+    let savedChars = 0;
+    let literalStart = 0;
+    let i = 0;
+    while (i < str.length) {
+      let ch = str[i];
+      let j = i + 1;
+      while (j < str.length && str[j] === ch) j++;
+      let runLen = j - i;
+      if (runLen >= 24) {
+        if (i > literalStart) {
+          parts.push(t.stringLiteral(str.slice(literalStart, i)));
+        }
+        parts.push(
+          t.callExpression(t.memberExpression(t.stringLiteral(ch), t.identifier("repeat")), [t.numericLiteral(runLen)])
+        );
+        savedChars += runLen - 16;
+        literalStart = j;
+      }
+      i = j;
+    }
+    if (parts.length === 0 || savedChars < 16) return t.stringLiteral(str);
+    if (literalStart < str.length) {
+      parts.push(t.stringLiteral(str.slice(literalStart)));
+    }
+    let expr = parts[0];
+    for (let k = 1; k < parts.length; k++) {
+      expr = t.binaryExpression("+", expr, parts[k]);
+    }
+    return expr;
   }
 
   _serializeValueObjectViaConstructor(
@@ -1969,6 +2132,11 @@ export class ResidualHeapSerializer {
       default:
         invariant(kind === "Object", "invariant established by visitor");
 
+        let errorCtor = getNativeErrorConstructorName(this.realm, val);
+        if (errorCtor !== undefined) {
+          return this._serializeValueNativeError(val, errorCtor);
+        }
+
         let proto = val.$Prototype;
         let { skipPrototype, constructor: _constructor } = getObjectPrototypeMetadata(this.realm, val);
         let createViaAuxiliaryConstructor =
@@ -2085,6 +2253,8 @@ export class ResidualHeapSerializer {
       return this._serializeEmptyValue();
     } else if (val instanceof UndefinedValue) {
       return voidExpression;
+    } else if (val instanceof StringValue) {
+      return this._serializeStringValue(val.value);
     } else if (HeapInspector.isLeaf(val)) {
       return t.valueToNode(val.serialize());
     } else if (val instanceof ObjectValue) {
@@ -2304,6 +2474,13 @@ export class ResidualHeapSerializer {
           return !this.referencedDeclaredValues.has(temporalAlias) && !this.residualValues.has(temporalAlias);
         }
         return canOmit;
+      },
+      isReferenced: (value: Value) => {
+        if (this.residualValues.has(value)) return true;
+        if (value instanceof ObjectValue && value.temporalAlias !== undefined) {
+          return this.residualValues.has(value.temporalAlias);
+        }
+        return false;
       },
       declare: (value: AbstractValue | ObjectValue) => {
         this.emitter.declare(value);
@@ -2575,6 +2752,10 @@ export class ResidualHeapSerializer {
       } else {
         Array.prototype.push.apply(ast_body, body);
       }
+    }
+
+    for (let ignoredVal of this._ignoredSerializedValues) {
+      if (this.residualValues.has(ignoredVal)) this.serializedValues.add(ignoredVal);
     }
 
     // Make sure that the visitor visited exactly the same values as the serializer
