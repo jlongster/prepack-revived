@@ -61,10 +61,11 @@ function joinTryBlockWithHandlers(
     // then we might need it to know whether we should bother tracking error handling.
     realm.isInPureTryStatement = true;
   }
-  let blockRes = env.evaluateCompletionDeref(ast.block, strictCode);
-  // this is a join point for break and continue completions
-  blockRes = Functions.incorporateSavedCompletion(realm, blockRes);
-  invariant(blockRes !== undefined);
+  // The end of the try block is a join point for the (conditional) abrupt completions that arise inside it.
+  // Abrupt completions saved before the try statement was reached must not be seen by the handler.
+  let blockRes = realm.evaluateCompletionInSavedCompletionScope(() =>
+    env.evaluateCompletionDeref(ast.block, strictCode)
+  );
   realm.isInPureTryStatement = savedIsInPureTryStatement;
 
   let result = blockRes;
@@ -72,7 +73,10 @@ function joinTryBlockWithHandlers(
   let selector = c => c instanceof ThrowCompletion;
   if (handler && blockRes instanceof Completion && blockRes.containsSelectedCompletion(selector)) {
     if (blockRes instanceof ThrowCompletion) {
-      result = env.evaluateCompletionDeref(handler, strictCode, blockRes);
+      // The finalizer (if any) must also run on the abrupt paths of the handler, so join them here.
+      result = realm.evaluateCompletionInSavedCompletionScope(() =>
+        env.evaluateCompletionDeref(handler, strictCode, blockRes)
+      );
     } else {
       invariant(blockRes instanceof JoinedAbruptCompletions || blockRes instanceof JoinedNormalAndAbruptCompletions);
       // put the handler under a guard that excludes normal paths from entering it.

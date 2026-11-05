@@ -1223,6 +1223,38 @@ export class Realm {
     }
   }
 
+  // Evaluates f with an empty saved completion and then incorporates whatever conditional abrupt completions
+  // f saved, so that a join point (the end of a labeled statement, a try block, ...) only joins the completions
+  // that arose inside it. Completions saved before f started (e.g. a throw that precedes a try statement) must
+  // not be seen by the join point. The outer saved completion is restored before returning, so the caller
+  // must compose the result with it, e.g. via returnOrThrowCompletion.
+  evaluateCompletionInSavedCompletionScope(f: () => Completion | Value): Completion | Value {
+    let priorSavedCompletion = this.savedCompletion;
+    this.savedCompletion = undefined;
+    let c;
+    try {
+      try {
+        c = f();
+      } catch (e) {
+        if (!(e instanceof AbruptCompletion)) throw e;
+        c = e;
+      }
+      c = Functions.incorporateSavedCompletion(this, c);
+      invariant(c !== undefined);
+    } catch (e) {
+      // Keep the prior saved completions reachable, so that an enclosing evaluateForEffects can undo their effects.
+      if (this.savedCompletion === undefined) this.savedCompletion = priorSavedCompletion;
+      else {
+        let last = this.savedCompletion;
+        while (last.composedWith !== undefined) last = last.composedWith;
+        last.composedWith = priorSavedCompletion;
+      }
+      throw e;
+    }
+    this.savedCompletion = priorSavedCompletion;
+    return c;
+  }
+
   pushPathConditionsLeadingToNormalCompletions(completion: Completion): void {
     let realm = this;
     let bottomValue = realm.intrinsics.__bottomValue;
