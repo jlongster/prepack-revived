@@ -11,3 +11,4 @@
 
 export { default as TypesDomain } from "./TypesDomain.js";
 export { default as ValuesDomain } from "./ValuesDomain.js";
+export { default as IntervalDomain } from "./IntervalDomain.js";

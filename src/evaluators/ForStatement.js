@@ -11,7 +11,7 @@
 
 import type { LexicalEnvironment } from "../environment.js";
 import { Effects, Realm } from "../realm.js";
-import { Value, EmptyValue, type UndefinedValue } from "../values/index.js";
+import { AbstractValue, NumberValue, Value, EmptyValue, type UndefinedValue } from "../values/index.js";
 import {
   AbruptCompletion,
   BreakCompletion,
@@ -23,6 +23,8 @@ import {
   ThrowCompletion,
   SimpleNormalCompletion,
 } from "../completions.js";
+import { IntervalDomain } from "../domains/index.js";
+import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { UpdateEmpty } from "../methods/index.js";
 import { LoopContinues, InternalGetResultValue } from "./ForOfStatement.js";
@@ -64,6 +66,37 @@ export function CreatePerIterationEnvironment(realm: Realm, perIterationBindings
   return realm.intrinsics.undefined;
 }
 
+// If a loop test compares a concrete number against an abstract number whose range has only a few
+// integer values (e.g. a clamped bound in [0, 3]), return that bound and its possible values.
+function findSmallEnumerableLoopBound(testValue: AbstractValue): void | [AbstractValue, Array<NumberValue>] {
+  let op = testValue.kind;
+  if (
+    op !== "<" &&
+    op !== "<=" &&
+    op !== ">" &&
+    op !== ">=" &&
+    op !== "!==" &&
+    op !== "!=" &&
+    op !== "===" &&
+    op !== "=="
+  ) {
+    return undefined;
+  }
+  if (testValue.args.length !== 2) return undefined;
+  let [x, y] = testValue.args;
+  let bound =
+    x instanceof NumberValue && y instanceof AbstractValue
+      ? y
+      : y instanceof NumberValue && x instanceof AbstractValue
+      ? x
+      : undefined;
+  if (bound === undefined) return undefined;
+  let nums = IntervalDomain.enumerate(bound, MAX_KEY_CASES, true);
+  if (nums === undefined || nums.length <= 1) return undefined;
+  let realm = bound.$Realm;
+  return [bound, nums.map(n => new NumberValue(realm, n))];
+}
+
 // ECMA262 13.7.4.8
 function ForBodyEvaluation(
   realm: Realm,
@@ -72,13 +105,16 @@ function ForBodyEvaluation(
   stmt,
   perIterationBindings: Array<string>,
   labelSet: ?Array<string>,
-  strictCode: boolean
+  strictCode: boolean,
+  initialV?: Value,
+  initialTestValue?: Value
 ): Value {
   // 1. Let V be undefined.
-  let V: Value = realm.intrinsics.undefined;
+  let V: Value = initialV !== undefined ? initialV : realm.intrinsics.undefined;
+  let pendingTestValue: void | Value = initialTestValue;
 
   // 2. Perform ? CreatePerIterationEnvironment(perIterationBindings).
-  CreatePerIterationEnvironment(realm, perIterationBindings);
+  if (pendingTestValue === undefined) CreatePerIterationEnvironment(realm, perIterationBindings);
   let env = realm.getRunningContext().lexicalEnvironment;
   let possibleInfiniteLoopIterations = 0;
 
@@ -87,11 +123,34 @@ function ForBodyEvaluation(
     let result;
     // a. If test is not [empty], then
     if (test) {
-      // i. Let testRef be the result of evaluating test.
-      let testRef = env.evaluate(test, strictCode);
+      let testValue;
+      if (pendingTestValue !== undefined) {
+        testValue =
+          pendingTestValue instanceof AbstractValue
+            ? realm.simplifyAndRefineAbstractCondition(pendingTestValue)
+            : pendingTestValue;
+        pendingTestValue = undefined;
+      } else {
+        // i. Let testRef be the result of evaluating test.
+        let testRef = env.evaluate(test, strictCode);
 
-      // ii. Let testValue be ? GetValue(testRef).
-      let testValue = Environment.GetValue(realm, testRef);
+        // ii. Let testValue be ? GetValue(testRef).
+        testValue = Environment.GetValue(realm, testRef);
+
+        if (
+          testValue instanceof AbstractValue &&
+          perIterationBindings.length === 0 &&
+          realm.savedCompletion === undefined
+        ) {
+          let bound = findSmallEnumerableLoopBound(testValue);
+          if (bound !== undefined) {
+            let [boundVal, cases] = bound;
+            return mapCases(realm, boundVal, cases, () =>
+              ForBodyEvaluation(realm, test, increment, stmt, perIterationBindings, labelSet, strictCode, V, testValue)
+            );
+          }
+        }
+      }
 
       // iii. If ToBoolean(testValue) is false, return NormalCompletion(V).
       if (!To.ToBooleanPartial(realm, testValue)) {

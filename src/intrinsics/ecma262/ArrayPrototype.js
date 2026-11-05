@@ -11,17 +11,21 @@
 
 import type { Realm } from "../../realm.js";
 import {
+  AbstractObjectValue,
   AbstractValue,
   ArrayValue,
   BooleanValue,
   BoundFunctionValue,
   ConcreteValue,
   ECMAScriptSourceFunctionValue,
+  EmptyValue,
   NativeFunctionValue,
   NullValue,
   NumberValue,
   ObjectValue,
+  PrimitiveValue,
   StringValue,
+  SymbolValue,
   UndefinedValue,
   Value,
 } from "../../values/index.js";
@@ -40,9 +44,40 @@ import {
   HasSomeCompatibleType,
 } from "../../methods/index.js";
 import { Create, Join, Leak, Properties, To } from "../../singletons.js";
+import { PropertyDescriptor } from "../../descriptors.js";
 import { createOperationDescriptor } from "../../utils/generator.js";
+import { IntervalDomain } from "../../domains/index.js";
+import { mapCases } from "../../utils/cases.js";
+
+// The maximum number of distinct values an abstract array length may have for array methods to
+// evaluate once per possible length and join the results.
+const MAX_LENGTH_CASES = 8;
 
 export default function(realm: Realm, obj: ObjectValue): void {
+  // Defines an array method that also works on arrays whose length is abstract, but known to be
+  // one of a few numbers: the method is evaluated once per possible length, under the path
+  // condition that the length has that value (which To.ToLength picks up), and the effects and
+  // results are joined.
+  function defineArrayMethod(
+    name: string,
+    length: number,
+    callback: (context: Value, args: Array<Value>, argCount: number) => Value
+  ): void {
+    obj.defineNativeMethod(name, length, (context, args, argCount) => {
+      if (context instanceof ArrayValue && !ArrayValue.isIntrinsicAndHasWidenedNumericProperty(context)) {
+        let lenVal = Get(realm, context, "length");
+        if (lenVal instanceof AbstractValue) {
+          let lengths = IntervalDomain.enumerate(lenVal, MAX_LENGTH_CASES, true);
+          if (lengths !== undefined && lengths.length > 1)
+            return mapCases(realm, lenVal, lengths.map(n => new NumberValue(realm, n)), () =>
+              callback(context, args.slice(), argCount)
+            );
+        }
+      }
+      return callback(context, args, argCount);
+    });
+  }
+
   // ECMA262 22.1.3.31
   obj.defineNativeProperty(realm.intrinsics.SymbolIterator, realm.intrinsics.ArrayProto_values);
 
@@ -50,7 +85,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   obj.defineNativeProperty("length", realm.intrinsics.zero);
 
   // ECMA262 22.1.3.1
-  obj.defineNativeMethod("concat", 1, (context, args, argCount) => {
+  defineArrayMethod("concat", 1, (context, args, argCount) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -147,7 +182,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
   // ECMA262 22.1.3.3
   if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile"))
-    obj.defineNativeMethod("copyWithin", 2, (context, [target, start, end]) => {
+    defineArrayMethod("copyWithin", 2, (context, [target, start, end]) => {
       // 1. Let O be ? ToObject(this value).
       let O = To.ToObject(realm, context);
 
@@ -279,7 +314,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.5
-  obj.defineNativeMethod("every", 1, (context, [callbackfn, thisArg]) => {
+  defineArrayMethod("every", 1, (context, [callbackfn, thisArg]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -348,7 +383,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.6
-  obj.defineNativeMethod("fill", 1, (context, [value, start, end]) => {
+  defineArrayMethod("fill", 1, (context, [value, start, end]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -408,7 +443,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.7
-  obj.defineNativeMethod("filter", 1, (context, [callbackfn, thisArg]) => {
+  defineArrayMethod("filter", 1, (context, [callbackfn, thisArg]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -500,7 +535,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.8
-  obj.defineNativeMethod("find", 1, (context, [predicate, thisArg]) => {
+  defineArrayMethod("find", 1, (context, [predicate, thisArg]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -563,7 +598,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.9
-  obj.defineNativeMethod("findIndex", 1, (context, [predicate, thisArg]) => {
+  defineArrayMethod("findIndex", 1, (context, [predicate, thisArg]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -626,7 +661,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.10
-  obj.defineNativeMethod("forEach", 1, (context, [callbackfn, thisArg]) => {
+  defineArrayMethod("forEach", 1, (context, [callbackfn, thisArg]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -694,7 +729,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
   // ECMA262 22.1.3.11
   if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile"))
-    obj.defineNativeMethod("includes", 1, (context, [searchElement, fromIndex]) => {
+    defineArrayMethod("includes", 1, (context, [searchElement, fromIndex]) => {
       // 1. Let O be ? ToObject(this value).
       let O = To.ToObject(realm, context);
 
@@ -741,9 +776,29 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }
 
       // 7. Repeat, while k < len
+      let disjunction: void | Value;
       while (k < len) {
         // a. Let elementK be the result of ? Get(O, ! ToString(k)).
         let elementK = Get(realm, O, To.ToString(realm, new NumberValue(realm, k)));
+
+        if (searchElement instanceof AbstractValue || elementK instanceof AbstractValue) {
+          let promoted = promoteEmptyElement(elementK);
+          if (promoted !== undefined) {
+            let same = sameValueZeroAbstract(searchElement, promoted);
+            if (!same.mightNotBeTrue()) return realm.intrinsics.true;
+            if (!same.mightNotBeFalse()) {
+              k = k + 1;
+              continue;
+            }
+            if (hasPureIndexedAccesses(O, k + 1, len)) {
+              disjunction =
+                disjunction === undefined ? same : AbstractValue.createFromLogicalOp(realm, "||", disjunction, same);
+              if (!disjunction.mightNotBeTrue()) return realm.intrinsics.true;
+              k = k + 1;
+              continue;
+            }
+          }
+        }
 
         // b. If SameValueZero(searchElement, elementK) is true, return true.
         if (SameValueZeroPartial(realm, searchElement, elementK) === true) return realm.intrinsics.true;
@@ -753,11 +808,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }
 
       // 8. Return false.
-      return realm.intrinsics.false;
+      return disjunction !== undefined ? disjunction : realm.intrinsics.false;
     });
 
   // ECMA262 22.1.3.12
-  obj.defineNativeMethod("indexOf", 1, (context, [searchElement, fromIndex]) => {
+  defineArrayMethod("indexOf", 1, (context, [searchElement, fromIndex]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -808,32 +863,203 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 8. Repeat, while k < len
+    let pendingMatches: Array<[number, Value]> = [];
+    let tailResult: Value = new NumberValue(realm, -1);
     while (k < len) {
+      let key = k + "";
+      if (
+        O instanceof ArrayValue &&
+        O.$TypedArrayName === undefined &&
+        !O.isPartialObject() &&
+        !O.mightBeLeakedObject() &&
+        O.unknownProperty === undefined &&
+        O.$Prototype === realm.intrinsics.ArrayPrototype &&
+        realm.intrinsics.ArrayPrototype.properties.get(key) === undefined &&
+        realm.intrinsics.ObjectPrototype.properties.get(key) === undefined
+      ) {
+        let binding = O.properties.get(key);
+        if (binding === undefined || binding.descriptor === undefined) {
+          k++;
+          continue;
+        }
+        if (binding.descriptor instanceof PropertyDescriptor && binding.descriptor.value instanceof Value) {
+          let rawVal = binding.descriptor.value;
+          if (rawVal instanceof AbstractValue || searchElement instanceof AbstractValue) {
+            let present = elementPresenceCondition(rawVal, { nodes: 32 }, new Map());
+            let promoted = promoteEmptyElement(rawVal);
+            if (present !== undefined && promoted !== undefined) {
+              let eq = AbstractValue.createFromBinaryOp(realm, "===", searchElement, promoted);
+              let match = !present.mightNotBeTrue()
+                ? eq
+                : !present.mightNotBeFalse()
+                ? realm.intrinsics.false
+                : !searchElement.mightBeUndefined()
+                ? eq
+                : AbstractValue.createFromLogicalOp(realm, "&&", present, eq);
+              if (!match.mightNotBeFalse()) {
+                k++;
+                continue;
+              }
+              if (!match.mightNotBeTrue()) {
+                tailResult = new NumberValue(realm, k);
+                break;
+              }
+              if (hasPureIndexedAccesses(O, k + 1, len)) {
+                pendingMatches.push([k, match]);
+                k++;
+                continue;
+              }
+            }
+          }
+        }
+      }
+
       // a. Let kPresent be ? HasProperty(O, ! ToString(k)).
-      let kPresent = HasProperty(realm, O, k + "");
+      let kPresent = HasProperty(realm, O, key);
 
       // b. If kPresent is true, then
       if (kPresent === true) {
         // i. Let elementK be ? Get(O, ! ToString(k)).
-        let elementK = Get(realm, O, k + "");
+        let elementK = Get(realm, O, key);
 
         // ii. Let same be the result of performing Strict Equality Comparison searchElement === elementK.
         let same = StrictEqualityComparisonPartial(realm, searchElement, elementK);
 
         // iii. If same is true, return k.
-        if (same) return new NumberValue(realm, k);
+        if (same) {
+          tailResult = new NumberValue(realm, k);
+          break;
+        }
       }
 
       // c. Increase k by 1.
       k++;
     }
 
-    // 9. Return -1.
-    return new NumberValue(realm, -1);
+    // 9. Return -1 (or the conditional chain of earlier abstract matches).
+    for (let i = pendingMatches.length - 1; i >= 0; i--) {
+      let [idx, match] = pendingMatches[i];
+      tailResult = AbstractValue.createFromConditionalOp(realm, match, new NumberValue(realm, idx), tailResult);
+    }
+    return tailResult;
   });
 
+  function hasPureIndexedAccesses(O: ObjectValue | AbstractObjectValue, from: number, to: number): boolean {
+    if (
+      !(O instanceof ArrayValue) ||
+      O.$TypedArrayName !== undefined ||
+      O.isPartialObject() ||
+      O.mightBeLeakedObject() ||
+      O.unknownProperty !== undefined ||
+      O.$Prototype !== realm.intrinsics.ArrayPrototype ||
+      to - from > 64
+    ) {
+      return false;
+    }
+    for (let j = from; j < to; j++) {
+      let key = j + "";
+      if (
+        realm.intrinsics.ArrayPrototype.properties.get(key) !== undefined ||
+        realm.intrinsics.ObjectPrototype.properties.get(key) !== undefined
+      ) {
+        return false;
+      }
+      let b = O.properties.get(key);
+      if (b !== undefined && b.descriptor !== undefined) {
+        if (!(b.descriptor instanceof PropertyDescriptor) || b.descriptor.value === undefined) return false;
+      }
+    }
+    return true;
+  }
+
+  function promoteEmptyElement(val: Value): void | Value {
+    if (val instanceof EmptyValue) return realm.intrinsics.undefined;
+    if (!(val instanceof AbstractValue)) return val;
+    if (!val.mightHaveBeenDeleted()) return realm.simplifyAndRefineAbstractValue(val);
+    let mapped = mapEmptyToUndefined(val, { nodes: 32 }, new Map());
+    if (mapped !== undefined)
+      return mapped instanceof AbstractValue ? realm.simplifyAndRefineAbstractValue(mapped) : mapped;
+    if (!val.values.isTop()) return val.promoteEmptyToUndefined();
+    return undefined;
+  }
+
+  function mapEmptyToUndefined(
+    val: Value,
+    budget: { nodes: number },
+    memo: Map<AbstractValue, Value | null>
+  ): void | Value {
+    if (val instanceof EmptyValue) return realm.intrinsics.undefined;
+    if (!(val instanceof AbstractValue)) return val;
+    if (!val.mightHaveBeenDeleted()) return val;
+    let cached = memo.get(val);
+    if (cached !== undefined) return cached === null ? undefined : cached;
+    if (val.kind !== "conditional" || --budget.nodes < 0) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let [c, x, y] = val.args;
+    let mx = mapEmptyToUndefined(x, budget, memo);
+    if (mx === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let my = mapEmptyToUndefined(y, budget, memo);
+    if (my === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let res = AbstractValue.createFromConditionalOp(realm, c, mx, my, val.expressionLocation);
+    memo.set(val, res);
+    return res;
+  }
+
+  function elementPresenceCondition(
+    val: Value,
+    budget: { nodes: number },
+    memo: Map<AbstractValue, Value | null>
+  ): void | Value {
+    if (val instanceof EmptyValue) return realm.intrinsics.false;
+    if (!(val instanceof AbstractValue) || !val.mightHaveBeenDeleted()) return realm.intrinsics.true;
+    let cached = memo.get(val);
+    if (cached !== undefined) return cached === null ? undefined : cached;
+    if (val.kind !== "conditional" || --budget.nodes < 0) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let [c, x, y] = val.args;
+    let px = elementPresenceCondition(x, budget, memo);
+    if (px === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let py = elementPresenceCondition(y, budget, memo);
+    if (py === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let res = AbstractValue.createFromConditionalOp(realm, c, px, py, val.expressionLocation, true);
+    memo.set(val, res);
+    return res;
+  }
+
+  function mightValueBeNaN(val: Value): boolean {
+    if (val instanceof NumberValue) return Number.isNaN(val.value);
+    if (!(val instanceof AbstractValue) || !val.mightBeNumber()) return false;
+    let r = IntervalDomain.of(val);
+    return r === undefined ? true : r.mayBeNaN;
+  }
+
+  function sameValueZeroAbstract(x: Value, y: Value): Value {
+    let eq = AbstractValue.createFromBinaryOp(realm, "===", x, y);
+    if (!mightValueBeNaN(x) || !mightValueBeNaN(y)) return eq;
+    let xNaN = AbstractValue.createFromBinaryOp(realm, "!==", x, x);
+    let yNaN = AbstractValue.createFromBinaryOp(realm, "!==", y, y);
+    let bothNaN = AbstractValue.createFromLogicalOp(realm, "&&", xNaN, yNaN);
+    return AbstractValue.createFromLogicalOp(realm, "||", eq, bothNaN);
+  }
+
   // ECMA262 22.1.3.13
-  obj.defineNativeMethod("join", 1, (context, [separator]) => {
+  defineArrayMethod("join", 1, (context, [separator]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -864,7 +1090,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
     if (!separator || separator instanceof UndefinedValue) separator = new StringValue(realm, ",");
 
     // 4. Let sep be ? ToString(separator).
-    let sep = To.ToStringPartial(realm, separator);
+    let sep = new StringValue(realm, To.ToStringPartial(realm, separator));
 
     // 5. If len is zero, return the empty String.
     if (len === 0) return realm.intrinsics.emptyString;
@@ -873,12 +1099,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
     let element0 = Get(realm, O, "0");
 
     // 7. If element0 is undefined or null, let R be the empty String; otherwise, let R be ? ToString(element0).
-    let R: ?string;
-    if (HasSomeCompatibleType(element0, UndefinedValue, NullValue)) {
-      R = "";
-    } else {
-      R = To.ToStringPartial(realm, element0);
-    }
+    let R = joinElementToString(element0);
 
     // 8. Let k be 1.
     let k = 1;
@@ -886,29 +1107,109 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 9. Repeat, while k < len
     while (k < len) {
       // a. Let S be the String value produced by concatenating R and sep.
-      let S: string = R + sep;
+      let S = concatenateStrings(R, sep);
 
       // b. Let element be ? Get(O, ! To.ToString(k)).
       let element = Get(realm, O, new StringValue(realm, k + ""));
 
       // c. If element is undefined or null, let next be the empty String; otherwise, let next be ? ToString(element).
-      let next: ?string;
-      if (HasSomeCompatibleType(element, UndefinedValue, NullValue)) {
-        next = "";
-      } else {
-        next = To.ToStringPartial(realm, element);
-      }
+      let next = joinElementToString(element);
 
       // d. Let R be a String value produced by concatenating S and next.
-      R = S + next;
+      R = concatenateStrings(S, next);
 
       // e. Increase k by 1.
       k++;
     }
 
     // 10. Return R.
-    return new StringValue(realm, R + "");
+    return R;
   });
+
+  // ToString(element), or the empty string if element is undefined or null. Abstract elements are
+  // supported if converting them to a string cannot have side effects.
+  function joinElementToString(element: Value): Value {
+    if (element instanceof AbstractValue) {
+      let folded = mapConditionalElementToString(element, { nodes: 32 }, new Map());
+      if (folded !== undefined) return folded;
+      if (isPrimitiveWithPureToString(element)) {
+        // Promote internal EmptyValue sentinels to undefined before string coercion so __empty
+        // ({}) is never coerced to "[object Object]" at runtime.
+        let promoted = element.promoteEmptyToUndefined();
+        if (!(promoted instanceof AbstractValue)) return joinElementToString(promoted);
+        let str = To.ToStringAbstract(realm, promoted);
+        if (!promoted.mightBeUndefined() && !promoted.mightBeNull()) return str;
+        let isNullOrUndefined = AbstractValue.createFromBinaryOp(realm, "==", promoted, realm.intrinsics.null);
+        return AbstractValue.createFromConditionalOp(realm, isNullOrUndefined, realm.intrinsics.emptyString, str);
+      }
+    }
+    if (HasSomeCompatibleType(element, UndefinedValue, NullValue)) return realm.intrinsics.emptyString;
+    return new StringValue(realm, To.ToStringPartial(realm, element));
+  }
+
+  function mapConditionalElementToString(
+    value: Value,
+    budget: { nodes: number },
+    memo: Map<AbstractValue, Value | null>
+  ): void | Value {
+    if (!(value instanceof AbstractValue)) {
+      if (value instanceof UndefinedValue || value instanceof NullValue) return realm.intrinsics.emptyString;
+      if (value instanceof PrimitiveValue && !(value instanceof SymbolValue))
+        return new StringValue(realm, To.ToString(realm, value));
+      return undefined;
+    }
+    let cached = memo.get(value);
+    if (cached !== undefined) return cached === null ? undefined : cached;
+    if (value.kind !== "conditional" || --budget.nodes < 0) {
+      memo.set(value, null);
+      return undefined;
+    }
+    let [c, x, y] = value.args;
+    let sx = mapConditionalElementToString(x, budget, memo);
+    if (sx === undefined) {
+      memo.set(value, null);
+      return undefined;
+    }
+    let sy = mapConditionalElementToString(y, budget, memo);
+    if (sy === undefined) {
+      memo.set(value, null);
+      return undefined;
+    }
+    let res = AbstractValue.createFromConditionalOp(realm, c, sx, sy, value.expressionLocation);
+    memo.set(value, res);
+    return res;
+  }
+
+  function isPrimitiveWithPureToString(value: AbstractValue): boolean {
+    let type = value.getType();
+    if (type === StringValue || type === BooleanValue || Value.isTypeCompatibleWith(type, NumberValue)) return true;
+    if (value.values.isTop()) return false;
+    for (let v of value.values.getElements()) {
+      if (!(v instanceof PrimitiveValue) || v instanceof SymbolValue) return false;
+    }
+    return true;
+  }
+
+  function concatenateStrings(x: Value, y: Value): Value {
+    if (x instanceof StringValue && y instanceof StringValue) return new StringValue(realm, x.value + y.value);
+    if (x instanceof StringValue && x.value === "") return y;
+    if (y instanceof StringValue && y.value === "") return x;
+    if (
+      x instanceof AbstractValue &&
+      y instanceof AbstractValue &&
+      x.kind === "conditional" &&
+      y.kind === "conditional" &&
+      x.args[0].equals(y.args[0])
+    ) {
+      return AbstractValue.createFromConditionalOp(
+        realm,
+        x.args[0],
+        concatenateStrings(x.args[1], y.args[1]),
+        concatenateStrings(x.args[2], y.args[2])
+      );
+    }
+    return AbstractValue.createFromBinaryOp(realm, "+", x, y);
+  }
 
   // ECMA262 22.1.3.14
   obj.defineNativeMethod("keys", 0, context => {
@@ -936,7 +1237,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.15
-  obj.defineNativeMethod("lastIndexOf", 1, (context, [searchElement, fromIndex]) => {
+  defineArrayMethod("lastIndexOf", 1, (context, [searchElement, fromIndex]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1105,7 +1406,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.17
-  obj.defineNativeMethod("pop", 0, context => {
+  defineArrayMethod("pop", 0, context => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1159,6 +1460,123 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
   // ECMA262 22.1.3.18
   obj.defineNativeMethod("push", 1, (context, args, argCount) => {
+    let items = argCount > 0 ? args.slice(0, argCount) : [];
+    let direct = tryPushOnBoundedAbstractLengthArray(context, items);
+    if (direct !== undefined) return direct;
+    if (context instanceof ArrayValue && !ArrayValue.isIntrinsicAndHasWidenedNumericProperty(context)) {
+      let lenVal = Get(realm, context, "length");
+      if (lenVal instanceof AbstractValue) {
+        let lengths = IntervalDomain.enumerate(lenVal, MAX_LENGTH_CASES, true);
+        if (lengths !== undefined && lengths.length > 1)
+          return mapCases(realm, lenVal, lengths.map(n => new NumberValue(realm, n)), () =>
+            pushConcrete(context, args.slice(), argCount)
+          );
+      }
+    }
+    return pushConcrete(context, args, argCount);
+  });
+
+  function tryPushOnBoundedAbstractLengthArray(context: Value, items: Array<Value>): void | Value {
+    if (
+      !(context instanceof ArrayValue) ||
+      context.$TypedArrayName !== undefined ||
+      ArrayValue.isIntrinsicAndHasWidenedNumericProperty(context) ||
+      context.isPartialObject() ||
+      context.mightBeLeakedObject() ||
+      context.unknownProperty !== undefined ||
+      !(context.$Extensible instanceof BooleanValue) ||
+      !context.$Extensible.value ||
+      context.$Prototype !== realm.intrinsics.ArrayPrototype
+    ) {
+      return undefined;
+    }
+    let lenDesc = Properties.OrdinaryGetOwnProperty(realm, context, "length");
+    if (
+      !(lenDesc instanceof PropertyDescriptor) ||
+      lenDesc.writable !== true ||
+      !(lenDesc.value instanceof AbstractValue)
+    )
+      return undefined;
+    let oldLen = lenDesc.value;
+    let range = IntervalDomain.of(oldLen);
+    if (
+      range === undefined ||
+      !range.integral ||
+      range.mayBeNaN ||
+      range.lo < 0 ||
+      range.lo === range.hi ||
+      range.hi + items.length > 4294967295
+    ) {
+      return undefined;
+    }
+    if (items.length === 0) return oldLen;
+    if (range.hi - range.lo >= MAX_LENGTH_CASES) return undefined;
+
+    let endIdx = range.hi + items.length - 1;
+    for (let idx = range.lo; idx <= endIdx; idx++) {
+      let key = idx + "";
+      if (
+        realm.intrinsics.ArrayPrototype.properties.get(key) !== undefined ||
+        realm.intrinsics.ObjectPrototype.properties.get(key) !== undefined
+      ) {
+        return undefined;
+      }
+      let binding = context.properties.get(key);
+      if (binding !== undefined && binding.descriptor !== undefined) {
+        let d = binding.descriptor;
+        if (
+          !(d instanceof PropertyDescriptor) ||
+          d.writable !== true ||
+          d.enumerable !== true ||
+          d.configurable !== true ||
+          d.value === undefined
+        ) {
+          return undefined;
+        }
+      }
+    }
+
+    for (let idx = range.lo; idx <= endIdx; idx++) {
+      let key = idx + "";
+      let binding = context.properties.get(key);
+      let prevVal =
+        binding !== undefined &&
+        binding.descriptor instanceof PropertyDescriptor &&
+        binding.descriptor.value instanceof Value
+          ? binding.descriptor.value
+          : realm.intrinsics.empty;
+      let val = prevVal;
+      for (let j = 0; j < items.length; j++) {
+        let neededLen = idx - j;
+        if (neededLen >= range.lo && neededLen <= range.hi) {
+          let cond = AbstractValue.createFromBinaryOp(realm, "===", oldLen, new NumberValue(realm, neededLen));
+          val = AbstractValue.createFromConditionalOp(realm, cond, items[j], val);
+        }
+      }
+      Properties.OrdinaryDefineOwnProperty(
+        realm,
+        context,
+        key,
+        new PropertyDescriptor({ value: val, writable: true, enumerable: true, configurable: true })
+      );
+    }
+
+    let newLen = AbstractValue.createFromBinaryOp(realm, "+", oldLen, new NumberValue(realm, items.length));
+    Properties.OrdinaryDefineOwnProperty(
+      realm,
+      context,
+      "length",
+      new PropertyDescriptor({
+        value: newLen,
+        writable: true,
+        enumerable: lenDesc.enumerable,
+        configurable: lenDesc.configurable,
+      })
+    );
+    return newLen;
+  }
+
+  function pushConcrete(context: Value, args: Array<Value>, argCount: number): Value {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1209,10 +1627,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 8. Return len.
     return new NumberValue(realm, len);
-  });
+  }
 
   // ECMA262 22.1.3.19
-  obj.defineNativeMethod("reduce", 1, (context, [callbackfn, initialValue]) => {
+  defineArrayMethod("reduce", 1, (context, [callbackfn, initialValue]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1321,7 +1739,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.20
-  obj.defineNativeMethod("reduceRight", 1, (context, [callbackfn, initialValue]) => {
+  defineArrayMethod("reduceRight", 1, (context, [callbackfn, initialValue]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1428,7 +1846,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.21
-  obj.defineNativeMethod("reverse", 0, context => {
+  defineArrayMethod("reverse", 0, context => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1531,7 +1949,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.22
-  obj.defineNativeMethod("shift", 0, context => {
+  defineArrayMethod("shift", 0, context => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1567,7 +1985,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
     let first = Get(realm, O, "0");
 
     // 5. Let k be 1.
-    let k = 0;
+    let k = 1;
 
     // 6. Repeat, while k < len
     while (k < len) {
@@ -1608,7 +2026,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.23
-  obj.defineNativeMethod("slice", 2, (context, [start, end]) => {
+  defineArrayMethod("slice", 2, (context, [start, end]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1681,7 +2099,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.24
-  obj.defineNativeMethod("some", 1, (context, [callbackfn, thisArg]) => {
+  defineArrayMethod("some", 1, (context, [callbackfn, thisArg]) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -1940,7 +2358,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 22.1.3.26
-  obj.defineNativeMethod("splice", 2, (context, [start, deleteCount, ...items], argLength) => {
+  defineArrayMethod("splice", 2, (context, [start, deleteCount, ...items], argLength) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -2228,7 +2646,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   obj.defineNativeProperty("toString", realm.intrinsics.ArrayProto_toString);
 
   // ECMA262 22.1.3.29
-  obj.defineNativeMethod("unshift", 1, (context, items, argCount) => {
+  defineArrayMethod("unshift", 1, (context, items, argCount) => {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
@@ -2243,7 +2661,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
       return AbstractValue.createTemporalFromBuildFunction(
         realm,
         NumberValue,
-        [O, new StringValue(realm, "unshift")],
+        [O, new StringValue(realm, "unshift"), ...items.slice(0, argCount)],
         createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
       );
     }

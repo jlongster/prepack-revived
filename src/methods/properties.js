@@ -50,7 +50,11 @@ import type { LexicalEnvironment } from "../environment.js";
 import { Create, Environment, Functions, Leak, Join, Path, To } from "../singletons.js";
 import IsStrict from "../utils/strict.js";
 import { createOperationDescriptor } from "../utils/generator.js";
-import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
+import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
+
+// The maximum number of elements that may be deleted when truncating an array with an abstract length.
+const MAX_ABSTRACT_LENGTH_TRUNCATION = 1000;
 import { cloneDescriptor, equalDescriptors, PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js";
 
 function StringKey(key: PropertyKeyValue): string {
@@ -483,6 +487,22 @@ export class PropertiesImplementation {
     Receiver: Value
   ): boolean {
     if (!(P instanceof AbstractValue)) return O.$Set(P, V, Receiver);
+
+    // If the key can only be one of a few strings or numbers, write each of them under the
+    // condition that the key has that value.
+    if (O.unknownProperty === undefined && !O.isPartialObject()) {
+      let keys = IntervalDomain.enumeratePropertyKeys(P, MAX_KEY_CASES);
+      if (keys !== undefined) {
+        let succeeded = mapCases(
+          realm,
+          P,
+          keys,
+          k => new BooleanValue(realm, O.$Set(To.ToString(realm, k), V, Receiver))
+        ).throwIfNotConcrete();
+        invariant(succeeded instanceof BooleanValue);
+        return succeeded.value;
+      }
+    }
     let pIsLoopVar = isWidenedValue(P);
     let pIsNumeric = Value.isTypeCompatibleWith(P.getType(), NumberValue);
 
@@ -1354,6 +1374,21 @@ export class PropertiesImplementation {
     // 9. Let oldLen be oldLenDesc.[[Value]].
     let oldLen = oldLenDesc.value;
     invariant(oldLen instanceof Value);
+    if (oldLen instanceof AbstractValue) {
+      // If the old length is abstract but bounded, run the algorithm with its upper bound.
+      // The only difference is that the truncation loop below also deletes elements at indices
+      // at or beyond the actual old length, which do not exist, so these deletes are no-ops.
+      let range = IntervalDomain.of(oldLen);
+      if (
+        range !== undefined &&
+        range.integral &&
+        !range.mayBeNaN &&
+        range.lo >= 0 &&
+        oldLenDesc.writable === true &&
+        range.hi - newLen <= MAX_ABSTRACT_LENGTH_TRUNCATION
+      )
+        oldLen = new NumberValue(realm, range.hi);
+    }
     oldLen = oldLen.throwIfNotConcrete();
     invariant(oldLen instanceof NumberValue, "should be a number");
     oldLen = (oldLen.value: number);

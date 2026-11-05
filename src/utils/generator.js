@@ -36,7 +36,7 @@ import {
   Value,
 } from "../values/index.js";
 import { CompilerDiagnostic } from "../errors.js";
-import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
 import invariant from "../invariant.js";
 import { JoinedNormalAndAbruptCompletions, SimpleNormalCompletion, ThrowCompletion } from "../completions.js";
 import type {
@@ -1137,6 +1137,7 @@ export class Generator {
       options
     );
     res.intrinsicName = id;
+    IntervalDomain.noteDerivation(res, args, operationDescriptor);
     this._addDerivedEntry({
       isPure: optionalArgs ? optionalArgs.isPure : undefined,
       declared: res,

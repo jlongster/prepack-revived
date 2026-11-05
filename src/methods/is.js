@@ -196,6 +196,9 @@ export function IsPropertyKey(realm: Realm, arg: string | Value): boolean {
 
 // ECMA262 7.2.2
 export function IsArray(realm: Realm, argument: Value): boolean {
+  if (argument instanceof AbstractValue) {
+    argument = realm.simplifyAndRefineAbstractValue(argument);
+  }
   // 1. If Type(argument) is not Object, return false.
   if (!argument.mightBeObject()) return false;
 
@@ -217,7 +220,21 @@ export function IsArray(realm: Realm, argument: Value): boolean {
   }
 
   // 4. Return false.
-  if (argument instanceof AbstractValue && !argument.isSimpleObject()) argument.throwIfNotConcrete();
+  if (argument instanceof AbstractValue) {
+    if (argument.getType() === ArrayValue) return true;
+    if (!argument.values.isTop()) {
+      let anyArray = false;
+      let allArray = true;
+      for (let elem of argument.values.getElements()) {
+        if (IsArray(realm, elem)) anyArray = true;
+        else allArray = false;
+      }
+      if (anyArray && allArray) return true;
+      if (anyArray) argument.throwIfNotConcrete();
+    } else if (!argument.isSimpleObject() || Value.isTypeCompatibleWith(ArrayValue, argument.getType())) {
+      argument.throwIfNotConcrete();
+    }
+  }
   return false;
 }
 
