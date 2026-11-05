@@ -149,8 +149,19 @@ export function evaluateGeneratorCall(
     failGeneratorOp(realm, "Calling a generator method using super during initialization is not supported");
   }
 
+  let factorySrc;
+  try {
+    // The lowering needs regenerator-runtime and Babel's ES2015 transform plugins at Prepack runtime.
+    getRegeneratorRuntimeSource();
+    factorySrc = getLoweredGeneratorFactorySource(F);
+  } catch (e) {
+    if (e instanceof FatalError) throw e;
+    throw failGeneratorOp(
+      realm,
+      "Calling a generator function during initialization requires the regenerator lowering: " + e.message
+    );
+  }
   let runtimeObj = getOrCreateRealmRegeneratorRuntime(realm);
-  let factorySrc = getLoweredGeneratorFactorySource(F);
   let factoryAst;
   try {
     factoryAst = parse(realm, factorySrc, "lowered-generator");

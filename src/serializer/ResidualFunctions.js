@@ -1349,8 +1349,18 @@ export class ResidualFunctions {
       }
     }
     let visitedBodyInstances = new Set();
+    const extendsClass = (sub: FunctionValue, base: FunctionValue): boolean => {
+      let seen = new Set();
+      for (let p = sub.$Prototype; p instanceof FunctionValue && !seen.has(p); p = p.$Prototype) {
+        if (p === base) return true;
+        seen.add(p);
+      }
+      return false;
+    };
     const visitSameIndexDep = (depVal: Value, ownerFv: FunctionValue, ip: BodyReference): void => {
       if (!(depVal instanceof FunctionValue) || depVal === ownerFv) return;
+      // A subclass must come after its base; lazy references from the base's code to the subclass don't need ordering.
+      if (extendsClass(depVal, ownerFv)) return;
       let depInst = this.residualFunctionInstances.get(depVal);
       if (
         depInst !== undefined &&
@@ -1390,31 +1400,26 @@ export class ResidualFunctions {
     for (let instance of this.functionInstances) {
       if (bodyInstanceSet.has(instance)) visitBodyInstance(instance);
     }
-    orderedBodyInstances.sort((a, b) => {
-      let ipa = a.insertionPoint;
-      let ipb = b.insertionPoint;
-      invariant(ipa instanceof BodyReference && ipb instanceof BodyReference);
-      if (ipa.body !== ipb.body) return 0;
-      return ipb.index - ipa.index;
-    });
-    // Group by (body, index) so higher indices splice first and within the same index topological order is preserved.
-    let idx = 0;
-    while (idx < orderedBodyInstances.length) {
-      let first = orderedBodyInstances[idx];
-      let ip = first.insertionPoint;
-      invariant(ip instanceof BodyReference);
-      let combined = [];
-      while (idx < orderedBodyInstances.length) {
-        let cur = orderedBodyInstances[idx];
-        let curIp = cur.insertionPoint;
-        invariant(curIp instanceof BodyReference);
-        if (curIp.body !== ip.body || curIp.index !== ip.index) break;
-        let fb = functionBodies.get(cur);
-        if (fb !== undefined) combined.push(...fb);
-        idx++;
-      }
-      if (combined.length > 0) {
-        ip.body.entries.splice(ip.index, 0, ...combined);
+    // Group by body and index (keeping topological order within a group), then splice higher indices first
+    // so that earlier insertion points stay valid.
+    let groupsByBody: Map<SerializedBody, Map<number, Array<BabelNodeStatement>>> = new Map();
+    for (let cur of orderedBodyInstances) {
+      let curIp = cur.insertionPoint;
+      invariant(curIp instanceof BodyReference);
+      let fb = functionBodies.get(cur);
+      if (fb === undefined || fb.length === 0) continue;
+      let byIndex = groupsByBody.get(curIp.body);
+      if (byIndex === undefined) groupsByBody.set(curIp.body, (byIndex = new Map()));
+      let group = byIndex.get(curIp.index);
+      if (group === undefined) byIndex.set(curIp.index, (group = []));
+      group.push(...fb);
+    }
+    for (let [body, byIndex] of groupsByBody) {
+      let indices = Array.from(byIndex.keys()).sort((a, b) => b - a);
+      for (let index of indices) {
+        let group = byIndex.get(index);
+        invariant(group !== undefined);
+        body.entries.splice(index, 0, ...group);
       }
     }
 
