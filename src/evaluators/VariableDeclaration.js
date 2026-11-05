@@ -12,7 +12,7 @@
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import type { Value } from "../values/index.js";
-import { ObjectValue, StringValue } from "../values/index.js";
+import { ECMAScriptFunctionValue, ObjectValue, StringValue } from "../values/index.js";
 import { IsAnonymousFunctionDefinition, HasOwnProperty } from "../methods/index.js";
 import { Environment, Functions, Properties } from "../singletons.js";
 import invariant from "../invariant.js";
@@ -115,7 +115,13 @@ export default function(
 
       // 4. Let value be ? GetValue(rhs).
       let value = Environment.GetValue(realm, rhs);
-      if (declar.id && declar.id.name !== undefined) value.__originalName = bindingId;
+      if (
+        declar.id &&
+        declar.id.name !== undefined &&
+        !(value instanceof ECMAScriptFunctionValue && value.$HomeObject !== undefined)
+      ) {
+        value.__originalName = bindingId;
+      }
 
       // 5. If IsAnonymousFunctionDefinition(Initializer) is true, then
       if (IsAnonymousFunctionDefinition(realm, Initializer)) {

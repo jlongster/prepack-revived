@@ -50,6 +50,11 @@ export function evaluateOptionalChain(
   let executeNonNullishStep = (step: OptionalStep, refOrVal: Value | Reference, val: Value): Value | Reference => {
     if (step.kind === "member") {
       let node = step.node;
+      if (!node.computed && node.property.type === "PrivateName") {
+        let bv = RequireObjectCoercible(realm, val, node.object.loc);
+        let privKey = Environment.ResolvePrivateIdentifier(realm, env, node.property.id.name);
+        return new Reference(bv, privKey, strictCode);
+      }
       let propertyNameValue;
       if (node.computed === true) {
         let propertyNameReference = env.evaluate(node.property, strictCode);

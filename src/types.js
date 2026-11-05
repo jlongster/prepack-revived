@@ -156,6 +156,25 @@ export type LexicalEnvironmentTypes = "global" | "module" | "script" | "function
 
 export type PropertyKeyValue = string | StringValue | SymbolValue;
 
+export type ClassInstanceElement =
+  | {
+      kind: "field",
+      isPrivate: boolean,
+      privateName?: string,
+      key: PropertyKeyValue,
+      computed: boolean,
+      initializer: ECMAScriptSourceFunctionValue,
+      hasValue: boolean,
+      setFunctionName: boolean,
+    }
+  | {
+      kind: "privateMethod",
+      methodKind: "method" | "get" | "set",
+      privateName: string,
+      privateSymbol: SymbolValue,
+      func: ECMAScriptSourceFunctionValue,
+    };
+
 export type Intrinsics = {
   undefined: UndefinedValue,
   empty: EmptyValue,
@@ -634,6 +653,8 @@ export type FunctionType = {
   // ECMA 9.2.10
   MakeMethod(realm: Realm, F: ECMAScriptSourceFunctionValue, homeObject: ObjectValue): Value,
 
+  InitializeInstanceElements(realm: Realm, receiver: ObjectValue, F: ObjectValue): void,
+
   // ECMA 14.3.8
   DefineMethod(
     realm: Realm,
@@ -649,6 +670,8 @@ export type EnvironmentType = {
   // ECMA262 6.2.3
   // IsSuperReference(V). Returns true if this reference has a thisValue component.
   IsSuperReference(realm: Realm, V: Reference): boolean,
+
+  ResolvePrivateIdentifier(realm: Realm, env: LexicalEnvironment, privateName: string): SymbolValue,
 
   // ECMA262 6.2.3
   // HasPrimitiveBase(V). Returns true if Type(base) is Boolean, String, Symbol, or Number.

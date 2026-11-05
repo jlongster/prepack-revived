@@ -40,10 +40,10 @@ import { OrdinaryCallEvaluateBody, OrdinaryCallBindThis, PrepareForOrdinaryCall,
 import { tryResidualizeRecursiveCall, withActivation } from "./recursion.js";
 import { SameValue } from "../methods/abstract.js";
 import { Construct } from "../methods/construct.js";
-import { UpdateEmpty } from "../methods/index.js";
+import { HasOwnProperty, UpdateEmpty } from "../methods/index.js";
 import { CreateListIterator } from "../methods/iterator.js";
 import { EvalPropertyName } from "../evaluators/ObjectExpression.js";
-import { Create, Environment, Join, Properties } from "../singletons.js";
+import { Create, Environment, Functions, Join, Properties } from "../singletons.js";
 import traverseFast from "../utils/traverse-fast.js";
 import invariant from "../invariant.js";
 import parse from "../utils/parse.js";
@@ -70,6 +70,93 @@ import type {
 } from "@babel/types";
 import * as t from "@babel/types";
 import { PropertyDescriptor } from "../descriptors.js";
+
+function initializeInstanceElements(realm: Realm, receiver: ObjectValue, F: ObjectValue): void {
+  if (!(F instanceof ECMAScriptSourceFunctionValue)) return;
+  let elements = F.$ClassInstanceElements;
+  if (elements === undefined || elements.length === 0) return;
+
+  for (let elem of elements) {
+    if (elem.kind !== "privateMethod") continue;
+    let sym = elem.privateSymbol;
+    let existing = receiver.symbols.get(sym);
+    let existingDesc = existing !== undefined ? existing.descriptor : undefined;
+    if (elem.methodKind === "method") {
+      if (existingDesc !== undefined) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Duplicate private method initialization");
+      }
+      Properties.DefinePropertyOrThrow(
+        realm,
+        receiver,
+        sym,
+        new PropertyDescriptor({
+          value: elem.func,
+          writable: false,
+          enumerable: false,
+          configurable: false,
+        })
+      );
+    } else {
+      let prevGet =
+        existingDesc instanceof PropertyDescriptor && !(existingDesc.get instanceof UndefinedValue)
+          ? existingDesc.get
+          : undefined;
+      let prevSet =
+        existingDesc instanceof PropertyDescriptor && !(existingDesc.set instanceof UndefinedValue)
+          ? existingDesc.set
+          : undefined;
+      if (
+        (elem.methodKind === "get" && prevGet !== undefined) ||
+        (elem.methodKind === "set" && prevSet !== undefined)
+      ) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Duplicate private accessor initialization");
+      }
+      Properties.DefinePropertyOrThrow(
+        realm,
+        receiver,
+        sym,
+        new PropertyDescriptor({
+          get: elem.methodKind === "get" ? elem.func : prevGet || realm.intrinsics.undefined,
+          set: elem.methodKind === "set" ? elem.func : prevSet || realm.intrinsics.undefined,
+          enumerable: false,
+          configurable: true,
+        })
+      );
+    }
+  }
+
+  for (let elem of elements) {
+    if (elem.kind !== "field") continue;
+    let initVal = elem.hasValue ? Call(realm, elem.initializer, receiver, []) : realm.intrinsics.undefined;
+    if (elem.setFunctionName && initVal instanceof ObjectValue && !HasOwnProperty(realm, initVal, "name")) {
+      Functions.SetFunctionName(
+        realm,
+        initVal,
+        elem.isPrivate && elem.privateName !== undefined ? "#" + elem.privateName : elem.key
+      );
+    }
+    if (elem.isPrivate) {
+      invariant(elem.key instanceof SymbolValue);
+      let existing = receiver.symbols.get(elem.key);
+      if (existing !== undefined && existing.descriptor !== undefined) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Duplicate private field initialization");
+      }
+      Properties.DefinePropertyOrThrow(
+        realm,
+        receiver,
+        elem.key,
+        new PropertyDescriptor({
+          value: initVal,
+          writable: true,
+          enumerable: false,
+          configurable: false,
+        })
+      );
+    } else {
+      Create.CreateDataPropertyOrThrow(realm, receiver, elem.key, initVal);
+    }
+  }
+}
 
 function InternalCall(
   realm: Realm,
@@ -252,6 +339,7 @@ function InternalConstruct(
       if (kind === "base") {
         invariant(thisArgument, "this wasn't initialized for some reason");
         OrdinaryCallBindThis(realm, F, calleeContext, thisArgument);
+        initializeInstanceElements(realm, thisArgument, F);
       }
 
       // 9. Let constructorEnv be the LexicalEnvironment of calleeContext.
@@ -1570,6 +1658,10 @@ export class FunctionImplementation {
 
     // 4. Return NormalCompletion(undefined).
     return realm.intrinsics.undefined;
+  }
+
+  InitializeInstanceElements(realm: Realm, receiver: ObjectValue, F: ObjectValue): void {
+    initializeInstanceElements(realm, receiver, F);
   }
 
   // ECMA 14.3.8

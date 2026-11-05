@@ -180,6 +180,7 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
   bindings: { [name: string]: Binding };
   // Frozen Records cannot have bindings created or deleted but can have bindings updated
   frozen: boolean;
+  $PrivateBindings: void | Map<string, SymbolValue>;
 
   // ECMA262 8.1.1.1.1
   HasBinding(N: string): boolean {

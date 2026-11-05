@@ -35,6 +35,12 @@ export default function(
   // 2. Let baseValue be ? GetValue(baseReference).
   let baseValue = Environment.GetValue(realm, baseReference);
 
+  if (!ast.computed && (ast.property.type: string) === "PrivateName") {
+    let bv = RequireObjectCoercible(realm, baseValue, ast.object.loc);
+    let privKey = Environment.ResolvePrivateIdentifier(realm, env, (ast.property: any).id.name);
+    return new Reference(bv, privKey, strictCode);
+  }
+
   let propertyNameValue;
   if (ast.computed === true) {
     // 3. Let propertyNameReference be the result of evaluating Expression.

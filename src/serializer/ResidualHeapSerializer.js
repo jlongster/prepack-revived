@@ -318,6 +318,7 @@ export class ResidualHeapSerializer {
   ): void {
     //inject symbols
     for (let [symbol, propertyBinding] of symbols) {
+      if (symbol.$IsPrivateName) continue;
       invariant(propertyBinding);
       let desc = propertyBinding.descriptor;
       if (desc === undefined) continue; //deleted
@@ -637,6 +638,16 @@ export class ResidualHeapSerializer {
     return this.residualHeapValueIdentifiers.getIdentifierAndIncrementReferenceCount(val);
   }
 
+  _getSerializeObjectRef(val: Value): BabelNodeExpression {
+    if (val instanceof ECMAScriptSourceFunctionValue && this.residualClassMethodInstances.has(val)) {
+      let cmi = this.residualClassMethodInstances.get(val);
+      if (cmi !== undefined && cmi.methodType !== "constructor") {
+        return this.serializeValue(val);
+      }
+    }
+    return this.getSerializeObjectIdentifier(val);
+  }
+
   _emitProperty(
     val: ObjectValue,
     key: string | SymbolValue | AbstractValue,
@@ -650,7 +661,7 @@ export class ResidualHeapSerializer {
           ? this.serializeValue(key)
           : getAsPropertyNameExpression(key);
       let computed = key instanceof SymbolValue || key instanceof AbstractValue || !t.isIdentifier(serializedKey);
-      return t.memberExpression(this.getSerializeObjectIdentifier(val), serializedKey, computed);
+      return t.memberExpression(this._getSerializeObjectRef(val), serializedKey, computed);
     };
     if (desc === undefined) {
       this._deleteProperty(locationFunction());
@@ -764,7 +775,7 @@ export class ResidualHeapSerializer {
     invariant(!this.emitter.getReasonToWaitForDependencies([val]), "precondition of _emitProperty");
     body.push(
       t.callExpression(this.preludeGenerator.memoizeReference("Object.defineProperty"), [
-        this.getSerializeObjectIdentifier(val),
+        this._getSerializeObjectRef(val),
         serializedKey,
         descriptorId,
       ])
@@ -1632,6 +1643,27 @@ export class ResidualHeapSerializer {
         return;
       }
     }
+    if (this.residualClassMethodInstances.has(val)) {
+      let cmi = this.residualClassMethodInstances.get(val);
+      invariant(cmi !== undefined);
+      if (cmi.methodType === "field" || cmi.methodType === "privateField") {
+        bindingsEmittedSemaphore.releaseOne();
+        return;
+      }
+      if (cmi.methodType !== "constructor") {
+        bindingsEmittedSemaphore.releaseOne();
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          [cmi.classConstructor],
+          () => {
+            this._emitObjectProperties(val);
+          },
+          this.emitter.getBody()
+        );
+        let additionalEffects = this.additionalFunctionValuesAndEffects.get(val);
+        if (additionalEffects) this._serializeAdditionalFunction(val, additionalEffects);
+        return;
+      }
+    }
     bindingsEmittedSemaphore.releaseOne();
     this._emitObjectProperties(val);
     let additionalEffects = this.additionalFunctionValuesAndEffects.get(val);
@@ -1645,6 +1677,7 @@ export class ResidualHeapSerializer {
   ): void {
     let classMethodInstance = this.residualClassMethodInstances.get(classFunc);
     invariant(classMethodInstance !== undefined);
+    classMethodInstance.staticPrivateFields = undefined;
 
     // handle class inheritance (including built-ins such as Map, Set, Array, Error, and extends null)
     if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
@@ -1757,10 +1790,37 @@ export class ResidualHeapSerializer {
     }
     for (let [symbol, method] of classFunc.symbols) {
       if (method.descriptor === undefined) continue;
+      if (symbol.$IsPrivateName) {
+        if (isRegisteredClassMethodBinding(method, symbol, true)) {
+          emitRegisteredClassMethodBinding(method, symbol);
+        } else if (method.descriptor instanceof PropertyDescriptor && method.descriptor.value !== undefined) {
+          let pName = symbol.$PrivateName;
+          invariant(typeof pName === "string");
+          invariant(method.descriptor.value instanceof Value);
+          let valNode = this.serializeValue(method.descriptor.value);
+          if (classMethodInstance.staticPrivateFields === undefined) {
+            classMethodInstance.staticPrivateFields = [];
+          }
+          classMethodInstance.staticPrivateFields.push({ privateName: pName, valueNode: valNode });
+        }
+        continue;
+      }
       if (isRegisteredClassMethodBinding(method, symbol, true)) {
         emitRegisteredClassMethodBinding(method, symbol);
       } else {
         symbolsToSerialize.set(symbol, method);
+      }
+    }
+
+    if (classFunc.$ClassInstanceElements !== undefined) {
+      for (let elem of classFunc.$ClassInstanceElements) {
+        if (elem.kind === "privateMethod") {
+          this.serializedValues.add(elem.func);
+          this._serializeClassMethod(elem.privateSymbol, elem.func);
+        } else {
+          this.serializedValues.add(elem.initializer);
+          this._serializeClassMethod(elem.key, elem.initializer);
+        }
       }
     }
 
@@ -1837,7 +1897,10 @@ export class ResidualHeapSerializer {
     if (this._serializedClassMethods.has(methodFunc)) return;
     this._serializedClassMethods.add(methodFunc);
 
-    if (typeof key === "string") {
+    if (classMethodInstance.privateName !== undefined) {
+      classMethodInstance.classMethodKeyNode = t.identifier(classMethodInstance.privateName);
+      classMethodInstance.classMethodComputed = false;
+    } else if (typeof key === "string") {
       let keyNode = getAsPropertyNameExpression(key);
       classMethodInstance.classMethodKeyNode = keyNode;
       classMethodInstance.classMethodComputed = !t.isIdentifier(keyNode);

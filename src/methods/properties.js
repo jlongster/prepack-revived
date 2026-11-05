@@ -1307,6 +1307,43 @@ export class PropertiesImplementation {
       }
       invariant(base instanceof ObjectValue || base instanceof AbstractObjectValue);
 
+      if (V.referencedName instanceof SymbolValue && V.referencedName.$IsPrivateName) {
+        if (!(base instanceof ObjectValue)) {
+          AbstractValue.reportIntrospectionError(base, V.referencedName);
+          throw new FatalError();
+        }
+        let pb = base.symbols.get(V.referencedName);
+        if (pb === undefined || pb.descriptor === undefined) {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Cannot write private member to an object whose class did not declare it"
+          );
+        }
+        let desc = pb.descriptor;
+        invariant(desc instanceof PropertyDescriptor);
+        if (desc.value !== undefined) {
+          if (!desc.writable) {
+            throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Private method is not writable");
+          }
+          realm.recordModifiedProperty(pb);
+          pb.descriptor = new PropertyDescriptor({
+            value: W,
+            writable: true,
+            enumerable: false,
+            configurable: false,
+          });
+          return true;
+        }
+        if (desc.set === undefined || desc.set instanceof UndefinedValue) {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Private member was defined without a setter"
+          );
+        }
+        Call(realm, desc.set, GetThisValue(realm, V), [W]);
+        return true;
+      }
+
       // b. Let succeeded be ? base.[[Set]](GetReferencedName(V), W, GetThisValue(V)).
       let succeeded = base.$SetPartial(Environment.GetReferencedNamePartial(realm, V), W, GetThisValue(realm, V));
 

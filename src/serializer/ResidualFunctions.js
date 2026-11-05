@@ -142,6 +142,7 @@ export class ResidualFunctions {
   _shouldUseFactoryFunction(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): boolean {
     invariant(instances.length > 0);
     if (instances[0].functionValue.$FunctionKind !== "normal") return false;
+    if (this.residualClassMethodInstances.has(instances[0].functionValue)) return false;
     function shouldInlineFunction(): boolean {
       if (instances[0].scopeInstances.size > 0) return false;
       let shouldInline = true;
@@ -327,7 +328,10 @@ export class ResidualFunctions {
         }
       }
     };
-    let funcNodes: Map<FunctionValue, BabelNodeFunctionExpression> = new Map();
+    let funcNodes: Map<
+      FunctionValue,
+      BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression | BabelNodeClassMethod
+    > = new Map();
     let defineFunction = (
       instance: FunctionInstance,
       funcId: BabelNodeIdentifier,
@@ -355,6 +359,9 @@ export class ResidualFunctions {
             t.isClassExpression(funcOrClassNode) ||
             t.isArrowFunctionExpression(funcOrClassNode)
         ); // .bind call
+        if (t.isArrowFunctionExpression(funcOrClassNode)) {
+          funcNodes.set(functionValue, ((funcOrClassNode: any): BabelNodeArrowFunctionExpression));
+        }
         body = getFunctionBody(instance);
       }
       let declarator = t.variableDeclarator(funcId, funcOrClassNode);
@@ -427,6 +434,7 @@ export class ResidualFunctions {
         } = classMethodInstance;
 
         let isConstructor = methodType === "constructor";
+        invariant(methodType !== "field" && methodType !== "privateField");
         invariant(classPrototype instanceof ObjectValue);
         invariant(classMethodKeyNode && (t.isExpression(classMethodKeyNode) || t.isIdentifier(classMethodKeyNode)));
         // we use the classPrototype as the key to get the class expression ast node
@@ -439,8 +447,13 @@ export class ResidualFunctions {
           classMethodComputed,
           classMethodIsStatic
         );
+        if (classMethodInstance.privateName !== undefined) {
+          (classMethod: any).key = (t: any).privateName(t.identifier(classMethodInstance.privateName));
+          classMethod.computed = false;
+        }
         if (isGenerator) classMethod.generator = true;
         if (isAsync) classMethod.async = true;
+        funcNodes.set(funcValue, classMethod);
         // add the class method to the class expression node body
         if (isConstructor) {
           funcOrClassNode.body.body.unshift(classMethod);
@@ -517,6 +530,54 @@ export class ResidualFunctions {
             invariant(t.isExpression(classMethodKeyNode) || t.isIdentifier(classMethodKeyNode));
             // we use the classPrototype as the key to get the class expression ast node
             funcOrClassNode = this._getOrCreateClassNode(classPrototype);
+
+            if (methodType === "field" || methodType === "privateField") {
+              let instantiatedFn = new ResidualFunctionInstantiator(
+                factoryFunctionInfos,
+                this.realm.moduleFactoryFunctionsToRemove,
+                this._getIdentifierReplacements(funcBody, residualFunctionBindings),
+                this._getCallReplacements(funcBody),
+                this._createFunctionExpression([], funcBody, false)
+              ).instantiate();
+              let scopeInitialization = [];
+              let delayedInitStmt = this.residualFunctionInitializers.getInitializerStatement(functionValue);
+              if (delayedInitStmt !== undefined) {
+                scopeInitialization.push(delayedInitStmt);
+              }
+              for (let scope of scopeInstances.values()) {
+                scopeInitialization = scopeInitialization.concat(
+                  this.referentializer.getReferentializedScopeInitialization(scope, t.numericLiteral(scope.id))
+                );
+              }
+              let instBody: BabelNodeBlockStatement = ((instantiatedFn.body: any): BabelNodeBlockStatement);
+              let valNode = null;
+              if (instBody.body.length > 0) {
+                if (
+                  scopeInitialization.length === 0 &&
+                  instBody.body.length === 1 &&
+                  t.isReturnStatement(instBody.body[0])
+                ) {
+                  let retStmt: any = instBody.body[0];
+                  valNode = retStmt.argument || null;
+                } else {
+                  let fullBody = t.blockStatement(scopeInitialization.concat(instBody.body), instBody.directives);
+                  valNode = t.callExpression(t.arrowFunctionExpression([], fullBody), []);
+                }
+              }
+              let fieldNode;
+              if (methodType === "privateField") {
+                invariant(classMethodInstance.privateName !== undefined);
+                fieldNode = (t: any).classPrivateProperty(
+                  (t: any).privateName(t.identifier(classMethodInstance.privateName)),
+                  valNode
+                );
+              } else {
+                fieldNode = t.classProperty(classMethodKeyNode, valNode, null, null, classMethodComputed);
+              }
+              (funcOrClassNode.body.body: Array<any>).push(fieldNode);
+              continue;
+            }
+
             // if we are dealing with a constructor, don't serialize it if the original
             // had an empty user-land constructor (because we create a constructor behind the scenes for them)
             let hasEmptyConstructor = !!functionValue.$HasEmptyConstructor;
@@ -530,6 +591,10 @@ export class ResidualFunctions {
                 classMethodComputed,
                 classMethodIsStatic
               );
+              if (classMethodInstance.privateName !== undefined) {
+                (rawClassMethod: any).key = (t: any).privateName(t.identifier(classMethodInstance.privateName));
+                rawClassMethod.computed = false;
+              }
               if (isGenerator) rawClassMethod.generator = true;
               if (isAsync) rawClassMethod.async = true;
               let classMethod = new ResidualFunctionInstantiator(
@@ -554,6 +619,7 @@ export class ResidualFunctions {
               }
 
               // add the class method to the class expression node body
+              funcNodes.set(functionValue, classMethod);
               if (isConstructor) {
                 funcOrClassNode.body.body.unshift(classMethod);
               } else {
@@ -563,6 +629,16 @@ export class ResidualFunctions {
             // we only return the funcOrClassNode if this is the constructor
             if (!isConstructor) {
               continue;
+            }
+            if (classMethodInstance.staticPrivateFields !== undefined) {
+              for (let spf of classMethodInstance.staticPrivateFields) {
+                let spfNode = (t: any).classPrivateProperty(
+                  (t: any).privateName(t.identifier(spf.privateName)),
+                  spf.valueNode
+                );
+                spfNode.static = true;
+                (funcOrClassNode.body.body: Array<any>).push(spfNode);
+              }
             }
             // handle the class super
             if (classSuperNode !== undefined) {
@@ -830,9 +906,15 @@ export class ResidualFunctions {
     for (let [functionValue, funcNode] of funcNodes) {
       let initializerStatement = this.residualFunctionInitializers.getInitializerStatement(functionValue);
       if (initializerStatement !== undefined) {
-        invariant(t.isFunctionExpression(funcNode));
-        let blockStatement: BabelNodeBlockStatement = ((funcNode: any): BabelNodeFunctionExpression).body;
-        blockStatement.body.unshift(initializerStatement);
+        invariant(
+          t.isFunctionExpression(funcNode) || t.isArrowFunctionExpression(funcNode) || t.isClassMethod(funcNode)
+        );
+        let blockStatement: BabelNodeBlockStatement = ((funcNode: any).body: BabelNodeBlockStatement);
+        invariant(t.isBlockStatement(blockStatement));
+        (funcNode: any).body = t.blockStatement(
+          [initializerStatement].concat(blockStatement.body),
+          blockStatement.directives
+        );
       }
     }
 

@@ -62,7 +62,12 @@ function visitName(
 // Why are these paths ignored?
 function ignorePath(path: BabelTraversePath): boolean {
   let parent = path.parent;
-  return t.isLabeledStatement(parent) || t.isBreakStatement(parent) || t.isContinueStatement(parent);
+  return (
+    t.isLabeledStatement(parent) ||
+    t.isBreakStatement(parent) ||
+    t.isContinueStatement(parent) ||
+    (parent && (parent.type: string) === "PrivateName")
+  );
 }
 
 let FunctionBindingVisitor = {
@@ -321,6 +326,16 @@ export class ReachabilityImplementation {
 
       let [nonLocalReadBindings, nonLocalWriteBindings] = parsedBindingsOfFunction(fn);
       computeFromBindings(fn, nonLocalReadBindings, nonLocalWriteBindings);
+      if (fn instanceof ECMAScriptSourceFunctionValue && fn.$ClassInstanceElements !== undefined) {
+        for (let elem of fn.$ClassInstanceElements) {
+          if (elem.kind === "privateMethod") {
+            computeFromValue(elem.func);
+          } else {
+            computeFromValue(elem.initializer);
+            if (!elem.isPrivate && elem.key instanceof Value) computeFromValue(elem.key);
+          }
+        }
+      }
     }
 
     function computeFromMap(val: ObjectValue): void {

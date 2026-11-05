@@ -162,54 +162,21 @@ export function MakeClassConstructor(realm: Realm, F: ECMAScriptSourceFunctionVa
   return realm.intrinsics.undefined;
 }
 
+function isConstructorClassMethod(elem: BabelNodeClassMethod): boolean {
+  if (IsStatic(elem) || elem.computed) return false;
+  if ((elem.key.type: string) === "PrivateName") return false;
+  return elem.key.name === "constructor" || elem.key.value === "constructor";
+}
+
 // ECMA 14.5.3
 export function ConstructorMethod(
   realm: Realm,
   ClassElementList: Array<BabelNodeClassMethod>
 ): EmptyValue | BabelNodeClassMethod {
-  let ClassElement;
-  // ClassElementList : ClassElement
-  if (ClassElementList.length === 1) {
-    ClassElement = ClassElementList[0];
-    // 1. If ClassElement is the production ClassElement : ; , return empty.
-    // It looks like Babel parses out ClassElements that are only ;
-
-    // 2. If IsStatic of ClassElement is true, return empty.
-    if (IsStatic(ClassElement)) {
-      return realm.intrinsics.empty;
-    }
-    // 3. If PropName of ClassElement is not "constructor", return empty.
-    if (ClassElement.key.name !== "constructor") {
-      return realm.intrinsics.empty;
-    }
-
-    // 4. Return ClassElement.
-    return ClassElement;
-  } else {
-    // ClassElementList : ClassElementList ClassElement
-    // 1. Let head be ConstructorMethod of ClassElementList.
-    let head = ConstructorMethod(realm, ClassElementList.slice(0, -1));
-    // 2. If head is not empty, return head.
-    if (!(head instanceof EmptyValue)) {
-      return head;
-    }
-
-    ClassElement = ClassElementList[ClassElementList.length - 1];
-    // 3. If ClassElement is the production ClassElement : ; , return empty.
-    // It looks like Babel parses out ClassElements that are only ;
-
-    // 4. If IsStatic of ClassElement is true, return empty.
-    if (IsStatic(ClassElement)) {
-      return realm.intrinsics.empty;
-    }
-    // If PropName of ClassElement is not "constructor", return empty.
-    if (ClassElement.key.name !== "constructor") {
-      return realm.intrinsics.empty;
-    }
-
-    // Return ClassElement.
-    return ClassElement;
+  for (let elem of ClassElementList) {
+    if (isConstructorClassMethod(elem)) return elem;
   }
+  return realm.intrinsics.empty;
 }
 
 // ECMA 14.5.10
@@ -217,36 +184,5 @@ export function NonConstructorMethodDefinitions(
   realm: Realm,
   ClassElementList: Array<BabelNodeClassMethod>
 ): Array<BabelNodeClassMethod> {
-  let ClassElement;
-  // ClassElementList : ClassElement
-  if (ClassElementList.length === 1) {
-    ClassElement = ClassElementList[0];
-    // If ClassElement is the production ClassElement : ; , return a new empty List.
-
-    // If IsStatic of ClassElement is false and PropName of ClassElement is "constructor", return a new empty List.
-    if (!IsStatic(ClassElement) && ClassElement.key.name === "constructor") {
-      return [];
-    }
-    // Return a List containing ClassElement.
-    return [ClassElement];
-  } else {
-    // ClassElementList : ClassElementList ClassElement
-    ClassElement = ClassElementList[ClassElementList.length - 1];
-
-    // Let list be NonConstructorMethodDefinitions of ClassElementList.
-    let list = NonConstructorMethodDefinitions(realm, ClassElementList.slice(0, -1));
-
-    // If ClassElement is the production ClassElement : ; , return list.
-
-    // If IsStatic of ClassElement is false and PropName of ClassElement is "constructor", return list.
-    if (!IsStatic(ClassElement) && ClassElement.key.name === "constructor") {
-      return list;
-    }
-
-    // Append ClassElement to the end of list.
-    list.push(ClassElement);
-
-    // Return list.
-    return list;
-  }
+  return ClassElementList.filter(elem => !isConstructorClassMethod(elem));
 }

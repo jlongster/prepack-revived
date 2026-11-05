@@ -296,6 +296,20 @@ export class ResidualHeapVisitor {
       invariant(propertyBinding);
       let desc = propertyBinding.descriptor;
       if (desc === undefined) continue; //deleted
+      if (symbol.$IsPrivateName) {
+        if (!(obj instanceof ECMAScriptFunctionValue && obj.$FunctionKind === "classConstructor")) {
+          let diag = new CompilerDiagnostic(
+            "Object instances with private fields or methods cannot be serialized in residual heap",
+            obj.expressionLocation,
+            "PP0001",
+            "FatalError"
+          );
+          this.realm.handleError(diag);
+          throw new FatalError();
+        }
+        this.visitDescriptor(desc);
+        continue;
+      }
       this.visitDescriptor(desc);
       this.visitValue(symbol);
     }
@@ -860,8 +874,66 @@ export class ResidualHeapVisitor {
       }
     }
     for (let [symbol, method] of classFunc.symbols) {
+      if (symbol.$IsPrivateName) {
+        let desc = method.descriptor;
+        if (desc instanceof PropertyDescriptor) {
+          let pName = symbol.$PrivateName;
+          invariant(typeof pName === "string");
+          if (desc.value !== undefined) {
+            if (!desc.writable && desc.value instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(desc.value);
+              this._visitClassMethod(classFunc, symbol, desc.value, "value", classPrototype, true, pName);
+            }
+          } else {
+            if (desc.get instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(desc.get);
+              this._visitClassMethod(classFunc, symbol, desc.get, "get", classPrototype, true, pName);
+            }
+            if (desc.set instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(desc.set);
+              this._visitClassMethod(classFunc, symbol, desc.set, "set", classPrototype, true, pName);
+            }
+          }
+        }
+        continue;
+      }
       if (canEmbedClassProperty(classFunc, classFunc, method, claimedMethods)) {
         withDescriptorValue(symbol, method.descriptor, visitStaticClassMethod);
+      }
+    }
+
+    if (classFunc.$ClassInstanceElements !== undefined) {
+      for (let elem of classFunc.$ClassInstanceElements) {
+        if (elem.kind === "privateMethod") {
+          this.classMethodInstances.set(elem.func, {
+            classConstructor: classFunc,
+            classPrototype,
+            methodType: elem.methodKind,
+            classSuperNode: undefined,
+            classMethodIsStatic: false,
+            classMethodKey: elem.privateSymbol,
+            classMethodKeyNode: undefined,
+            classMethodComputed: false,
+            privateName: elem.privateName,
+          });
+          this.visitValue(elem.func);
+        } else {
+          this.classMethodInstances.set(elem.initializer, {
+            classConstructor: classFunc,
+            classPrototype,
+            methodType: elem.isPrivate ? "privateField" : "field",
+            classSuperNode: undefined,
+            classMethodIsStatic: false,
+            classMethodKey: elem.key,
+            classMethodKeyNode: undefined,
+            classMethodComputed: elem.computed,
+            privateName: elem.privateName,
+          });
+          this.visitValue(elem.initializer);
+          if (!elem.isPrivate && elem.key instanceof SymbolValue) {
+            this.visitValue(elem.key);
+          }
+        }
       }
     }
 
@@ -883,7 +955,8 @@ export class ResidualHeapVisitor {
     methodFunc: ECMAScriptSourceFunctionValue,
     methodType: "get" | "set" | "value",
     classPrototype: ObjectValue,
-    isStatic: boolean
+    isStatic: boolean,
+    privateName?: string
   ): void {
     this.classMethodInstances.set(methodFunc, {
       classConstructor: classFunc,
@@ -893,7 +966,8 @@ export class ResidualHeapVisitor {
       classMethodIsStatic: isStatic,
       classMethodKey: key,
       classMethodKeyNode: undefined,
-      classMethodComputed: !!methodFunc.$HasComputedName,
+      classMethodComputed: privateName !== undefined ? false : !!methodFunc.$HasComputedName,
+      privateName,
     });
   }
 

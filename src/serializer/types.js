@@ -68,12 +68,14 @@ export type AdditionalFunctionInfo = {
 export type ClassMethodInstance = {|
   classConstructor: FunctionValue,
   classPrototype: ObjectValue,
-  methodType: "constructor" | "method" | "get" | "set",
+  methodType: "constructor" | "method" | "get" | "set" | "field" | "privateField",
   classSuperNode: void | BabelNodeExpression,
   classMethodIsStatic: boolean,
   classMethodKey?: string | SymbolValue,
   classMethodKeyNode: void | BabelNodeExpression,
   classMethodComputed: boolean,
+  privateName?: string,
+  staticPrivateFields?: Array<{ privateName: string, valueNode: ?BabelNodeExpression }>,
 |};
 
 // Each of these will correspond to a different preludeGenerator and thus will

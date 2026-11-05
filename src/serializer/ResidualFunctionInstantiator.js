@@ -308,6 +308,7 @@ export class ResidualFunctionInstantiator<
         return this._replaceLabeledStatement(node);
       case "BreakStatement":
       case "ContinueStatement":
+      case "PrivateName":
         return node;
       case "JSXIdentifier":
       case "JSXMemberExpressions":

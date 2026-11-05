@@ -41,6 +41,7 @@ import { AbruptCompletion, SimpleNormalCompletion } from "../completions.js";
 import { FatalError } from "../errors.js";
 import { EvalPropertyName } from "../evaluators/ObjectExpression.js";
 import {
+  Call,
   GetV,
   GetThisValue,
   HasSomeCompatibleType,
@@ -52,6 +53,7 @@ import {
   HasOwnProperty,
   RequireObjectCoercible,
 } from "./index.js";
+import { PropertyDescriptor } from "../descriptors.js";
 import { Create, Functions, Properties, To } from "../singletons.js";
 import type {
   BabelNode,
@@ -162,6 +164,27 @@ export class EnvironmentImplementation {
   // IsSuperReference(V). Returns true if this reference has a thisValue component.
   IsSuperReference(realm: Realm, V: Reference): boolean {
     return V.thisValue !== undefined;
+  }
+
+  ResolvePrivateIdentifier(realm: Realm, env: LexicalEnvironment, privateName: string): SymbolValue {
+    let cur: ?LexicalEnvironment = env;
+    while (cur != null) {
+      let rec = cur.environmentRecord;
+      if (
+        rec instanceof DeclarativeEnvironmentRecord &&
+        rec.$PrivateBindings !== undefined &&
+        rec.$PrivateBindings.has(privateName)
+      ) {
+        let sym = rec.$PrivateBindings.get(privateName);
+        invariant(sym !== undefined);
+        return sym;
+      }
+      cur = cur.parent;
+    }
+    throw realm.createErrorThrowCompletion(
+      realm.intrinsics.SyntaxError,
+      `Private field '#${privateName}' must be declared in an enclosing class`
+    );
   }
 
   // ECMA262 6.2.3
@@ -306,6 +329,33 @@ export class EnvironmentImplementation {
         base = To.ToObject(realm, base);
       }
       invariant(base instanceof ObjectValue || base instanceof AbstractObjectValue);
+
+      if (V.referencedName instanceof SymbolValue && V.referencedName.$IsPrivateName) {
+        if (!(base instanceof ObjectValue)) {
+          AbstractValue.reportIntrospectionError(base, V.referencedName);
+          throw new FatalError();
+        }
+        let pb = base.symbols.get(V.referencedName);
+        if (pb === undefined || pb.descriptor === undefined) {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Cannot read private member from an object whose class did not declare it"
+          );
+        }
+        let desc = pb.descriptor;
+        invariant(desc instanceof PropertyDescriptor);
+        if (desc.value !== undefined) {
+          invariant(desc.value instanceof Value);
+          return desc.value;
+        }
+        if (desc.get === undefined || desc.get instanceof UndefinedValue) {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Private member was defined without a getter"
+          );
+        }
+        return Call(realm, desc.get, GetThisValue(realm, V), []);
+      }
 
       // b. Return ? base.[[Get]](GetReferencedName(V), GetThisValue(V)).
       return base.$GetPartial(this.GetReferencedNamePartial(realm, V), GetThisValue(realm, V));

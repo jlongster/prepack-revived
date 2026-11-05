@@ -19,6 +19,8 @@ export default class SymbolValue extends PrimitiveValue {
   }
 
   $Description: void | Value;
+  $IsPrivateName: ?boolean;
+  $PrivateName: ?string;
 
   hashValue: void | number;
 
