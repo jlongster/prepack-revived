@@ -29,12 +29,5 @@ if (global.__optimize) {
 
 inspect = function() {
   var vals = [0, 1, "", "x", NaN, null, undefined, {}];
-  return [
-    vals.map(f).join(),
-    vals.map(g).join(),
-    h(0, "", NaN),
-    h(1, 0, "x"),
-    h(1, 1, 1),
-    h("", "", "s"),
-  ].join("|");
+  return [vals.map(f).join(), vals.map(g).join(), h(0, "", NaN), h(1, 0, "x"), h(1, 1, 1), h("", "", "s")].join("|");
 };

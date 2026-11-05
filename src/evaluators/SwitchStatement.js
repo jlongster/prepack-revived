@@ -247,7 +247,7 @@ function CaseBlockEvaluation(
 
   // Abstract interpretation of case blocks is a significantly different process
   // from regular interpretation, so we fork off early to keep things tidily separated.
-  if (input instanceof AbstractValue && cases.length < 6) {
+  if (input instanceof AbstractValue) {
     return AbstractCaseBlockEvaluation(cases, default_case_num, input, strictCode, env, realm);
   }
 
@@ -363,18 +363,21 @@ function evaluationHelper(
   // 6. Set the running execution context's LexicalEnvironment to blockEnv.
   realm.getRunningContext().lexicalEnvironment = blockEnv;
 
-  let R;
   try {
     // 7. Let R be the result of performing CaseBlockEvaluation of CaseBlock with argument switchValue.
-    R = CaseBlockEvaluation(cases, switchValue, strictCode, blockEnv, realm);
+    // The end of the switch statement is a join point for the (conditional) unlabeled breaks inside it.
+    let R = realm.evaluateCompletionInSavedCompletionScope(() =>
+      CaseBlockEvaluation(cases, switchValue, strictCode, blockEnv, realm)
+    );
+    let selector = c => c instanceof BreakCompletion && !c.target;
+    if (R instanceof BreakCompletion && !R.target) {
+      R = (UpdateEmpty(realm, R, realm.intrinsics.undefined): any).value;
+    } else if (R instanceof JoinedAbruptCompletions || R instanceof JoinedNormalAndAbruptCompletions) {
+      R = Completion.normalizeSelectedCompletions(selector, R);
+    }
 
     // 9. Return R.
-    return R;
-  } catch (e) {
-    if (e instanceof BreakCompletion) {
-      if (!e.target) return (UpdateEmpty(realm, e, realm.intrinsics.undefined): any).value;
-    }
-    throw e;
+    return realm.returnOrThrowCompletion(R);
   } finally {
     // 8. Set the running execution context's LexicalEnvironment to oldEnv.
     realm.getRunningContext().lexicalEnvironment = oldEnv;
