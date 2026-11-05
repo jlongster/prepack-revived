@@ -3,8 +3,8 @@
 **Result:** the revived Prepack compiles a known React 18 app (the shared react-bench app: 30
 function components, 944 lines) into a `render(data)` function that never runs React. On all 500
 check inputs its output is byte-identical to `ReactDOMServer.renderToString(<App data={data}/>)`.
-It is 4.4–5.5× faster than `renderToString` with the JIT and 10–12× faster with `--jitless`. That is
-within 1.4–1.9× of a hand-written renderer for the same app.
+It is 4.2–5.5× faster than `renderToString` with the JIT and about 9× faster with `--jitless`. That is
+within 1.4–2.1× of a hand-written renderer for the same app.
 
 Code: `react-ssr/` (the compiler and the React model), the Prepack changes listed under "Prepack
 changes" below, and `react-bench/impl/prepack.js` (the plug-in for the shared harness).
@@ -111,17 +111,20 @@ identical), plus inputs outside the schema (all fall back, none are rendered wro
 
 | engine | page | baseline renderToString | prepack | handwritten | prepack speedup | prepack vs handwritten |
 |---|---|---:|---:|---:|---:|---:|
-| JIT | small (~6 KB) | 0.067 ms | 0.012 ms | 0.009 ms | **5.45×** | 1.4× slower |
-| JIT | large (~285 KB) | 3.19 ms | 0.74 ms | 0.50 ms | **4.35×** | 1.5× slower |
-| jitless | small | 0.61 ms | 0.067 ms | 0.032 ms | **9.7×** | 2.1× slower |
-| jitless | large | 26.4 ms | 2.31 ms | 1.21 ms | **11.6×** | 1.9× slower |
+| JIT | small (~6 KB) | 0.068 ms | 0.012 ms | 0.009 ms | **5.5×** | 1.4× slower |
+| JIT | large (~285 KB) | 3.06 ms | 0.72 ms | 0.49 ms | **4.2×** | 1.5× slower |
+| jitless | small | 0.51 ms | 0.057 ms | 0.027 ms | **9.1×** | 2.1× slower |
+| jitless | large | 21.1 ms | 2.29 ms | 1.22 ms | **9.1×** | 1.9× slower |
+
+(An earlier run under different machine load measured 4.35×/5.45× JIT and 9.7×/11.6× jitless.)
 
 Allocation per render: small 14 KB (baseline 137 KB, handwritten 13 KB), large 749 KB (baseline
 6.4 MB, handwritten 606 KB).
 
 Generated code: 72.9 KB (18.6 KB gzip), against 31 KB for `app.js` (React and react-dom are not
 needed). Compile time: 13–20 s for the bench app (Prepack), 1.8 s for the feature app. Cold start
-from the cached artifact: load 4 ms + prepare 3 ms + first render 2 ms. Without a cache, the
+from the cached artifact (perf.js): load 11 ms + prepare 2.8 ms + first render 2.2 ms = 16 ms to first HTML
+(baseline 17 ms, handwritten 1.8 ms; the load figure is mostly the harness's module resolution, 3.4 ms in isolation). Without a cache, the
 first run pays the Prepack compile.
 
 Progression on the large JIT page as the work went on: first correct version 1.7× → lazy tree
