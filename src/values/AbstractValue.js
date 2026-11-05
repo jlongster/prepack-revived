@@ -605,14 +605,17 @@ export default class AbstractValue extends Value {
 
   static createJoinConditionForSelectedCompletions(
     selector: Completion => boolean,
-    completion: JoinedAbruptCompletions | JoinedNormalAndAbruptCompletions
+    completion: JoinedAbruptCompletions | JoinedNormalAndAbruptCompletions,
+    memo: Map<Completion, Value> = new Map()
   ): Value {
+    let cached = memo.get(completion);
+    if (cached !== undefined) return cached;
     let jcw;
     let jc = completion.joinCondition;
     let realm = jc.$Realm;
     let njc = AbstractValue.createFromUnaryOp(realm, "!", jc, true, undefined, true);
     if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
-      jcw = AbstractValue.createJoinConditionForSelectedCompletions(selector, completion.composedWith);
+      jcw = AbstractValue.createJoinConditionForSelectedCompletions(selector, completion.composedWith, memo);
       jc = AbstractValue.createFromLogicalOp(realm, "&&", jcw, jc, undefined, true);
       njc = AbstractValue.createFromLogicalOp(realm, "&&", jcw, njc, undefined, true);
     }
@@ -621,31 +624,40 @@ export default class AbstractValue extends Value {
     let cContainsSelectedCompletion = c.containsSelectedCompletion(selector);
     let aContainsSelectedCompletion = a.containsSelectedCompletion(selector);
     if (!cContainsSelectedCompletion && !aContainsSelectedCompletion) {
-      if (jcw !== undefined) return jcw;
-      return realm.intrinsics.false;
+      let res = jcw !== undefined ? jcw : realm.intrinsics.false;
+      memo.set(completion, res);
+      return res;
     }
     let cCond = jc;
     if (cContainsSelectedCompletion) {
       if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
-        let jcc = AbstractValue.createJoinConditionForSelectedCompletions(selector, c);
+        let jcc = AbstractValue.createJoinConditionForSelectedCompletions(selector, c, memo);
         cCond = AbstractValue.createFromLogicalOp(realm, "&&", cCond, jcc, undefined, true);
       }
-      if (!aContainsSelectedCompletion) return cCond;
+      if (!aContainsSelectedCompletion) {
+        memo.set(completion, cCond);
+        return cCond;
+      }
     }
     let aCond = njc;
     if (aContainsSelectedCompletion) {
       if (a instanceof JoinedAbruptCompletions || a instanceof JoinedNormalAndAbruptCompletions) {
-        let jac = AbstractValue.createJoinConditionForSelectedCompletions(selector, a);
+        let jac = AbstractValue.createJoinConditionForSelectedCompletions(selector, a, memo);
         aCond = AbstractValue.createFromLogicalOp(realm, "&&", aCond, jac, undefined, true);
       }
-      if (!cContainsSelectedCompletion) return aCond;
+      if (!cContainsSelectedCompletion) {
+        memo.set(completion, aCond);
+        return aCond;
+      }
     }
     let or = AbstractValue.createFromLogicalOp(realm, "||", cCond, aCond, undefined, true);
     if (completion instanceof JoinedNormalAndAbruptCompletions && completion.composedWith !== undefined) {
-      let composedCond = AbstractValue.createJoinConditionForSelectedCompletions(selector, completion.composedWith);
-      let and = AbstractValue.createFromLogicalOp(realm, "&&", composedCond, or, undefined, true);
+      invariant(jcw !== undefined);
+      let and = AbstractValue.createFromLogicalOp(realm, "&&", jcw, or, undefined, true);
+      memo.set(completion, and);
       return and;
     }
+    memo.set(completion, or);
     return or;
   }
 

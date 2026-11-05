@@ -104,8 +104,15 @@ export function resolveSmtMode(option: void | SmtMode): SmtMode {
   return mode || "fallback";
 }
 
+// Deterministic per-Realm query budget so unrolled loops cannot stall compilation on unprovable queries.
+const MAX_REALM_FALLBACK_QUERIES = 400;
+
 export function smtEnabled(realm: Realm): boolean {
-  return realm.smtMode !== "off" && solver() !== undefined;
+  return (
+    realm.smtMode !== "off" &&
+    (realm.smtMode === "audit" || realm.smtQueries < MAX_REALM_FALLBACK_QUERIES) &&
+    solver() !== undefined
+  );
 }
 
 export function smtAuditing(realm: Realm): boolean {
@@ -113,10 +120,11 @@ export function smtAuditing(realm: Realm): boolean {
 }
 
 // Runs `(push) script check (pop)`; returns the answer and, for "sat" with `model`, the raw get-value output.
-function check(script: string, modelTerms?: Array<string>): [Z3Answer, string] {
+function check(script: string, modelTerms?: Array<string>, realm?: Realm): [Z3Answer, string] {
   let z = solver();
   if (z === undefined) return ["unknown", ""];
   let cacheable = modelTerms === undefined;
+  if (cacheable && realm !== undefined) realm.smtQueries++;
   if (cacheable) {
     let cached = cache.get(script);
     if (cached !== undefined) {
@@ -144,7 +152,8 @@ function check(script: string, modelTerms?: Array<string>): [Z3Answer, string] {
     z.run("(pop)");
     rest = model === undefined ? "" : model.trim();
   }
-  stats.solverMs += Date.now() - start;
+  let elapsed = Date.now() - start;
+  stats.solverMs += elapsed;
   stats[answer]++;
   if (cacheable) {
     if (cache.size >= CACHE_LIMIT) cache.clear();
@@ -156,9 +165,10 @@ function check(script: string, modelTerms?: Array<string>): [Z3Answer, string] {
 // Builds a query: background facts, assumptions (each must be truthy), and a final goal formula.
 function build(
   assumptions: $ReadOnlyArray<Value>,
-  goal: SmtTranslator => string
+  goal: SmtTranslator => string,
+  maxNodes: number = 80
 ): void | { script: string, translator: SmtTranslator } {
-  let t = new SmtTranslator();
+  let t = new SmtTranslator(maxNodes);
   try {
     let asserts = assumptions.map(c => `(assert ${t.truthy(c)})`);
     let g = goal(t);
@@ -173,10 +183,35 @@ function build(
 }
 
 // Is the conjunction of assumptions plus `goal` unsatisfiable? (true only when proven)
-function provenUnsat(assumptions: $ReadOnlyArray<Value>, goal: SmtTranslator => string): boolean {
-  let q = build(assumptions, goal);
+function provenUnsat(assumptions: $ReadOnlyArray<Value>, goal: SmtTranslator => string, realm?: Realm): boolean {
+  let q = build(assumptions, goal, 80);
   if (q === undefined) return false;
-  return check(q.script)[0] === "unsat";
+  return check(q.script, undefined, realm)[0] === "unsat";
+}
+
+function expandedChildren(v: AbstractValue): void | $ReadOnlyArray<Value> {
+  if (v.kind === "abstractConcreteUnion") return v.args;
+  let od = v.operationDescriptor;
+  let args = v.args;
+  if (v.intrinsicName !== undefined) {
+    let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
+    if (entry === undefined || entry.isPure !== true) return undefined;
+    od = entry.operationDescriptor;
+    args = entry.args;
+  }
+  if (od === undefined) return undefined;
+  let t = od.type;
+  if (
+    t === "BINARY_EXPRESSION" ||
+    t === "LOGICAL_EXPRESSION" ||
+    t === "UNARY_EXPRESSION" ||
+    t === "CONDITIONAL_EXPRESSION" ||
+    t === "CANNOT_BECOME_OBJECT" ||
+    (t === "ABSTRACT_FROM_TEMPLATE" && od.data.templateSource === "(A).length")
+  ) {
+    return args;
+  }
+  return undefined;
 }
 
 // Collects the hashValues of opaque leaves reachable inside `v` (iteratively, bounded so deep DAGs never overflow the C stack).
@@ -188,16 +223,12 @@ function collectLeafHashes(root: Value, out: Set<number>, seen: Set<AbstractValu
     if (!(v instanceof AbstractValue) || seen.has(v)) continue;
     seen.add(v);
     steps++;
-    let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
-    if (entry !== undefined && entry.isPure === true) {
-      if (entry.args.length === 0) out.add(v.hashValue);
-      else for (let a of entry.args) stack.push(a);
+    let children = expandedChildren(v);
+    if (children === undefined || children.length === 0) {
+      out.add(v.hashValue);
       continue;
     }
-    if (v.intrinsicName !== undefined || v.args.length === 0) {
-      out.add(v.hashValue);
-    }
-    for (let a of v.args) stack.push(a);
+    for (let a of children) stack.push(a);
   }
 }
 
@@ -235,7 +266,7 @@ function sliceRelevantAssumptions(assumptions: $ReadOnlyArray<Value>, target: Va
     }
   }
   let result = [];
-  for (let i = 0; i < assumptions.length && result.length < 32; i++) {
+  for (let i = 0; i < assumptions.length && result.length < 16; i++) {
     if (kept[i]) result.push(assumptions[i]);
   }
   return result;
@@ -243,31 +274,39 @@ function sliceRelevantAssumptions(assumptions: $ReadOnlyArray<Value>, target: Va
 
 // conditions => condition (truthy)
 export function smtImplies(conditions: $ReadOnlyArray<Value>, condition: Value): boolean {
-  return provenUnsat(sliceRelevantAssumptions(conditions, condition), t => `(not ${t.truthy(condition)})`);
+  let relevant = sliceRelevantAssumptions(conditions, condition);
+  if (relevant.length === 0 && condition instanceof AbstractValue && expandedChildren(condition) === undefined) {
+    return false;
+  }
+  return provenUnsat(relevant, t => `(not ${t.truthy(condition)})`, condition.$Realm);
 }
 
 // conditions => !condition
 export function smtImpliesNot(conditions: $ReadOnlyArray<Value>, condition: Value): boolean {
-  return provenUnsat(sliceRelevantAssumptions(conditions, condition), t => t.truthy(condition));
+  let relevant = sliceRelevantAssumptions(conditions, condition);
+  if (relevant.length === 0 && condition instanceof AbstractValue && expandedChildren(condition) === undefined) {
+    return false;
+  }
+  return provenUnsat(relevant, t => t.truthy(condition), condition.$Realm);
 }
 
 // The path conditions themselves are contradictory.
 export function smtInfeasible(conditions: $ReadOnlyArray<Value>): boolean {
-  return provenUnsat(conditions, () => "true");
+  return provenUnsat(conditions, () => "true", conditions.length > 0 ? conditions[0].$Realm : undefined);
 }
 
 // conditions => value is a JS object (typeof === "object" && !== null, or typeof === "function")
 export function smtIsObject(conditions: $ReadOnlyArray<Value>, value: Value): boolean {
   let relevant = sliceRelevantAssumptions(conditions, value);
   if (relevant.length === 0) return false;
-  return provenUnsat(relevant, t => `(not ((_ is Obj) ${t.term(value)}))`);
+  return provenUnsat(relevant, t => `(not ((_ is Obj) ${t.term(value)}))`, value.$Realm);
 }
 
 export type Counterexample = { [string]: string };
 
 // Returns a counterexample if `goal` can hold together with the assumptions, undefined if it cannot (or unknown).
 function findCounterexample(assumptions: $ReadOnlyArray<Value>, goal: SmtTranslator => string): void | Counterexample {
-  let q = build(assumptions, goal);
+  let q = build(assumptions, goal, 250);
   if (q === undefined) return undefined;
   let leaves = q.translator.leaves;
   let [answer, model] = check(q.script, leaves.map(l => l.name));

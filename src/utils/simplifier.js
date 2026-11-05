@@ -841,6 +841,10 @@ function negate(
 ): Value {
   if (value instanceof ConcreteValue) return ValuesDomain.computeUnary(realm, "!", value);
   invariant(value instanceof AbstractValue);
+  if (depth > 3) {
+    if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
+    return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, isCondition, true);
+  }
   value = simplify(realm, value, true, depth + 1);
   if (!value.mightNotBeTrue()) return realm.intrinsics.false;
   if (!value.mightNotBeFalse()) return realm.intrinsics.true;
@@ -907,12 +911,13 @@ function negate(
         left,
         right,
         loc || value.expressionLocation,
-        isCondition
+        isCondition,
+        depth > 1
       );
     }
   }
   if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
-  return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, isCondition);
+  return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, isCondition, true);
 }
 
 function cannotBeNaN(v: Value): boolean {

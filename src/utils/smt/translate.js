@@ -160,6 +160,7 @@ export class SmtTranslator {
     this.numConsts = new Map();
     this.strConsts = new Set();
     this.primAsserted = new Set();
+    this.usesToStr = false;
   }
 
   decls: Array<string>;
@@ -170,9 +171,10 @@ export class SmtTranslator {
   nodes: number;
   maxNodes: number;
   leaves: Array<Leaf>;
-  numConsts: Map<string, string>;
+  numConsts: Map<string, [string, string]>;
   strConsts: Set<string>;
   primAsserted: Set<string>;
+  usesToStr: boolean;
 
   truthy(v: Value, depth: number = 0): string {
     if (v instanceof ConcreteValue) return v.mightNotBeTrue() ? "false" : "true";
@@ -187,7 +189,12 @@ export class SmtTranslator {
 
   // The script (declarations, definitions and background facts) needed by the terms produced so far.
   script(): string {
-    return this.decls.join("\n");
+    if (!this.usesToStr || this.numConsts.size === 0) return this.decls.join("\n");
+    let numStrFacts = [];
+    for (let [fp, str] of this.numConsts.values()) {
+      numStrFacts.push(`(assert (= (numstr ${fp}) ${stringLiteral(str)}))`);
+    }
+    return this.decls.join("\n") + "\n" + numStrFacts.join("\n");
   }
 
   term(v: Value, depth: number = 0): string {
@@ -251,11 +258,10 @@ export class SmtTranslator {
 
   number(x: number): string {
     let fp = numberLiteral(x);
-    // Ground ToString facts for numbers that occur in the query (ToString of a number is otherwise opaque).
+    // Record ToString facts for numbers that occur in the query; emitted only when `tostr` (`+`) is used.
     let key = Object.is(x, -0) ? "-0" : String(x);
     if (!this.numConsts.has(key)) {
-      this.numConsts.set(key, fp);
-      this.decls.push(`(assert (= (numstr ${fp}) ${stringLiteral(String(x))}))`);
+      this.numConsts.set(key, [fp, String(x)]);
     }
     return fp;
   }
@@ -350,24 +356,37 @@ export class SmtTranslator {
           case "<": {
             let pa = this.toPrimitive(args[0], a, "objprim_num");
             let pb = this.toPrimitive(args[1], b, "objprim_num");
+            if (!mightProduceStringPrimitive(args[0]) || !mightProduceStringPrimitive(args[1])) {
+              return `(Bool (nlt (tonum ${pa}) (tonum ${pb})))`;
+            }
             return `(Bool (jlt ${pa} ${pb}))`;
           }
           case "<=": {
             let pa = this.toPrimitive(args[0], a, "objprim_num");
             let pb = this.toPrimitive(args[1], b, "objprim_num");
+            if (!mightProduceStringPrimitive(args[0]) || !mightProduceStringPrimitive(args[1])) {
+              return `(Bool (nle (tonum ${pa}) (tonum ${pb})))`;
+            }
             return `(Bool (jle ${pa} ${pb}))`;
           }
           case ">": {
             let pa = this.toPrimitive(args[0], a, "objprim_num");
             let pb = this.toPrimitive(args[1], b, "objprim_num");
+            if (!mightProduceStringPrimitive(args[0]) || !mightProduceStringPrimitive(args[1])) {
+              return `(Bool (nlt (tonum ${pb}) (tonum ${pa})))`;
+            }
             return `(Bool (jlt ${pb} ${pa}))`;
           }
           case ">=": {
             let pa = this.toPrimitive(args[0], a, "objprim_num");
             let pb = this.toPrimitive(args[1], b, "objprim_num");
+            if (!mightProduceStringPrimitive(args[0]) || !mightProduceStringPrimitive(args[1])) {
+              return `(Bool (nle (tonum ${pb}) (tonum ${pa})))`;
+            }
             return `(Bool (jle ${pb} ${pa}))`;
           }
           case "+": {
+            this.usesToStr = true;
             let pa = this.toPrimitive(args[0], a, "objprim");
             let pb = this.toPrimitive(args[1], b, "objprim");
             return `(jadd ${pa} ${pb})`;
@@ -470,6 +489,11 @@ function samePureDescriptor(a: OperationDescriptor, b: OperationDescriptor): boo
   if (a.type === "ABSTRACT_FROM_TEMPLATE") return a.data.templateSource === b.data.templateSource;
   if (a.type === "IDENTIFIER") return a.data.id === b.data.id;
   return false;
+}
+
+function mightProduceStringPrimitive(v: Value): boolean {
+  if (v instanceof ConcreteValue) return v instanceof StringValue || v instanceof ObjectValue;
+  return v.mightBeString() || v.mightBeObject();
 }
 
 function operatorKindOf(od: OperationDescriptor): void | any {

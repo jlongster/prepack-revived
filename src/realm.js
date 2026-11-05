@@ -269,6 +269,7 @@ export class Realm {
     this.abstractValueImpliesCounter = 0;
     this.inSimplificationPath = false;
     this.smtMode = resolveSmtMode(opts.smt);
+    this.smtQueries = 0;
 
     this.timeout = opts.timeout;
     if (this.timeout !== undefined) {
@@ -385,6 +386,7 @@ export class Realm {
   impliesCounterOverflowed: boolean;
   inSimplificationPath: boolean;
   smtMode: SmtMode;
+  smtQueries: number;
   smtAuditContext: void | string;
 
   modifiedBindings: void | Bindings;

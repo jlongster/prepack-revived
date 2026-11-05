@@ -216,12 +216,29 @@ function ForBodyEvaluation(
       // many forked execution paths, and they're non linear, then it might
       // computationally lead to a something that seems like an infinite loop.
       possibleInfiniteLoopIterations++;
-      if (possibleInfiniteLoopIterations > 6) {
+      if (possibleInfiniteLoopIterations > 6 || countSavedCompletionNodes(realm.savedCompletion, 65) > 64) {
         failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
       }
     }
   }
   invariant(false);
+
+  function countSavedCompletionNodes(
+    c: void | Completion | Value,
+    limit: number,
+    seen: Set<Completion> = new Set()
+  ): number {
+    if (!(c instanceof Completion) || seen.has(c) || seen.size >= limit) return seen.size;
+    seen.add(c);
+    if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
+      countSavedCompletionNodes(c.composedWith, limit, seen);
+    }
+    if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
+      countSavedCompletionNodes(c.consequent, limit, seen);
+      countSavedCompletionNodes(c.alternate, limit, seen);
+    }
+    return seen.size;
+  }
 
   function failIfContainsBreakOrReturnOrThrowCompletion(c: void | Completion | Value) {
     if (c === undefined) return;
