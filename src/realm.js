@@ -1101,7 +1101,15 @@ export class Realm {
     }
     this.applyEffects(effects);
 
-    return condValue.$Realm.returnOrThrowCompletion(effects.result);
+    let completion = effects.result;
+    if (completion instanceof JoinedNormalAndAbruptCompletions) {
+      // The value of the conditional is the join of the values of all of its normal paths, not just one of them.
+      // Compute it before composing the completion with the saved completion, which may modify it.
+      let value = Join.joinValuesOfSelectedCompletions(c => c instanceof SimpleNormalCompletion, completion);
+      this.returnOrThrowCompletion(completion);
+      return value;
+    }
+    return this.returnOrThrowCompletion(completion);
   }
 
   _applyPropertiesToNewlyCreatedObjects(
