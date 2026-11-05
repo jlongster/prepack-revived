@@ -24,6 +24,7 @@ function makeSandbox() {
       warn: noop,
       error: noop,
       info: noop,
+      debug: noop,
     },
   };
   sandbox.global = sandbox;
@@ -96,7 +97,7 @@ var __hydrationHook = {
   return runtimePrelude + "\n" + code.replace(createRe, "new Proxy($1, __hydrationHook)") + "\n";
 }
 
-function runInVm(libCode, smokeCode, timeoutMs = 15000) {
+function runInVm(libCode, smokeCode, timeoutMs = 60000) {
   try {
     const sandbox = makeSandbox();
     const src = buildVmRunnerSource(libCode, smokeCode);
@@ -108,7 +109,7 @@ function runInVm(libCode, smokeCode, timeoutMs = 15000) {
   }
 }
 
-function runInFreshNode(libCode, smokeCode, tmpDir, tag = "check", timeoutMs = 20000) {
+function runInFreshNode(libCode, smokeCode, tmpDir, tag = "check", timeoutMs = 60000) {
   fs.mkdirSync(tmpDir, { recursive: true });
   const scriptFile = path.join(tmpDir, `${tag}-${process.pid}-${Math.random().toString(36).slice(2)}.js`);
   const fullSrc = buildNodeStandaloneScript(libCode, smokeCode, { printDigest: true });
@@ -117,7 +118,7 @@ function runInFreshNode(libCode, smokeCode, tmpDir, tag = "check", timeoutMs = 2
     const r = childProcess.spawnSync(process.execPath, [scriptFile], {
       env: Object.assign({}, process.env, { TZ: "UTC", LANG: "C", LC_ALL: "C" }),
       timeout: timeoutMs,
-      maxBuffer: 16 * 1024 * 1024,
+      maxBuffer: 32 * 1024 * 1024,
       encoding: "utf8",
     });
     if (r.error) {

@@ -127,7 +127,7 @@ function run(
     trace: false,
     debugNames: false,
     emitConcreteModel: false,
-    inlineExpressions: false,
+    inlineExpressions: (undefined: void | boolean),
     removeModuleFactoryFunctions: false,
     logStatistics: false,
     logModules: false,

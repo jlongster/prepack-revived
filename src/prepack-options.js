@@ -135,7 +135,7 @@ export function getSerializerOptions({
   logStatistics = false,
   logModules = false,
   profile = false,
-  inlineExpressions = false,
+  inlineExpressions,
   modulesToInitialize,
   trace = false,
 }: PrepackOptions): SerializerOptions {
@@ -148,7 +148,7 @@ export function getSerializerOptions({
     logStatistics,
     logModules,
     profile,
-    inlineExpressions,
+    inlineExpressions: inlineExpressions !== undefined ? inlineExpressions : lazyObjectsRuntime === undefined,
     trace,
   };
   if (lazyObjectsRuntime !== undefined) {

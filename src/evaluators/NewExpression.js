@@ -10,16 +10,25 @@
 /* @flow */
 
 import type { Realm } from "../realm.js";
-import type { LexicalEnvironment } from "../environment.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
-import { ObjectValue, Value, AbstractObjectValue, AbstractValue } from "../values/index.js";
+import {
+  ObjectValue,
+  Value,
+  AbstractObjectValue,
+  AbstractValue,
+  ECMAScriptSourceFunctionValue,
+} from "../values/index.js";
+import { EnvironmentRecord, type LexicalEnvironment } from "../environment.js";
+import { JoinedNormalAndAbruptCompletions } from "../completions.js";
+import { isInTryBlock } from "../methods/recursion.js";
+import { isRetainedOnGlobalObject } from "../methods/inlining.js";
 import { Environment, Leak } from "../singletons.js";
 import { IsConstructor, ArgumentListEvaluation } from "../methods/index.js";
 import { Construct } from "../methods/index.js";
 import invariant from "../invariant.js";
 import { FatalError } from "../errors.js";
 import { BabelNodeNewExpression } from "@babel/types";
-import { createOperationDescriptor } from "../utils/generator.js";
+import { createOperationDescriptor, Generator, TemporalOperationEntry } from "../utils/generator.js";
 
 export default function(
   ast: BabelNodeNewExpression,
@@ -79,10 +88,16 @@ function tryToEvaluateConstructOrLeaveAsAbstract(
   strictCode: boolean,
   realm: Realm
 ): ObjectValue | AbstractObjectValue {
+  let minEnvId = EnvironmentRecord.nextId;
+  let hadSavedAbrupt = false;
   let effects;
   try {
     effects = realm.evaluateForEffects(
-      () => createConstruct(constructor, argsList, realm),
+      () => {
+        let res = createConstruct(constructor, argsList, realm);
+        if (realm.savedCompletion !== undefined) hadSavedAbrupt = true;
+        return res;
+      },
       undefined,
       "tryToEvaluateConstructOrLeaveAsAbstract"
     );
@@ -90,32 +105,75 @@ function tryToEvaluateConstructOrLeaveAsAbstract(
     // if a FatalError occurs when constructing the constructor
     // then try and recover and create an abstract for this construct
     if (error instanceof FatalError) {
-      // we need to leak all the arguments and the constructor
-      Leak.value(realm, constructor);
-      for (let arg of argsList) {
-        Leak.value(realm, arg);
-      }
-      let abstractValue = realm.evaluateWithPossibleThrowCompletion(
-        () =>
-          AbstractValue.createTemporalFromBuildFunction(
-            realm,
-            ObjectValue,
-            [constructor, ...argsList],
-            createOperationDescriptor("NEW_EXPRESSION")
-          ),
-        TypesDomain.topVal,
-        ValuesDomain.topVal
-      );
-      invariant(abstractValue instanceof AbstractObjectValue);
-      return abstractValue;
+      return emitResidualNewExpression(realm, constructor, argsList);
     } else {
       throw error;
     }
+  }
+  if (
+    isInTryBlock(realm) &&
+    !realm.instantRender.enabled &&
+    !realm.react.enabled &&
+    constructor instanceof ECMAScriptSourceFunctionValue &&
+    argsList.some(a => a instanceof AbstractValue) &&
+    (hadSavedAbrupt || effects.result instanceof JoinedNormalAndAbruptCompletions) &&
+    isRetainedOnGlobalObject(realm, constructor) &&
+    isCleanIsolatedConstructEffects(effects, minEnvId)
+  ) {
+    return emitResidualNewExpression(realm, constructor, argsList);
   }
   realm.applyEffects(effects);
   let completion = realm.returnOrThrowCompletion(effects.result);
   invariant(completion instanceof ObjectValue || completion instanceof AbstractObjectValue);
   return completion;
+}
+
+function isCleanGeneratorForConstruct(gen: Generator): boolean {
+  for (let entry of gen._entries) {
+    if (!(entry instanceof TemporalOperationEntry)) return false;
+    if (entry.isPure) continue;
+    let deps = entry.getDependencies();
+    if (deps !== undefined && entry.operationDescriptor.type === "JOIN_GENERATORS") {
+      for (let dep of deps) {
+        if (!isCleanGeneratorForConstruct(dep)) return false;
+      }
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+function isCleanIsolatedConstructEffects(effects, minEnvId: number): boolean {
+  for (let pb of effects.modifiedProperties.keys()) {
+    if (effects.createdObjects.has(pb.object)) continue;
+    if (ObjectValue.refuseSerializationOnPropertyBinding(pb)) continue;
+    return false;
+  }
+  for (let b of effects.modifiedBindings.keys()) {
+    if (b.environment.id < minEnvId) return false;
+  }
+  return isCleanGeneratorForConstruct(effects.generator);
+}
+
+function emitResidualNewExpression(realm: Realm, constructor: Value, argsList: Array<Value>): AbstractObjectValue {
+  Leak.value(realm, constructor);
+  for (let arg of argsList) {
+    Leak.value(realm, arg);
+  }
+  let abstractValue = realm.evaluateWithPossibleThrowCompletion(
+    () =>
+      AbstractValue.createTemporalFromBuildFunction(
+        realm,
+        ObjectValue,
+        [constructor, ...argsList],
+        createOperationDescriptor("NEW_EXPRESSION")
+      ),
+    TypesDomain.topVal,
+    ValuesDomain.topVal
+  );
+  invariant(abstractValue instanceof AbstractObjectValue);
+  return abstractValue;
 }
 
 function createConstruct(constructor: Value, argsList: Array<Value>, realm: Realm): ObjectValue | AbstractObjectValue {

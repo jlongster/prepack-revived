@@ -11,7 +11,7 @@
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-//import { SimpleNormalCompletion } from "../completions.js";
+import { SimpleNormalCompletion } from "../completions.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import {
@@ -31,7 +31,8 @@ import {
 import { Reference, EnvironmentRecord } from "../environment.js";
 import invariant from "../invariant.js";
 import { IsCallable } from "../methods/index.js";
-import { Environment, To } from "../singletons.js";
+import { Environment, Leak, To } from "../singletons.js";
+import { createOperationDescriptor } from "../utils/generator.js";
 import type { BabelNodeUnaryExpression } from "@babel/types";
 
 function isInstance(proto, Constructor): boolean {
@@ -101,6 +102,49 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
   strictCode: boolean,
   realm: Realm
 ): Value {
+  if (ast.operator === "+" || ast.operator === "-" || ast.operator === "~") {
+    let val = Environment.GetValue(realm, expr);
+    const previousErrorHandler = realm.errorHandler;
+    let isPure = true;
+    realm.errorHandler = diagnostic => {
+      isPure = false;
+      return "Recover";
+    };
+    let effects;
+    try {
+      effects = realm.evaluateForEffects(
+        () => func(ast, val, strictCode, realm),
+        undefined,
+        "tryToEvaluateOperationOrLeaveAsAbstract"
+      );
+    } catch (error) {
+      if (error instanceof FatalError) {
+        isPure = false;
+      } else {
+        throw error;
+      }
+    } finally {
+      realm.errorHandler = previousErrorHandler;
+    }
+    if (isPure && effects) {
+      realm.applyEffects(effects);
+      if (effects.result instanceof SimpleNormalCompletion) return effects.result.value;
+      return realm.returnOrThrowCompletion(effects.result);
+    }
+    Leak.value(realm, val, ast.loc);
+    return realm.evaluateWithPossibleThrowCompletion(
+      () =>
+        AbstractValue.createTemporalFromBuildFunction(
+          realm,
+          ast.operator === "~" ? IntegralValue : NumberValue,
+          [val],
+          createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix }),
+          { isPure: true }
+        ),
+      TypesDomain.topVal,
+      ValuesDomain.topVal
+    );
+  }
   let effects;
   try {
     effects = realm.evaluateForEffects(
