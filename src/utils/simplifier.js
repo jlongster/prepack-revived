@@ -14,7 +14,7 @@ import { FatalError, InfeasiblePathError } from "../errors.js";
 import { ValuesDomain } from "../domains/index.js";
 import invariant from "../invariant.js";
 import { Realm } from "../realm.js";
-import { AbstractValue, BooleanValue, ConcreteValue, Value } from "../values/index.js";
+import { AbstractValue, BooleanValue, ConcreteValue, StringValue, Value } from "../values/index.js";
 import { Path, To } from "../singletons.js";
 import EmptyValue from "../values/EmptyValue.js";
 import { createOperationDescriptor } from "./generator.js";
@@ -199,8 +199,11 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     case "==":
     case "!=":
     case "===":
-    case "!==":
+    case "!==": {
+      let folded = foldConditionalArithmetic(realm, value, op);
+      if (folded !== value) return simplify(realm, folded, isCondition, depth + 1);
       return simplifyEquality(realm, value, depth + 1);
+    }
     case "conditional": {
       let [c0, x0, y0] = value.args;
       let c = simplify(realm, c0, true, depth + 1);
@@ -270,11 +273,11 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
           return AbstractValue.createFromConditionalOp(realm, c, x, z, value.expressionLocation, isCondition, true);
       }
       if (isCondition || (x.getType() === BooleanValue && y.getType() === BooleanValue)) {
-        // c ? true : false <=> c
-        if (!x.mightNotBeTrue() && !y.mightNotBeFalse()) return c;
+        // c ? true : false <=> c, if c is a boolean or only used as a condition
+        if (!x.mightNotBeTrue() && !y.mightNotBeFalse() && (isCondition || c.getType() === BooleanValue)) return c;
         // c ? false : true <=> !c
         if (!x.mightNotBeFalse() && !y.mightNotBeTrue())
-          return AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, true);
+          return AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, isCondition);
       }
       if (c.equals(c0) && x.equals(x0) && y.equals(y0)) return value;
       return AbstractValue.createFromConditionalOp(realm, c, x, y, value.expressionLocation, isCondition, true);
@@ -319,6 +322,13 @@ function foldConditionalArithmetic(realm: Realm, value: AbstractValue, op: any):
     return value;
   }
   if (!left.concat(right).every(v => v instanceof PrimitiveValue && !(v instanceof EmptyValue))) return value;
+  // Only fold comparisons of numbers and strings. Folding comparisons of booleans would loop, since
+  // simplifying the conditional result compares it with its own (boolean) branches.
+  if (
+    (op === "===" || op === "!==" || op === "==" || op === "!=") &&
+    !left.concat(right).every(v => v instanceof NumberValue || v instanceof StringValue)
+  )
+    return value;
   let l = ValuesDomain.computeBinary(realm, op, (left[0]: any), (left[1]: any));
   let r = ValuesDomain.computeBinary(realm, op, (right[0]: any), (right[1]: any));
   if (!(l instanceof PrimitiveValue) || !(r instanceof PrimitiveValue)) return value;

@@ -21,7 +21,9 @@ import {
   NullValue,
   NumberValue,
   ObjectValue,
+  PrimitiveValue,
   StringValue,
+  SymbolValue,
   UndefinedValue,
   Value,
 } from "../../values/index.js";
@@ -866,57 +868,79 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
-    let len = To.ToLength(realm, Get(realm, O, "length"));
+    let lenVal = Get(realm, O, "length");
 
     // 3. If separator is undefined, let separator be the single-element String ",".
     if (!separator || separator instanceof UndefinedValue) separator = new StringValue(realm, ",");
 
     // 4. Let sep be ? ToString(separator).
-    let sep = To.ToStringPartial(realm, separator);
+    let sep = new StringValue(realm, To.ToStringPartial(realm, separator));
 
-    // 5. If len is zero, return the empty String.
-    if (len === 0) return realm.intrinsics.emptyString;
+    return withConcreteLength(lenVal, len => {
+      // 5. If len is zero, return the empty String.
+      if (len === 0) return realm.intrinsics.emptyString;
 
-    // 6. Let element0 be Get(O, "0").
-    let element0 = Get(realm, O, "0");
+      // 6. Let element0 be Get(O, "0").
+      let element0 = Get(realm, O, "0");
 
-    // 7. If element0 is undefined or null, let R be the empty String; otherwise, let R be ? ToString(element0).
-    let R: ?string;
-    if (HasSomeCompatibleType(element0, UndefinedValue, NullValue)) {
-      R = "";
-    } else {
-      R = To.ToStringPartial(realm, element0);
-    }
+      // 7. If element0 is undefined or null, let R be the empty String; otherwise, let R be ? ToString(element0).
+      let R = joinElementToString(element0);
 
-    // 8. Let k be 1.
-    let k = 1;
+      // 8. Let k be 1.
+      let k = 1;
 
-    // 9. Repeat, while k < len
-    while (k < len) {
-      // a. Let S be the String value produced by concatenating R and sep.
-      let S: string = R + sep;
+      // 9. Repeat, while k < len
+      while (k < len) {
+        // a. Let S be the String value produced by concatenating R and sep.
+        let S = concatenateStrings(R, sep);
 
-      // b. Let element be ? Get(O, ! To.ToString(k)).
-      let element = Get(realm, O, new StringValue(realm, k + ""));
+        // b. Let element be ? Get(O, ! To.ToString(k)).
+        let element = Get(realm, O, new StringValue(realm, k + ""));
 
-      // c. If element is undefined or null, let next be the empty String; otherwise, let next be ? ToString(element).
-      let next: ?string;
-      if (HasSomeCompatibleType(element, UndefinedValue, NullValue)) {
-        next = "";
-      } else {
-        next = To.ToStringPartial(realm, element);
+        // c. If element is undefined or null, let next be the empty String; otherwise, let next be ? ToString(element).
+        let next = joinElementToString(element);
+
+        // d. Let R be a String value produced by concatenating S and next.
+        R = concatenateStrings(S, next);
+
+        // e. Increase k by 1.
+        k++;
       }
 
-      // d. Let R be a String value produced by concatenating S and next.
-      R = S + next;
-
-      // e. Increase k by 1.
-      k++;
-    }
-
-    // 10. Return R.
-    return new StringValue(realm, R + "");
+      // 10. Return R.
+      return R;
+    });
   });
+
+  // ToString(element), or the empty string if element is undefined or null. Abstract elements are
+  // supported if converting them to a string cannot have side effects.
+  function joinElementToString(element: Value): Value {
+    if (element instanceof AbstractValue && isPrimitiveWithPureToString(element)) {
+      let str = To.ToStringAbstract(realm, element);
+      if (!element.mightBeUndefined() && !element.mightBeNull()) return str;
+      let isNullOrUndefined = AbstractValue.createFromBinaryOp(realm, "==", element, realm.intrinsics.null);
+      return AbstractValue.createFromConditionalOp(realm, isNullOrUndefined, realm.intrinsics.emptyString, str);
+    }
+    if (HasSomeCompatibleType(element, UndefinedValue, NullValue)) return realm.intrinsics.emptyString;
+    return new StringValue(realm, To.ToStringPartial(realm, element));
+  }
+
+  function isPrimitiveWithPureToString(value: AbstractValue): boolean {
+    let type = value.getType();
+    if (type === StringValue || type === BooleanValue || Value.isTypeCompatibleWith(type, NumberValue)) return true;
+    if (value.values.isTop()) return false;
+    for (let v of value.values.getElements()) {
+      if (!(v instanceof PrimitiveValue) || v instanceof SymbolValue) return false;
+    }
+    return true;
+  }
+
+  function concatenateStrings(x: Value, y: Value): Value {
+    if (x instanceof StringValue && y instanceof StringValue) return new StringValue(realm, x.value + y.value);
+    if (x instanceof StringValue && x.value === "") return y;
+    if (y instanceof StringValue && y.value === "") return x;
+    return AbstractValue.createFromBinaryOp(realm, "+", x, y);
+  }
 
   // ECMA262 22.1.3.14
   obj.defineNativeMethod("keys", 0, context => {
