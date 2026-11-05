@@ -20,11 +20,15 @@ import {
   FunctionValue,
   IntegralValue,
   NativeFunctionValue,
+  NullValue,
+  NumberValue,
   ObjectValue,
   StringValue,
+  SymbolValue,
+  UndefinedValue,
   Value,
 } from "../../values/index.js";
-import { To, Path } from "../../singletons.js";
+import { Create, To, Path } from "../../singletons.js";
 import { IsCallable } from "../../methods/index.js";
 import { ValuesDomain } from "../../domains/index.js";
 import invariant from "../../invariant.js";
@@ -667,6 +671,96 @@ export default function(realm: Realm): void {
     new PropertyDescriptor({
       value: new NativeFunctionValue(realm, "global.__fatal", "__fatal", 0, (context, []) => {
         throw new FatalError();
+      }),
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
+  // __possibleTypes(value) returns a comma separated, sorted list of the typeof results the value
+  // may have at runtime, looking through conditionals and unions. An abstract leaf of object type is
+  // reported as "abstract-object" and a leaf about whose type nothing is known as "unknown".
+  global.$DefineOwnProperty(
+    "__possibleTypes",
+    new PropertyDescriptor({
+      value: new NativeFunctionValue(realm, "global.__possibleTypes", "__possibleTypes", 1, (context, [value]) => {
+        let kinds = new Set();
+        let visit = (v: Value, depth: number) => {
+          if (depth > 64) {
+            kinds.add("unknown");
+            return;
+          }
+          if (v instanceof AbstractValue) {
+            if (v.kind === "conditional") {
+              visit(v.args[1], depth + 1);
+              visit(v.args[2], depth + 1);
+              return;
+            }
+            if (v.kind === "abstractConcreteUnion") {
+              for (let arg of v.args) visit(arg, depth + 1);
+              return;
+            }
+            let type = v.getType();
+            if (type === StringValue) kinds.add("string");
+            else if (Value.isTypeCompatibleWith(type, NumberValue)) kinds.add("number");
+            else if (type === BooleanValue) kinds.add("boolean");
+            else if (type === SymbolValue) kinds.add("symbol");
+            else if (Value.isTypeCompatibleWith(type, FunctionValue)) kinds.add("function");
+            else if (Value.isTypeCompatibleWith(type, ObjectValue)) kinds.add("abstract-object");
+            else if (!v.values.isTop()) for (let element of v.values.getElements()) visit(element, depth + 1);
+            else kinds.add("unknown");
+            return;
+          }
+          if (v instanceof ObjectValue) kinds.add(IsCallable(realm, v) ? "function" : "object");
+          else if (v instanceof NullValue) kinds.add("null");
+          else if (v instanceof UndefinedValue) kinds.add("undefined");
+          else if (v instanceof StringValue) kinds.add("string");
+          else if (v instanceof NumberValue) kinds.add("number");
+          else if (v instanceof BooleanValue) kinds.add("boolean");
+          else if (v instanceof SymbolValue) kinds.add("symbol");
+          else kinds.add("unknown");
+        };
+        visit(value, 0);
+        return new StringValue(realm, Array.from(kinds).sort().join(","));
+      }),
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
+  // __conditionalParts(value) returns [condition, consequent, alternate] when value is an abstract
+  // conditional (or logical) value, so that a model can branch on the condition and process each
+  // part separately. Returns undefined for any other value.
+  global.$DefineOwnProperty(
+    "__conditionalParts",
+    new PropertyDescriptor({
+      value: new NativeFunctionValue(realm, "global.__conditionalParts", "__conditionalParts", 1, (context, [value]) => {
+        if (!(value instanceof AbstractValue)) return realm.intrinsics.undefined;
+        let parts;
+        if (value.kind === "conditional") parts = [value.args[0], value.args[1], value.args[2]];
+        else if (value.kind === "||") parts = [value.args[0], value.args[0], value.args[1]];
+        else if (value.kind === "&&") parts = [value.args[0], value.args[1], value.args[0]];
+        else return realm.intrinsics.undefined;
+        return Create.CreateArrayFromList(realm, parts);
+      }),
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
+  // __bailout(message) aborts the evaluation with a FatalError diagnostic carrying the message.
+  // Models use it to refuse (at specialization time) code they do not know how to specialize soundly.
+  global.$DefineOwnProperty(
+    "__bailout",
+    new PropertyDescriptor({
+      value: new NativeFunctionValue(realm, "global.__bailout", "__bailout", 1, (context, [message]) => {
+        let text = message instanceof StringValue ? message.value : "unsupported construct";
+        let error = new CompilerDiagnostic(text, realm.currentLocation, "PP1100", "FatalError");
+        realm.handleError(error);
+        throw new FatalError(text);
       }),
       writable: true,
       enumerable: false,

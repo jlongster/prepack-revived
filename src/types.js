@@ -1004,7 +1004,13 @@ export type UtilsType = {|
   describeValue: Value => string,
   jsonToDisplayString: <T: { toDisplayJson(number): DisplayResult }>(T, number) => string,
   verboseToDisplayJson: ({}, number) => DisplayResult,
-  createModelledFunctionCall: (Realm, FunctionValue, void | string | ArgModel, void | Value) => void => Value,
+  createModelledFunctionCall: (
+    Realm,
+    FunctionValue,
+    void | string | ArgModel,
+    void | Value,
+    void | Array<void | ShapeInformationInterface>
+  ) => void => Value,
   isBindingMutationOutsideFunction: (binding: Binding, bindingEntry: BindingEntry, F: FunctionValue) => boolean,
   areEffectsPure: (realm: Realm, effects: Effects, F: FunctionValue) => boolean,
   reportSideEffectsFromEffects: (
@@ -1040,6 +1046,8 @@ export interface ShapeInformationInterface {
   getPropertyShape(key: string): void | ShapeInformationInterface;
   getGetter(): void | SupportedGraphQLGetters;
   getAbstractType(): typeof Value;
+  getVariants(): void | Array<ShapeInformationInterface>;
+  getJSType(): string;
 }
 
 type ECMAScriptType =
@@ -1087,11 +1095,20 @@ type ShapeDescriptorOfEnum = ShapeDescriptorCommon & {
   kind: "enum",
 };
 
+// A value that is exactly one of the variants. Variants are discriminated at runtime by typeof
+// (and === for undefined/null), so at most one variant may have each of the jsTypes void, null,
+// boolean, number/integral, string, and at most one of object/array.
+type ShapeDescriptorOfUnion = ShapeDescriptorCommon & {
+  kind: "union",
+  variants: Array<ShapeDescriptor>,
+};
+
 export type ShapeDescriptorNonLink =
   | ShapeDescriptorOfObject
   | ShapeDescriptorOfArray
   | ShapeDescriptorOfPrimitive
-  | ShapeDescriptorOfEnum;
+  | ShapeDescriptorOfEnum
+  | ShapeDescriptorOfUnion;
 
 export type ShapeDescriptor = ShapeDescriptorNonLink | ShapeDescriptorOfLink;
 

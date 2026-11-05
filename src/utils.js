@@ -29,7 +29,9 @@ import {
 } from "./values/index.js";
 import invariant from "./invariant.js";
 import { ShapeInformation } from "./utils/ShapeInformation.js";
-import type { ArgModel } from "./types.js";
+import { createShapedValue } from "./utils/ShapedValues.js";
+import { createOperationDescriptor } from "./utils/generator.js";
+import type { ArgModel, ShapeInformationInterface } from "./types.js";
 import { CompilerDiagnostic, FatalError } from "./errors.js";
 import type { Binding } from "./environment.js";
 import * as t from "@babel/types";
@@ -156,31 +158,58 @@ export function createModelledFunctionCall(
   realm: Realm,
   funcValue: FunctionValue,
   argModelInput: void | string | ArgModel,
-  thisValue: void | Value
+  thisValue: void | Value,
+  argShapes?: void | Array<void | ShapeInformationInterface>
 ): void => Value {
   let call = funcValue.$Call;
   invariant(call);
   let numArgs = funcValue.getLength();
   let args = [];
+  let deferredArgs = [];
   let argModel = typeof argModelInput === "string" ? (JSON.parse(argModelInput): ArgModel) : argModelInput;
   invariant(funcValue instanceof ECMAScriptSourceFunctionValue);
   let params = funcValue.$FormalParameters;
   if (numArgs !== undefined && numArgs > 0 && params) {
-    for (let parameterId of params) {
+    for (let i = 0; i < params.length; i++) {
+      let parameterId = params[i];
       if (t.isIdentifier(parameterId)) {
         // $FlowFixMe: Flow strict file does not allow for casting
         let paramName = ((parameterId: any): BabelNodeIdentifier).name;
-        let shape = ShapeInformation.createForArgument(argModel, paramName);
+        let shape =
+          argShapes !== undefined && argShapes !== null
+            ? argShapes[i]
+            : ShapeInformation.createForArgument(argModel, paramName);
         // Create an AbstractValue similar to __abstract being called
-        args.push(
-          AbstractValue.createAbstractArgument(
-            realm,
-            paramName,
-            funcValue.expressionLocation,
-            shape !== undefined ? shape.getAbstractType() : Value,
-            shape
-          )
-        );
+        if (shape === undefined) {
+          args.push(
+            AbstractValue.createAbstractArgument(realm, paramName, funcValue.expressionLocation, Value, undefined)
+          );
+        } else {
+          let paramShape = shape;
+          // Shaped arguments may need temporal entries (arrays with widened numeric properties),
+          // so they are created inside the evaluation of the call.
+          args.push(realm.intrinsics.undefined);
+          let index = args.length - 1;
+          deferredArgs.push(() => {
+            args[index] = createShapedValue(realm, paramShape, (type, readShape) => {
+              let argument = AbstractValue.createAbstractArgument(
+                realm,
+                paramName,
+                funcValue.expressionLocation,
+                type === ArrayValue ? Value : type,
+                readShape
+              );
+              if (type !== ArrayValue) return argument;
+              let array = ArrayValue.createTemporalWithWidenedNumericProperty(
+                realm,
+                [argument],
+                createOperationDescriptor("SINGLE_ARG")
+              );
+              array.shape = readShape;
+              return array;
+            });
+          });
+        }
       } else {
         realm.handleError(
           new CompilerDiagnostic(
@@ -203,6 +232,7 @@ export function createModelledFunctionCall(
     let newPathConditions = funcValue.pathConditionDuringDeclaration || savedPathConditions;
     realm.pathConditions = newPathConditions;
     try {
+      for (let createArg of deferredArgs) createArg();
       let result = call(thisArg, args);
       return result;
     } finally {

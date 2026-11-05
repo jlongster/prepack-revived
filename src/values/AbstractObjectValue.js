@@ -27,6 +27,7 @@ import {
 } from "./index.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import { IsDataDescriptor } from "../methods/index.js";
+import { createShapedValue } from "../utils/ShapedValues.js";
 import { Leak, Join, Widen } from "../singletons.js";
 import invariant from "../invariant.js";
 import { createOperationDescriptor, type OperationDescriptor } from "../utils/generator.js";
@@ -659,14 +660,9 @@ export default class AbstractObjectValue extends AbstractValue {
         let shape = shapeContainer.shape;
         let propertyShape, propertyGetter;
         // propertyShape expects only a string value
-        if (
-          (realm.instantRender.enabled || realm.react.enabled) &&
-          shape !== undefined &&
-          (typeof P === "string" || P instanceof StringValue)
-        ) {
+        if (shape !== undefined && (typeof P === "string" || P instanceof StringValue)) {
           propertyShape = shape.getPropertyShape(P instanceof StringValue ? P.value : P);
-          if (propertyShape !== undefined) {
-            type = propertyShape.getAbstractType();
+          if (propertyShape !== undefined && (realm.instantRender.enabled || realm.react.enabled)) {
             propertyGetter = propertyShape.getGetter();
           }
         }
@@ -674,26 +670,32 @@ export default class AbstractObjectValue extends AbstractValue {
         if (typeof P === "string") {
           P = new StringValue(this.$Realm, P);
         }
-        // Create an temporal array with widened properties
-        if (type === ArrayValue) {
-          return ArrayValue.createTemporalWithWidenedNumericProperty(
-            realm,
-            [ob, P],
-            createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter })
-          );
-        }
-        let propAbsVal = AbstractValue.createTemporalFromBuildFunction(
-          realm,
-          type,
-          [ob, P],
-          createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter }),
-          {
-            skipInvariant: true,
-            isPure: true,
-            shape: propertyShape,
+        let key = P;
+        let read = (readType, readShape) => {
+          // Create an temporal array with widened properties
+          if (readType === ArrayValue) {
+            let array = ArrayValue.createTemporalWithWidenedNumericProperty(
+              realm,
+              [ob, key],
+              createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter })
+            );
+            array.shape = readShape;
+            return array;
           }
-        );
-        return propAbsVal;
+          return AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            readType,
+            [ob, key],
+            createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter }),
+            {
+              skipInvariant: true,
+              isPure: true,
+              shape: readShape,
+            }
+          );
+        };
+        if (propertyShape !== undefined) return createShapedValue(realm, propertyShape, read);
+        return read(type, undefined);
       };
       if (this.isSimpleObject() && this.isIntrinsic()) {
         return generateAbstractGet();

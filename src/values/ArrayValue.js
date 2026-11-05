@@ -10,9 +10,10 @@
 /* @flow strict-local */
 
 import type { Effects, Realm } from "../realm.js";
-import type { PropertyBinding, PropertyKeyValue, Descriptor, ObjectKind } from "../types.js";
+import type { PropertyBinding, PropertyKeyValue, Descriptor, ObjectKind, ShapeInformationInterface } from "../types.js";
 import {
   AbstractValue,
+  BooleanValue,
   BoundFunctionValue,
   ECMAScriptSourceFunctionValue,
   NumberValue,
@@ -41,7 +42,8 @@ type PossibleNestedOptimizedFunctions = [
 function evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
   realm: Realm,
   abstractArrayValue: ArrayValue,
-  possibleNestedOptimizedFunctions: PossibleNestedOptimizedFunctions
+  possibleNestedOptimizedFunctions: PossibleNestedOptimizedFunctions,
+  argShapes: void | Array<void | ShapeInformationInterface>
 ): void {
   for (let { func, thisValue } of possibleNestedOptimizedFunctions) {
     let funcToModel = func;
@@ -70,15 +72,16 @@ function evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
 
     let funcCall = () => {
       invariant(funcToModel instanceof ECMAScriptSourceFunctionValue);
-      return realm.evaluateFunctionForPureEffects(
-        func,
-        Utils.createModelledFunctionCall(realm, funcToModel, undefined, thisValue),
+      let effects = realm.evaluateForEffects(
+        Utils.createModelledFunctionCall(realm, funcToModel, undefined, thisValue, argShapes),
         null,
-        "temporalArray nestedOptimizedFunction",
-        () => {
-          throw new NestedOptimizedFunctionSideEffect();
-        }
+        "temporalArray nestedOptimizedFunction"
       );
+      dropNetZeroModifications(effects, func);
+      Utils.reportSideEffectsFromEffects(realm, effects, func, () => {
+        throw new NestedOptimizedFunctionSideEffect();
+      });
+      return effects;
     };
     // We take the modelled function and wrap it in a pure evaluation so we can check for
     // side-effects that occur when evaluating the function. If there are side-effects, then
@@ -110,6 +113,53 @@ function evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
     abstractArrayValue.nestedOptimizedFunctionEffects.set(funcToModel, effects);
     realm.collectedNestedOptimizedFunctionEffects.set(funcToModel, effects);
   }
+}
+
+// A callback invocation that temporarily changes an outer binding or property but restores the
+// exact same value (and attributes) before it returns has no net effect on the outer state, so
+// running it any number of times is equivalent to running it once (each invocation starts from
+// the same state). Such modifications are dropped from the callback's effects instead of being
+// treated as side effects. The values are compared by identity: a value recomputed to something
+// equal but not identical still counts as a modification.
+function dropNetZeroModifications(effects: Effects, func: BoundFunctionValue | ECMAScriptSourceFunctionValue): void {
+  for (let [binding, entry] of effects.modifiedBindings) {
+    if (
+      Utils.isBindingMutationOutsideFunction(binding, entry, func) &&
+      sameValue(entry.value, binding.value) &&
+      entry.hasLeaked === binding.hasLeaked
+    ) {
+      effects.modifiedBindings.delete(binding);
+    }
+  }
+  for (let [propertyBinding, descriptor] of effects.modifiedProperties) {
+    if (effects.createdObjects.has(propertyBinding.object)) continue;
+    let previous = propertyBinding.descriptor;
+    if (previous === descriptor) {
+      effects.modifiedProperties.delete(propertyBinding);
+      continue;
+    }
+    if (
+      previous instanceof PropertyDescriptor &&
+      descriptor instanceof PropertyDescriptor &&
+      sameValue(previous.value, descriptor.value) &&
+      previous.writable === descriptor.writable &&
+      previous.enumerable === descriptor.enumerable &&
+      previous.configurable === descriptor.configurable &&
+      previous.get === descriptor.get &&
+      previous.set === descriptor.set
+    ) {
+      effects.modifiedProperties.delete(propertyBinding);
+    }
+  }
+}
+
+function sameValue(a: void | Value, b: void | Value): boolean {
+  if (a === b) return a !== undefined;
+  return (
+    (a instanceof NumberValue && b instanceof NumberValue && Object.is(a.value, b.value)) ||
+    (a instanceof StringValue && b instanceof StringValue && a.value === b.value) ||
+    (a instanceof BooleanValue && b instanceof BooleanValue && a.value === b.value)
+  );
 }
 
 /*
@@ -203,7 +253,8 @@ function createArrayWithWidenedNumericProperty(
   realm: Realm,
   args: Array<Value>,
   intrinsicName: string,
-  possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions
+  possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions,
+  argShapes?: Array<void | ShapeInformationInterface>
 ): ArrayValue {
   let abstractArrayValue = new ArrayValue(realm, intrinsicName);
 
@@ -212,7 +263,8 @@ function createArrayWithWidenedNumericProperty(
       evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
         realm,
         abstractArrayValue,
-        possibleNestedOptimizedFunctions
+        possibleNestedOptimizedFunctions,
+        argShapes
       );
     } else {
       // If nested optimized functions are disabled, we need to fallback to
@@ -239,6 +291,9 @@ export default class ArrayValue extends ObjectValue {
     super(realm, realm.intrinsics.ArrayPrototype, intrinsicName);
   }
   nestedOptimizedFunctionEffects: void | Map<ECMAScriptSourceFunctionValue, Effects>;
+  // For arrays with widened numeric properties that model an abstract input array, the shape of
+  // the array (whose element shape is used for the arguments of nested optimized callbacks).
+  shape: void | ShapeInformationInterface;
 
   getKind(): ObjectKind {
     return "Array";
@@ -351,13 +406,14 @@ export default class ArrayValue extends ObjectValue {
     realm: Realm,
     args: Array<Value>,
     operationDescriptor: OperationDescriptor,
-    possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions
+    possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions,
+    argShapes?: Array<void | ShapeInformationInterface>
   ): ArrayValue {
     invariant(realm.generator !== undefined);
 
     let value = realm.generator.deriveConcreteObject(
       intrinsicName =>
-        createArrayWithWidenedNumericProperty(realm, args, intrinsicName, possibleNestedOptimizedFunctions),
+        createArrayWithWidenedNumericProperty(realm, args, intrinsicName, possibleNestedOptimizedFunctions, argShapes),
       args,
       operationDescriptor,
       { isPure: true }
