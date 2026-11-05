@@ -1,12 +1,13 @@
 {
   "generatedBy": "bench/setup.js",
-  "count": 15,
-  "totalBytes": 2830908,
+  "count": 22,
+  "totalBytes": 25352367,
   "libraries": [
     {
       "id": "lodash",
       "name": "Lodash",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Utility library; module init constructs LodashWrapper/LazyWrapper prototypes, 300+ methods, and lookup tables.",
       "file": "libs/dist/lodash.js",
@@ -27,6 +28,7 @@
       "id": "underscore",
       "name": "Underscore",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Functional utility library; module init performs environment feature checks and mixes 100+ functions onto `_.prototype`.",
       "file": "libs/dist/underscore.js",
@@ -47,6 +49,7 @@
       "id": "ramda",
       "name": "Ramda",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Point-free curried functional library; module init wraps 250+ combinators in _curry1/_curry2/_curry3 dispatchers.",
       "file": "libs/dist/ramda.js",
@@ -67,6 +70,7 @@
       "id": "immutable",
       "name": "Immutable.js",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Persistent HAMT/trie collections (Map, List, Set, OrderedMap, Record); builds prototype hierarchies and sentinels at init.",
       "file": "libs/dist/immutable.js",
@@ -87,6 +91,7 @@
       "id": "moment",
       "name": "Moment.js (with locales)",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Init-heavy date/time library with 135+ bundled locales registered via defineLocale() and regex token tables built at load.",
       "file": "libs/dist/moment.js",
@@ -107,6 +112,7 @@
       "id": "chroma-js",
       "name": "chroma.js",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Color conversion & scale library; module init registers RGB/HSL/Lab/LCH/CMYK color spaces, ColorBrewer palettes, and W3C named colors.",
       "file": "libs/dist/chroma-js.js",
@@ -127,6 +133,7 @@
       "id": "acorn",
       "name": "Acorn",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "ECMAScript parser; module init builds token types, keyword regexes, operator precedence tables, and Unicode identifier bitmaps.",
       "file": "libs/dist/acorn.js",
@@ -147,6 +154,7 @@
       "id": "crc-32",
       "name": "SheetJS crc-32",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Lookup-table CRC-32 implementation; module init computes a 256-entry table and 16 slice-by-16 Int32Array subtables (4,096 entries).",
       "file": "libs/dist/crc-32.js",
@@ -167,6 +175,7 @@
       "id": "marked",
       "name": "Marked",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Markdown parser & compiler; module init constructs GFM/pedantic/normal block and inline grammar regex tables.",
       "file": "libs/dist/marked.js",
@@ -187,6 +196,7 @@
       "id": "d3-scale",
       "name": "D3 Scale + Array",
       "kind": "library",
+      "tier": "standard",
       "buildType": "umd",
       "description": "Data visualization quantitative/ordinal/time scales, array statistics, formatters, and color interpolators initialized on `d3`.",
       "file": "libs/dist/d3-scale.js",
@@ -249,6 +259,7 @@
       "id": "redux",
       "name": "Redux (store + middleware init)",
       "kind": "app-workload",
+      "tier": "standard",
       "buildType": "esbuild-iife",
       "description": "Redux bundled into an ES2015 IIFE; module init composes reducers, applies logging/validation middleware, creates a store, and dispatches seed actions.",
       "file": "libs/dist/redux.js",
@@ -269,6 +280,7 @@
       "id": "handlebars-app",
       "name": "Handlebars (init template compile)",
       "kind": "app-workload",
+      "tier": "standard",
       "buildType": "umd+app-init",
       "description": "App workload: loads Handlebars compiler+runtime, registers helpers/partials, compiles an invoice template AST to JS, and renders a boot view at module init.",
       "file": "libs/dist/handlebars-app.js",
@@ -289,6 +301,7 @@
       "id": "preact-ssr-app",
       "name": "Preact SSR App (init + runtime renderToString)",
       "kind": "app-workload",
+      "tier": "standard",
       "buildType": "umd+app-init",
       "description": "App workload: Preact + preact-render-to-string renders a multi-component documentation dashboard at module init and exposes dynamic SSR at runtime.",
       "file": "libs/dist/preact-ssr-app.js",
@@ -315,6 +328,7 @@
       "id": "react-ssr-app",
       "name": "React 18 SSR App (init + runtime renderToString)",
       "kind": "app-workload",
+      "tier": "standard",
       "buildType": "umd+app-init",
       "description": "App workload: React 18 + ReactDOMServer legacy browser bundle renders a multi-component storefront catalog at module init and serves runtime SSR.",
       "file": "libs/dist/react-ssr-app.js",
@@ -341,6 +355,7 @@
       "id": "yaml-router-app",
       "name": "YAML Config + Mustache + Router App",
       "kind": "app-workload",
+      "tier": "standard",
       "buildType": "umd+app-init",
       "description": "Init-heavy app workload: parses a 95-line YAML service/route manifest with js-yaml, compiles 10 parameterized REST routes into RegExps, and pre-parses Mustache views at module init.",
       "file": "libs/dist/yaml-router-app.js",
@@ -360,6 +375,159 @@
           "version": "4.2.0",
           "license": "MIT",
           "homepage": "https://github.com/janl/mustache.js"
+        }
+      ]
+    },
+    {
+      "id": "moment-timezone",
+      "name": "Moment Timezone (full IANA data)",
+      "kind": "library",
+      "tier": "large",
+      "buildType": "umd",
+      "description": "Moment core + full Moment Timezone data (~0.91 MB); module init unpacks base-60 IANA transition tables and links for 590+ timezones.",
+      "file": "libs/dist/moment-timezone.js",
+      "bytes": 935184,
+      "sha256": "0ea838ff86d1210433ee4a06deb970eaa3428cd96152c20df7346cdd21e96548",
+      "expectedDigest": "691c1c533a28bd8eda4c9904563283448e64b848f5dc23958a651d188baec988",
+      "expectedPreview": "{\"tzVersion\":\"0.6.6\",\"dataVersion\":\"2026f\",\"zoneCount\":597,\"conversions\":[{\"zone\":\"America/New_York\",\"winter\":\"2026-01-15 13:30:00 EST (-05:00)\",\"winterDst\":false,\"summer\":\"2026-07",
+      "packages": [
+        {
+          "name": "moment",
+          "version": "2.31.0",
+          "license": "MIT",
+          "homepage": "https://momentjs.com"
+        },
+        {
+          "name": "moment-timezone",
+          "version": "0.6.6",
+          "license": "MIT",
+          "homepage": "http://momentjs.com/timezone/"
+        }
+      ]
+    },
+    {
+      "id": "prettier",
+      "name": "Prettier Standalone (+ Babel, PostCSS, HTML parsers)",
+      "kind": "library",
+      "tier": "large",
+      "buildType": "umd",
+      "description": "Prettier standalone formatter bundled with Babel, PostCSS, and HTML parser plugins (~1.07 MB); builds printer AST dispatchers and parser grammars at init.",
+      "file": "libs/dist/prettier.js",
+      "bytes": 1091154,
+      "sha256": "57052068ad0765e318560e3733505f7b467713a8ba7d5c9604bd890ee46f4073",
+      "expectedDigest": "3543f56ddc74997fd2da5caedc1d1b1c50518669180c64510db2f987f220836a",
+      "expectedPreview": "{\"version\":\"2.8.8\",\"js\":\"const compute = ({ items, taxRate = 0.08 }) =>\\n  items\\n    .filter((x) => x.qty > 0)\\n    .map((it, idx) => ({\\n      idx,\\n      sku: it.sku,\\n      gro",
+      "packages": [
+        {
+          "name": "prettier",
+          "version": "2.8.8",
+          "license": "MIT",
+          "homepage": "https://prettier.io"
+        }
+      ]
+    },
+    {
+      "id": "highlight-js",
+      "name": "Highlight.js (all 190+ languages)",
+      "kind": "library",
+      "tier": "large",
+      "buildType": "esbuild-iife",
+      "description": "Full Highlight.js syntax highlighter (~1.72 MB ES2015 IIFE); module init registers all 193 language grammar factories and freezes core tables.",
+      "file": "libs/dist/highlight-js.js",
+      "bytes": 1878500,
+      "sha256": "592d0303a6a14458765bba68e1938db467d9a2ea31ee116a336f3ecc6ec68f8a",
+      "expectedDigest": "602a65ad2637d1ce89d5151cc155d6a1ec39317b29b08813bfb43bf4345a50b4",
+      "expectedPreview": "{\"version\":\"11.12.0\",\"languageCount\":193,\"tsAliases\":[\"ts\",\"tsx\",\"mts\",\"cts\"],\"highlighted\":[{\"lang\":\"javascript\",\"relevance\":7,\"html\":\"<span class=\\\"hljs-keyword\\\">export</span> <",
+      "packages": [
+        {
+          "name": "highlight.js",
+          "version": "11.12.0",
+          "license": "BSD-3-Clause",
+          "homepage": "https://highlightjs.org/"
+        }
+      ]
+    },
+    {
+      "id": "three",
+      "name": "Three.js (math + scene graph)",
+      "kind": "library",
+      "tier": "large",
+      "buildType": "esbuild-iife",
+      "description": "Three.js 3D engine (~1.90 MB ES2015 IIFE); module init constructs math LUTs, color management spaces, shader chunks, uniform libraries, and geometry/material classes.",
+      "file": "libs/dist/three.js",
+      "bytes": 1960313,
+      "sha256": "68c8ed5011094b796fedda390d969ba8913b9d34cc7575b166ae97ff4203081c",
+      "expectedDigest": "e62c48c0a428d1007f56203a2d2682428ea30c9ea42f99d5960a5810ac2c092a",
+      "expectedPreview": "{\"revision\":\"187\",\"det\":8,\"identDiag\":[1,1,1,1],\"transformed\":[3,-4,10],\"rayHit\":[0,0,2],\"crateWorld\":[12.828427,7,-1.585786],\"crateNdc\":[0.612271,0.601435,0.990402],\"geoCount\":2,\"",
+      "packages": [
+        {
+          "name": "three",
+          "version": "0.187.0",
+          "license": "MIT",
+          "homepage": "https://threejs.org/"
+        }
+      ]
+    },
+    {
+      "id": "mathjs",
+      "name": "mathjs (eager typed-function registry)",
+      "kind": "library",
+      "tier": "large",
+      "buildType": "esbuild-iife",
+      "description": "Init-heavy math engine (~2.11 MB IIFE); module init constructs 300+ multi-signature functions via typed-function, unit tables, physical constants, and expression algebra.",
+      "file": "libs/dist/mathjs.js",
+      "bytes": 2168744,
+      "sha256": "9d344d84dc97a3bffef20aadd98677430c2136bccd4aa38a2c51260f3ac9257d",
+      "expectedDigest": "7b0e0441c745c31eb916ab1290639fdd181e86de0291de1efe3f534166bdecc5",
+      "expectedPreview": "{\"version\":\"15.2.0\",\"det\":54,\"solved\":[0.425926,2.259259,2.777778],\"invRow0\":[0.296296,-0.166667,-0.092593],\"deriv\":\"3 * x ^ 2 + 4 * x - 5\",\"simplified\":\"6 * x\",\"quadAt4\":25,\"compl",
+      "packages": [
+        {
+          "name": "mathjs",
+          "version": "15.2.0",
+          "license": "Apache-2.0",
+          "homepage": "https://mathjs.org"
+        }
+      ]
+    },
+    {
+      "id": "babel-standalone",
+      "name": "@babel/standalone (preset-env + preset-react)",
+      "kind": "library",
+      "tier": "large",
+      "buildType": "umd",
+      "description": "Standalone Babel 7 compiler (~5.25 MB UMD); module init registers @babel/parser, @babel/traverse, @babel/generator, core-js compat tables, 100+ plugins, and built-in presets.",
+      "file": "libs/dist/babel-standalone.js",
+      "bytes": 5374865,
+      "sha256": "6a650cbcef54f6088df4cd3154803872a02908298a65b755c3da8ca327dd1291",
+      "expectedDigest": "da602d47888edc2efe52f20b9fa2c65dfd56f367c6d06c5662e5674894e8d3ac",
+      "expectedPreview": "{\"version\":\"7.29.13\",\"presetCount\":13,\"pluginCount\":123,\"topNodeTypes\":[\"ExpressionStatement\",\"ExpressionStatement\",\"FunctionDeclaration\",\"FunctionDeclaration\",\"FunctionDeclaration",
+      "packages": [
+        {
+          "name": "@babel/standalone",
+          "version": "7.29.13",
+          "license": "MIT",
+          "homepage": "https://babel.dev/docs/en/next/babel-standalone"
+        }
+      ]
+    },
+    {
+      "id": "typescript",
+      "name": "TypeScript Compiler (lib/typescript.js)",
+      "kind": "library",
+      "tier": "large",
+      "buildType": "standalone-script",
+      "description": "Full TypeScript 5.9 compiler (~8.90 MB standalone script); module init constructs scanner/parser/binder/checker/emitter dispatch tables, token maps, and diagnostic catalogs.",
+      "file": "libs/dist/typescript.js",
+      "bytes": 9112699,
+      "sha256": "4bfc15ec1258183715454a83c9ab3da9a5665a93da7b2ce79c6799abd9dc00d0",
+      "expectedDigest": "f715c524a3830172417e2084570c603e1678c3095a76c4959d8bc0820ca9f0df",
+      "expectedPreview": "{\"version\":\"5.9.3\",\"diagCount\":0,\"stmtKinds\":[\"EnumDeclaration\",\"InterfaceDeclaration\",\"ClassDeclaration\"],\"nodeCount\":116,\"identCount\":40,\"outputText\":\"\\\"use strict\\\";\\nObject.def",
+      "packages": [
+        {
+          "name": "typescript",
+          "version": "5.9.3",
+          "license": "Apache-2.0",
+          "homepage": "https://www.typescriptlang.org/"
         }
       ]
     }
