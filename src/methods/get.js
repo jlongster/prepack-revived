@@ -22,6 +22,7 @@ import {
   NullValue,
   NumberValue,
   ObjectValue,
+  PrimitiveValue,
   ProxyValue,
   StringValue,
   UndefinedValue,
@@ -369,6 +370,70 @@ export function OrdinaryGetPartial(
   if (O.unknownProperty === undefined && !O.isPartialObject()) {
     let keys = IntervalDomain.enumeratePropertyKeys(P, MAX_KEY_CASES);
     if (keys !== undefined) return mapCases(realm, P, keys, k => O.$Get(To.ToString(realm, k), Receiver));
+
+    // For larger bounded integer index ranges (e.g. `lut[x & 255]` on a 256-entry lookup table),
+    // emit a single typed `OBJECT_GET_PARTIAL` read instead of a 256-deep conditional chain.
+    if (
+      O === Receiver &&
+      O instanceof ArrayValue &&
+      !O.isIntrinsic() &&
+      !O.mightBeLeakedObject() &&
+      O.$Prototype === realm.intrinsics.ArrayPrototype &&
+      !P.mightNotBeNumber() &&
+      realm.generator !== undefined
+    ) {
+      let lenBinding = O.properties.get("length");
+      let lenDesc = lenBinding !== undefined ? lenBinding.descriptor : undefined;
+      let lenVal = lenDesc instanceof PropertyDescriptor ? lenDesc.value : undefined;
+      let range = IntervalDomain.of(P);
+      if (
+        lenVal instanceof NumberValue &&
+        range !== undefined &&
+        range.integral &&
+        !range.mayBeNaN &&
+        range.lo >= 0 &&
+        range.hi < lenVal.value &&
+        range.hi - range.lo <= 4096
+      ) {
+        let commonType: void | typeof Value;
+        let allPresentData = true;
+        for (let k = range.lo; k <= range.hi; k++) {
+          let elemBinding = O.properties.get(k + "");
+          let elemDesc = elemBinding !== undefined ? elemBinding.descriptor : undefined;
+          if (!(elemDesc instanceof PropertyDescriptor) || !(elemDesc.value instanceof Value)) {
+            allPresentData = false;
+            break;
+          }
+          let ev = elemDesc.value;
+          if (ev instanceof EmptyValue || (ev instanceof AbstractValue && ev.mightHaveBeenDeleted())) {
+            allPresentData = false;
+            break;
+          }
+          let et = ev.getType();
+          if (commonType === undefined) {
+            commonType = et;
+          } else if (commonType !== et) {
+            if (Value.isTypeCompatibleWith(et, commonType)) {
+              // keep commonType
+            } else if (Value.isTypeCompatibleWith(commonType, et)) {
+              commonType = et;
+            } else {
+              commonType = Value;
+            }
+          }
+        }
+        if (allPresentData && commonType !== undefined && Value.isTypeCompatibleWith(commonType, PrimitiveValue)) {
+          O.makeFinal();
+          return AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            commonType,
+            [O, P],
+            createOperationDescriptor("OBJECT_GET_PARTIAL"),
+            { skipInvariant: true, isPure: true }
+          );
+        }
+      }
+    }
   }
 
   // A string coercion might have side-effects.

@@ -17,6 +17,7 @@ import {
   IntegralValue,
   ObjectValue,
   SymbolValue,
+  UndefinedValue,
 } from "../values/index.js";
 import type { Effects, Realm, SideEffectType } from "../realm.js";
 
@@ -131,10 +132,10 @@ export function withDescriptorValue(
     if (descriptor.value !== undefined) {
       func(propertyNameOrSymbol, descriptor.value, "value");
     } else {
-      if (descriptor.get !== undefined) {
+      if (descriptor.get !== undefined && !(descriptor.get instanceof UndefinedValue)) {
         func(propertyNameOrSymbol, descriptor.get, "get");
       }
-      if (descriptor.set !== undefined) {
+      if (descriptor.set !== undefined && !(descriptor.set instanceof UndefinedValue)) {
         func(propertyNameOrSymbol, descriptor.set, "set");
       }
     }

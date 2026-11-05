@@ -193,7 +193,10 @@ export class ResidualFunctions {
     invariant(functionInfo);
     let { unbound, modified, usesThis, usesArguments } = functionInfo;
     let params = instances[0].functionValue.$FormalParameters;
-    let hasNonIdentifierParam = params !== undefined && params.some(p => p.type !== "Identifier");
+    let hasNonIdentifierParam =
+      (params !== undefined && params.some(p => p.type !== "Identifier")) ||
+      instances[0].functionValue.$FunctionKind === "generator" ||
+      !!instances[0].functionValue.$IsAsync;
     if (unbound.size === 0 && modified.size === 0 && !usesThis && !usesArguments && !hasNonIdentifierParam) {
       return [];
     }
@@ -313,7 +316,10 @@ export class ResidualFunctions {
     invariant(functionInfo);
     let { usesArguments } = functionInfo;
     let params = instances[0].functionValue.$FormalParameters;
-    let hasNonIdentifierParam = params !== undefined && params.some(p => p.type !== "Identifier");
+    let hasNonIdentifierParam =
+      (params !== undefined && params.some(p => p.type !== "Identifier")) ||
+      instances[0].functionValue.$FunctionKind === "generator" ||
+      !!instances[0].functionValue.$IsAsync;
     let canCurry = this._canUseCurriedFactory(funcBody, instances);
     if ((usesArguments || hasNonIdentifierParam) && !canCurry) return false;
 
@@ -441,11 +447,15 @@ export class ResidualFunctions {
   _createFunctionExpression(
     params: Array<BabelNodeLVal>,
     body: BabelNodeBlockStatement,
-    isLexical: boolean
+    isLexical: boolean,
+    isGenerator: boolean = false,
+    isAsync: boolean = false
   ): BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression {
     // Additional statements might be inserted at the beginning of the body, so we clone it.
     body = ((Object.assign({}, body): any): BabelNodeBlockStatement);
-    return isLexical ? t.arrowFunctionExpression(params, body) : t.functionExpression(null, params, body);
+    return isLexical
+      ? t.arrowFunctionExpression(params, body, isAsync)
+      : t.functionExpression(null, params, body, isGenerator, isAsync);
   }
 
   spliceFunctions(
@@ -610,6 +620,8 @@ export class ResidualFunctions {
           classMethodComputed,
           classMethodIsStatic
         );
+        classMethod.generator = functionValue.$FunctionKind === "generator";
+        classMethod.async = !!functionValue.$IsAsync;
         // add the class method to the class expression node body
         if (isConstructor) {
           funcOrClassNode.body.body.unshift(classMethod);
@@ -625,9 +637,11 @@ export class ResidualFunctions {
           funcOrClassNode.superClass = classSuperNode;
         }
       } else {
+        let isGen = functionValue.$FunctionKind === "generator";
+        let isAsync = !!functionValue.$IsAsync;
         funcOrClassNode = isLexical
-          ? t.arrowFunctionExpression(params, functionBody)
-          : t.functionExpression(null, params, functionBody);
+          ? t.arrowFunctionExpression(params, functionBody, isAsync)
+          : t.functionExpression(null, params, functionBody, isGen, isAsync);
       }
       let id = this.locationService.getLocation(funcValue);
       invariant(id !== undefined);
@@ -687,20 +701,35 @@ export class ResidualFunctions {
             let hasEmptyConstructor = !!functionValue.$HasEmptyConstructor;
             if (!isConstructor || (isConstructor && !hasEmptyConstructor)) {
               let methodParams = params.slice();
+              let rawClassMethod = t.classMethod(
+                methodType,
+                classMethodKeyNode,
+                methodParams,
+                funcBody,
+                classMethodComputed,
+                classMethodIsStatic
+              );
+              rawClassMethod.generator = functionValue.$FunctionKind === "generator";
+              rawClassMethod.async = !!functionValue.$IsAsync;
               let classMethod = new ResidualFunctionInstantiator(
                 factoryFunctionInfos,
                 this.realm.moduleFactoryFunctionsToRemove,
                 this._getIdentifierReplacements(funcBody, residualFunctionBindings),
                 this._getCallReplacements(funcBody),
-                t.classMethod(
-                  methodType,
-                  classMethodKeyNode,
-                  methodParams,
-                  funcBody,
-                  classMethodComputed,
-                  classMethodIsStatic
-                )
+                rawClassMethod
               ).instantiate();
+
+              let methodScopeInit = [];
+              for (let scope of scopeInstances.values()) {
+                methodScopeInit = methodScopeInit.concat(
+                  this.referentializer.getReferentializedScopeInitialization(scope, t.numericLiteral(scope.id))
+                );
+              }
+              if (methodScopeInit.length > 0) {
+                let methodBody = ((classMethod.body: any): BabelNodeBlockStatement);
+                invariant(t.isBlockStatement(methodBody));
+                methodBody.body = methodScopeInit.concat(methodBody.body);
+              }
 
               // add the class method to the class expression node body
               if (isConstructor) {
@@ -719,12 +748,14 @@ export class ResidualFunctions {
             }
           } else {
             let isLexical = instance.functionValue.$ThisMode === "lexical";
+            let isGen = instance.functionValue.$FunctionKind === "generator";
+            let isAsync = !!instance.functionValue.$IsAsync;
             funcOrClassNode = new ResidualFunctionInstantiator(
               factoryFunctionInfos,
               this.realm.moduleFactoryFunctionsToRemove,
               this._getIdentifierReplacements(funcBody, residualFunctionBindings),
               this._getCallReplacements(funcBody),
-              this._createFunctionExpression(params, funcBody, isLexical)
+              this._createFunctionExpression(params, funcBody, isLexical, isGen, isAsync)
             ).instantiate();
 
             let scopeInitialization = [];
@@ -822,7 +853,9 @@ export class ResidualFunctions {
 
         if (useCurried) {
           let isLexical = normalInstances[0].functionValue.$ThisMode === "lexical";
-          let innerTemplate = this._createFunctionExpression(params.slice(), funcBody, isLexical);
+          let isGen = normalInstances[0].functionValue.$FunctionKind === "generator";
+          let isAsync = !!normalInstances[0].functionValue.$IsAsync;
+          let innerTemplate = this._createFunctionExpression(params.slice(), funcBody, isLexical, isGen, isAsync);
           if (selfName !== undefined && t.isFunctionExpression(innerTemplate)) {
             ((innerTemplate: any): BabelNodeFunctionExpression).id = t.identifier(selfName);
           }
@@ -892,12 +925,14 @@ export class ResidualFunctions {
         }
 
         factoryParams = factoryParams.concat(params).slice();
+        let factoryIsGen = normalInstances[0].functionValue.$FunctionKind === "generator";
+        let factoryIsAsync = !!normalInstances[0].functionValue.$IsAsync;
         let factoryNode = new ResidualFunctionInstantiator(
           factoryFunctionInfos,
           this.realm.moduleFactoryFunctionsToRemove,
           this._getIdentifierReplacements(funcBody, sameResidualBindings),
           this._getCallReplacements(funcBody),
-          this._createFunctionExpression(factoryParams, funcBody, false)
+          this._createFunctionExpression(factoryParams, funcBody, false, factoryIsGen, factoryIsAsync)
         ).instantiate();
 
         if (scopeInitialization.length > 0) {
@@ -1024,12 +1059,14 @@ export class ResidualFunctions {
             // Fallback: emit as a normal FunctionExpression in prelude so all references remain valid!
             let { functionValue, residualFunctionBindings, scopeInstances } = inst;
             let isLexical = functionValue.$ThisMode === "lexical";
+            let isGen = functionValue.$FunctionKind === "generator";
+            let isAsync = !!functionValue.$IsAsync;
             let clonedNode = new ResidualFunctionInstantiator(
               factoryFunctionInfos,
               this.realm.moduleFactoryFunctionsToRemove,
               this._getIdentifierReplacements(info.funcBody, residualFunctionBindings),
               this._getCallReplacements(info.funcBody),
-              this._createFunctionExpression(info.params, info.funcBody, isLexical)
+              this._createFunctionExpression(info.params, info.funcBody, isLexical, isGen, isAsync)
             ).instantiate();
             invariant(scopeInstances.size === 0);
             registerFunctionStrictness(clonedNode, functionValue.$Strict);
@@ -1072,6 +1109,21 @@ export class ResidualFunctions {
       visitedBodyInstances.add(instance);
       let ip = instance.insertionPoint;
       if (ip instanceof BodyReference) {
+        if (
+          this.residualClassMethodInstances.has(instance.functionValue) &&
+          instance.functionValue.$Prototype instanceof FunctionValue
+        ) {
+          let superInst = this.residualFunctionInstances.get(instance.functionValue.$Prototype);
+          if (
+            superInst !== undefined &&
+            bodyInstanceSet.has(superInst) &&
+            superInst.insertionPoint instanceof BodyReference &&
+            superInst.insertionPoint.body === ip.body &&
+            superInst.insertionPoint.index === ip.index
+          ) {
+            visitBodyInstance(superInst);
+          }
+        }
         for (let rb of instance.residualFunctionBindings.values()) {
           if (rb.value instanceof FunctionValue && rb.value !== instance.functionValue) {
             let depInst = this.residualFunctionInstances.get(rb.value);

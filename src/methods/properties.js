@@ -41,7 +41,6 @@ import {
   IsDataDescriptor,
   IsGenericDescriptor,
   IsPropertyKey,
-  MakeConstructor,
   SameValue,
   SameValuePartial,
 } from "./index.js";
@@ -1879,7 +1878,7 @@ export class PropertiesImplementation {
     enumerable: boolean
   ): boolean {
     // MethodDefinition : PropertyName ( StrictFormalParameters ) { FunctionBody }
-    if (MethodDefinition.kind === "method") {
+    if (MethodDefinition.kind === "method" && !MethodDefinition.generator) {
       // 1. Let methodDef be DefineMethod of MethodDefinition with argument object.
       let methodDef = Functions.DefineMethod(realm, MethodDefinition, object, env, strictCode);
 
@@ -1901,7 +1900,10 @@ export class PropertiesImplementation {
 
       // 5. Return DefinePropertyOrThrow(object, methodDef.[[key]], desc).
       return this.DefinePropertyOrThrow(realm, object, methodDef.$Key, desc);
-    } else if (MethodDefinition.kind === "generator") {
+    } else if (
+      MethodDefinition.kind === "generator" ||
+      (MethodDefinition.kind === "method" && MethodDefinition.generator)
+    ) {
       // MethodDefinition : GeneratorMethod
       // See 14.4.
       // ECMA 14.4.13
@@ -1922,8 +1924,10 @@ export class PropertiesImplementation {
         MethodDefinition.params,
         MethodDefinition.body,
         scope,
-        strict
+        strict,
+        !!MethodDefinition.async
       );
+      closure.$HasComputedName = !!MethodDefinition.computed;
 
       // 6. Perform MakeMethod(closure, object).
       Functions.MakeMethod(realm, closure, object);
@@ -1932,8 +1936,18 @@ export class PropertiesImplementation {
       let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
       prototype.originalConstructor = closure;
 
-      // 8. Perform MakeConstructor(closure, true, prototype).
-      MakeConstructor(realm, closure, true, prototype);
+      // 8. Perform DefinePropertyOrThrow(closure, "prototype", PropertyDescriptor{[[Value]]: prototype, [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: false}).
+      this.DefinePropertyOrThrow(
+        realm,
+        closure,
+        "prototype",
+        new PropertyDescriptor({
+          value: prototype,
+          writable: true,
+          enumerable: false,
+          configurable: false,
+        })
+      );
 
       // 9. Perform SetFunctionName(closure, propKey).
       Functions.SetFunctionName(realm, closure, propKey);

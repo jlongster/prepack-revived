@@ -351,6 +351,13 @@ export class ResidualHeapVisitor {
     if (getNativeErrorConstructorName(this.realm, obj) !== undefined) return;
     let kind = obj.getKind();
     if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
+    if (
+      obj instanceof ECMAScriptFunctionValue &&
+      obj.$FunctionKind === "generator" &&
+      proto === this.realm.intrinsics.Generator
+    ) {
+      return;
+    }
 
     if (!obj.$IsClassPrototype || proto !== this.realm.intrinsics.null) {
       this.visitValue(proto);
@@ -635,6 +642,20 @@ export class ResidualHeapVisitor {
     }
     if (isClass && val.$HomeObject instanceof ObjectValue) {
       this._visitClass(val, val.$HomeObject);
+    } else if (!isClass && val.$HomeObject instanceof ObjectValue) {
+      let home = val.$HomeObject;
+      if (home.$IsClassPrototype) {
+        let ctor = home.properties.get("constructor");
+        if (
+          ctor !== undefined &&
+          ctor.descriptor instanceof PropertyDescriptor &&
+          ctor.descriptor.value instanceof ECMAScriptSourceFunctionValue
+        ) {
+          this.visitValue(ctor.descriptor.value);
+        }
+      } else if (home instanceof ECMAScriptSourceFunctionValue && home.$FunctionKind === "classConstructor") {
+        this.visitValue(home);
+      }
     }
   }
 
@@ -794,11 +815,13 @@ export class ResidualHeapVisitor {
   _visitClass(classFunc: ECMAScriptSourceFunctionValue, classPrototype: ObjectValue): void {
     let visitClassMethod = (propertyNameOrSymbol, methodFunc, methodType, isStatic) => {
       if (methodFunc instanceof ECMAScriptSourceFunctionValue) {
-        // if the method does not have a $HomeObject, it's not a class method
-        if (methodFunc.$HomeObject !== undefined) {
-          if (methodFunc !== classFunc) {
-            this._visitClassMethod(methodFunc, methodType, classPrototype, !!isStatic);
-          }
+        let expectedHome = isStatic ? classFunc : classPrototype;
+        if (
+          methodFunc.$HomeObject === expectedHome &&
+          methodFunc !== classFunc &&
+          !this.classMethodInstances.has(methodFunc)
+        ) {
+          this._visitClassMethod(methodFunc, methodType, classPrototype, !!isStatic, propertyNameOrSymbol);
         }
       }
     };
@@ -810,7 +833,7 @@ export class ResidualHeapVisitor {
     }
 
     // handle class inheritance
-    if (!(classFunc.$Prototype instanceof NativeFunctionValue)) {
+    if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
       this.visitValue(classFunc.$Prototype);
     }
 
@@ -840,6 +863,11 @@ export class ResidualHeapVisitor {
             withDescriptorValue(propertyName, method.descriptor, visitClassProperty);
           }
         }
+        for (let [symbol, method] of constructorFunc.symbols) {
+          if (method.descriptor !== undefined) {
+            withDescriptorValue(symbol, method.descriptor, visitClassProperty);
+          }
+        }
       }
     }
     this.classMethodInstances.set(classFunc, {
@@ -856,7 +884,8 @@ export class ResidualHeapVisitor {
     methodFunc: ECMAScriptSourceFunctionValue,
     methodType: "get" | "set" | "value",
     classPrototype: ObjectValue,
-    isStatic: boolean
+    isStatic: boolean,
+    homeKey: string | SymbolValue
   ): void {
     this.classMethodInstances.set(methodFunc, {
       classPrototype,
@@ -865,6 +894,7 @@ export class ResidualHeapVisitor {
       classMethodIsStatic: isStatic,
       classMethodKeyNode: undefined,
       classMethodComputed: !!methodFunc.$HasComputedName,
+      homeKey,
     });
   }
 

@@ -319,11 +319,13 @@ export class HeapInspector {
   }
 
   isDefaultPrototype(prototype: ObjectValue): boolean {
-    if (
-      prototype.symbols.size !== 0 ||
-      prototype.$Prototype !== this.realm.intrinsics.ObjectPrototype ||
-      prototype.$Extensible.mightNotBeTrue()
-    ) {
+    if (prototype.symbols.size !== 0 || prototype.$Extensible.mightNotBeTrue()) {
+      return false;
+    }
+    if (prototype.originalConstructor !== undefined && prototype.originalConstructor.$FunctionKind === "generator") {
+      return prototype.$Prototype === this.realm.intrinsics.GeneratorPrototype && prototype.properties.size === 0;
+    }
+    if (prototype.$Prototype !== this.realm.intrinsics.ObjectPrototype) {
       return false;
     }
     let foundConstructor = false;
