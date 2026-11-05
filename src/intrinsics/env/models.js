@@ -17,6 +17,7 @@ import { AbstractJoinedDescriptor } from "../../descriptors.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  ArrayValue,
   BooleanValue,
   ConcreteValue,
   FunctionValue,
@@ -362,6 +363,7 @@ export function isEnvironmentDerived(val: Value): boolean {
       val.kind === "==" ||
       val.kind === "!=" ||
       val.kind === "<" ||
+      val.kind === "+" ||
       val.kind === "in") &&
     val.args.length === 2
   ) {
@@ -570,6 +572,8 @@ export function createEnvironmentCallResult(
   let baseType: typeof Value =
     methodSpec !== undefined
       ? scalarTypeToAbstractType(methodSpec.r)
+      : propName === "split"
+      ? ArrayValue
       : (func instanceof AbstractObjectValue ? func.functionResultType : undefined) || Value;
   let res = AbstractValue.createTemporalFromBuildFunction(
     realm,
@@ -579,6 +583,9 @@ export function createEnvironmentCallResult(
   );
   invariant(res instanceof AbstractValue);
   res.isEnvironmentValue = true;
+  if (propName === "split" && res instanceof AbstractObjectValue) {
+    res.envElementType = StringValue;
+  }
   if (methodSpec !== undefined) {
     if (methodSpec.s !== undefined) res.envShapeName = methodSpec.s;
     return applyNullability(realm, res, !!methodSpec.n, !!methodSpec.o);

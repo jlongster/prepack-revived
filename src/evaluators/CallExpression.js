@@ -92,14 +92,15 @@ function evaluateReference(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
+  let refBase = ref instanceof Reference ? ref.base : undefined;
   if (
     ref instanceof Reference &&
-    ref.base instanceof AbstractValue &&
+    refBase instanceof AbstractValue &&
     // TODO: what about ref.base conditionals that mightBeObjects?
-    ref.base.mightNotBeObject() &&
-    (realm.isInPureScope() || (ref.base.kind === "conditional" && isEnvironmentDerived(ref.base)))
+    refBase.mightNotBeObject() &&
+    (realm.isInPureScope() || (refBase.kind === "conditional" && isEnvironmentDerived(refBase)))
   ) {
-    let base = ref.base;
+    let base = refBase;
     if (base.kind === "conditional") {
       let [condValue, consequentVal, alternateVal] = base.args;
       invariant(condValue instanceof AbstractValue);

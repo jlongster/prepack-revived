@@ -571,6 +571,12 @@ export class ToImplementation {
 
   IsToNumberPure(realm: Realm, val: numberOrValue): boolean {
     if (val instanceof Value) {
+      if (val instanceof AbstractValue && val.kind === "abstractConcreteUnion") {
+        return val.args.every(arg => this.IsToNumberPure(realm, arg));
+      }
+      if (val instanceof AbstractValue && val.kind === "conditional" && isEnvironmentDerived(val)) {
+        return this.IsToNumberPure(realm, val.args[1]) && this.IsToNumberPure(realm, val.args[2]);
+      }
       let type = this.GetToPrimitivePureResultType(realm, val);
       return type !== undefined && type !== SymbolValue && type !== PrimitiveValue && type !== Value;
     }
@@ -755,6 +761,12 @@ export class ToImplementation {
 
   IsToStringPure(realm: Realm, input: string | Value): boolean {
     if (input instanceof Value) {
+      if (input instanceof AbstractValue && input.kind === "abstractConcreteUnion") {
+        return input.args.every(arg => this.IsToStringPure(realm, arg));
+      }
+      if (input instanceof AbstractValue && input.kind === "conditional" && isEnvironmentDerived(input)) {
+        return this.IsToStringPure(realm, input.args[1]) && this.IsToStringPure(realm, input.args[2]);
+      }
       let type = this.GetToPrimitivePureResultType(realm, input);
       return type !== undefined && type !== SymbolValue && type !== PrimitiveValue && type !== Value;
     }

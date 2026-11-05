@@ -32,7 +32,8 @@ export default function(realm: Realm): NativeFunctionValue {
     "Object.prototype.toString",
     "toString",
     0,
-    context => {
+    _context => {
+      let context = _context;
       if (context instanceof AbstractValue) {
         context = realm.simplifyAndRefineAbstractValue(context);
       }

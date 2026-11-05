@@ -265,7 +265,12 @@ export class HeapInspector {
           desc.enumerable !== true &&
           desc.writable === targetDescriptor.writable &&
           desc.value instanceof ObjectValue &&
-          desc.value.originalConstructor === val
+          (desc.value.originalConstructor === val ||
+            (val instanceof ECMAScriptSourceFunctionValue &&
+              val.$FunctionKind === "generator" &&
+              desc.value.$Prototype === this.realm.intrinsics.GeneratorPrototype &&
+              desc.value.properties.size === 0 &&
+              desc.value.symbols.size === 0))
         ) {
           return true;
         }
