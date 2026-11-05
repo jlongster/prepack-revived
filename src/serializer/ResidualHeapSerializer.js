@@ -2874,18 +2874,21 @@ export class ResidualHeapSerializer {
 
   _inlineSingleUseTopLevelFunctions(body: Array<BabelNodeStatement>): void {
     let candidates: Map<string, { stmtIdx: number, funcNode: BabelNodeExpression }> = new Map();
+    let allFuncDeclIndices: Array<number> = [];
     for (let i = 0; i < body.length; i++) {
       let stmt = body[i];
-      if (
-        stmt.type === "VariableDeclaration" &&
-        stmt.kind === "var" &&
-        stmt.declarations.length === 1 &&
-        stmt.declarations[0].id.type === "Identifier" &&
-        stmt.declarations[0].init != null &&
-        (stmt.declarations[0].init.type === "FunctionExpression" ||
-          stmt.declarations[0].init.type === "ArrowFunctionExpression")
-      ) {
-        candidates.set(stmt.declarations[0].id.name, { stmtIdx: i, funcNode: stmt.declarations[0].init });
+      if (stmt.type === "VariableDeclaration" && stmt.kind === "var" && stmt.declarations.length === 1) {
+        let decl = stmt.declarations[0];
+        let declId = decl.id;
+        let declInit = decl.init;
+        if (
+          declId.type === "Identifier" &&
+          declInit != null &&
+          (declInit.type === "FunctionExpression" || declInit.type === "ArrowFunctionExpression")
+        ) {
+          allFuncDeclIndices.push(i);
+          candidates.set(declId.name, { stmtIdx: i, funcNode: declInit });
+        }
       }
     }
     if (candidates.size === 0) return;
@@ -2893,7 +2896,7 @@ export class ResidualHeapSerializer {
     let counts: Map<string, number> = new Map();
     let wrapper = t.program(body);
     traverseFast(wrapper, node => {
-      if (t.isIdentifier(node)) {
+      if (t.isIdentifier(node) || t.isJSXIdentifier(node)) {
         let idName = ((node: any): BabelNodeIdentifier).name;
         if (candidates.has(idName)) {
           counts.set(idName, (counts.get(idName) || 0) + 1);
@@ -2903,6 +2906,20 @@ export class ResidualHeapSerializer {
     });
     for (let name of Array.from(candidates.keys())) {
       if (counts.get(name) !== 2) candidates.delete(name);
+    }
+    if (candidates.size === 0) return;
+
+    // Preserve relative source ordering of residual functions: do not move a candidate past
+    // a later non-candidate function declaration in `body`.
+    let candidateIndices = new Set(Array.from(candidates.values()).map(c => c.stmtIdx));
+    let lastNonCandidateFuncIdx = -1;
+    for (let idx of allFuncDeclIndices) {
+      if (!candidateIndices.has(idx)) lastNonCandidateFuncIdx = idx;
+    }
+    if (lastNonCandidateFuncIdx >= 0) {
+      for (let [name, cand] of Array.from(candidates.entries())) {
+        if (cand.stmtIdx < lastNonCandidateFuncIdx) candidates.delete(name);
+      }
     }
     if (candidates.size === 0) return;
 
