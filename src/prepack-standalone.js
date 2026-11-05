@@ -30,6 +30,9 @@ import { Modules } from "./utils/modules.js";
 import { Logger } from "./utils/logger.js";
 import { Generator } from "./utils/generator.js";
 import { AbstractObjectValue, AbstractValue, ObjectValue } from "./values/index.js";
+import { profileEnvironment } from "./intrinsics/env/assumptions.js";
+
+export { profileEnvironment };
 
 export function prepackSources(
   sourceFileCollection: SourceFileCollection | Array<SourceFile>,
@@ -37,6 +40,13 @@ export function prepackSources(
   statistics: SerializerStatistics | void = undefined
 ): SerializedResult {
   if (Array.isArray(sourceFileCollection)) sourceFileCollection = new SourceFileCollection(sourceFileCollection);
+
+  if (options.profileEnv !== undefined) {
+    let profiled = profileEnvironment(sourceFileCollection.toArray(), options.profileEnv);
+    options = ((Object.assign({}, options, {
+      assumptions: Object.assign({}, profiled, options.assumptions || {}),
+    }): any): PrepackOptions);
+  }
 
   let realmOptions = getRealmOptions(options);
   realmOptions.errorHandler = options.errorHandler;
@@ -47,6 +57,11 @@ export function prepackSources(
     options.debugReproArgs
   );
   initializeGlobals(realm);
+  if (realm.smtMode === "audit")
+    realm.smtAuditContext = sourceFileCollection
+      .toArray()
+      .map(f => f.filePath)
+      .join(",");
   if (typeof options.additionalGlobals === "function") {
     options.additionalGlobals(realm);
   }

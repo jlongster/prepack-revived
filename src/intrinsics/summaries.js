@@ -608,6 +608,7 @@ function classifyArrayLikeReceiver(realm: Realm, context: Value): Classification
   }
   invariant(context instanceof AbstractValue);
   if (context.mightBeObject()) {
+    if (context instanceof AbstractObjectValue && context.envElementType === StringValue) return "pure";
     return isCoercionPureSimpleObject(realm, context) ? "pure" : "user";
   }
   let type = context.getType();
@@ -1444,5 +1445,12 @@ function stringSplit(realm: Realm, context: Value, args: Array<Value>): void | V
   let templateSource = isStringReceiver
     ? `A.split(${splitParams.join(", ")})`
     : `global.String.prototype.split.call(A${splitParams.length > 0 ? ", " + splitParams.join(", ") : ""})`;
-  return residualizeStringSplit(realm, templateSource, inputs, classifications);
+  let splitResult = residualizeStringSplit(realm, templateSource, inputs, classifications);
+  if (splitResult instanceof AbstractObjectValue) {
+    splitResult.envElementType = StringValue;
+    if (context instanceof AbstractValue && context.isEnvironmentValue === true) {
+      splitResult.isEnvironmentValue = true;
+    }
+  }
+  return splitResult;
 }

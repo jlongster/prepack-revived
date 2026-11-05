@@ -10,6 +10,7 @@
 /* @flow */
 
 import type { BabelNodeSourceLocation } from "@babel/types";
+import type { PathConditions } from "../types.js";
 import type { Realm } from "../realm.js";
 import {
   AbstractObjectValue,
@@ -64,14 +65,14 @@ export default class Value {
   $Realm: Realm;
 
   // this => val. A false value does not imply that !(this => val).
-  implies(val: AbstractValue, depth: number = 0): boolean {
+  implies(val: AbstractValue, depth: number = 0, _context?: PathConditions): boolean {
     if (!this.mightNotBeFalse()) return true;
     if (this.equals(val)) return true;
     return false;
   }
 
   // this => !val. A false value does not imply that !(this => !val).
-  impliesNot(val: AbstractValue, depth: number = 0): boolean {
+  impliesNot(val: AbstractValue, depth: number = 0, _context?: PathConditions): boolean {
     if (!this.mightNotBeFalse()) return true;
     if (this.equals(val)) return false;
     return false;

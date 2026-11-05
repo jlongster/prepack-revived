@@ -123,7 +123,7 @@ export default function(
       closure.loc = ast.loc;
       closure.__originalName = name;
 
-      if (!ast.async) {
+      if (ast.async !== true) {
         // 8. Perform MakeConstructor(closure).
         MakeConstructor(realm, closure);
       }
@@ -195,7 +195,7 @@ export default function(
       );
       closure.loc = ast.loc;
 
-      if (!ast.async) {
+      if (ast.async !== true) {
         // 4. Perform MakeConstructor(closure).
         MakeConstructor(realm, closure);
       }

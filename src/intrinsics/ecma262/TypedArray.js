@@ -12,7 +12,15 @@
 import type { Realm } from "../../realm.js";
 import type { ElementType, TypedArrayKind } from "../../types.js";
 import { ElementSize } from "../../types.js";
-import { NumberValue, NativeFunctionValue, ObjectValue, StringValue, UndefinedValue } from "../../values/index.js";
+import {
+  AbstractObjectValue,
+  AbstractValue,
+  NumberValue,
+  NativeFunctionValue,
+  ObjectValue,
+  StringValue,
+  UndefinedValue,
+} from "../../values/index.js";
 import {
   ArrayElementSize,
   ArrayElementType,
@@ -32,6 +40,8 @@ import {
   GetValueFromBuffer,
   SetValueInBuffer,
 } from "../../methods/arraybuffer.js";
+import { createOperationDescriptor } from "../../utils/generator.js";
+import { isEnvironmentDerived } from "../env/models.js";
 import invariant from "../../invariant.js";
 
 export default function(realm: Realm): NativeFunctionValue {
@@ -254,6 +264,21 @@ export function build(realm: Realm, type: ElementType): NativeFunctionValue {
 
       // 3. Return ? AllocateTypedArray(constructorName, NewTarget, "%TypedArrayPrototype%", 0).
       return AllocateTypedArray(realm, constructorName, NewTarget, `${type}ArrayPrototype`, 0);
+    } else if (
+      NewTarget &&
+      realm.useAbstractInterpretation &&
+      args[0] instanceof AbstractObjectValue &&
+      isEnvironmentDerived(args[0])
+    ) {
+      let envArr = AbstractValue.createTemporalFromBuildFunction(
+        realm,
+        ObjectValue,
+        [func, ...args.slice(0, argCount)],
+        createOperationDescriptor("NEW_EXPRESSION")
+      );
+      invariant(envArr instanceof AbstractObjectValue);
+      envArr.isEnvironmentValue = true;
+      return envArr;
     } else if (!(args[0] instanceof ObjectValue)) {
       // ECMA262 22.2.4.2
       let length = args[0].throwIfNotConcrete();

@@ -11,7 +11,7 @@
 
 import { DeclarativeEnvironmentRecord, type Binding } from "../environment.js";
 import { AbstractValue, ConcreteValue, ObjectValue, Value } from "../values/index.js";
-import type { ECMAScriptSourceFunctionValue, FunctionValue } from "../values/index.js";
+import type { ECMAScriptSourceFunctionValue, FunctionValue, SymbolValue } from "../values/index.js";
 import type {
   BabelNodeExpression,
   BabelNodeStatement,

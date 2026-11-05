@@ -11,7 +11,7 @@
 
 import type { Realm } from "../../realm.js";
 
-import { FunctionValue, NativeFunctionValue } from "../../values/index.js";
+import { FunctionValue, NativeFunctionValue, ConcreteValue } from "../../values/index.js";
 import initializeDocument from "./document.js";
 import initializeConsole from "../common/console.js";
 import { FatalError } from "../../errors.js";
@@ -33,42 +33,48 @@ export default function(realm: Realm): void {
       })
     );
 
-  global.$DefineOwnProperty(
-    "self",
-    new PropertyDescriptor({
-      value: global,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    })
-  );
+  // Only eagerly materialize closed-world browser globals (`window = global`, `self = global`, `document`)
+  // when explicitly running in closed-world mode or React/fb-www compiler modes.
+  // In the safe open-world default, `window`, `self`, and `document` are resolved on demand via
+  // src/intrinsics/env/models.js so `typeof window` / `typeof document` stay residual across environments.
+  if (realm.closedWorld || realm.isCompatibleWith("fb-www") || !realm.useAbstractInterpretation) {
+    global.$DefineOwnProperty(
+      "self",
+      new PropertyDescriptor({
+        value: global,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      })
+    );
 
-  global.$DefineOwnProperty(
-    "window",
-    new PropertyDescriptor({
-      value: global,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    })
-  );
+    global.$DefineOwnProperty(
+      "window",
+      new PropertyDescriptor({
+        value: global,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      })
+    );
 
-  global.$DefineOwnProperty(
-    "document",
-    new PropertyDescriptor({
-      value: initializeDocument(realm),
-      writable: true,
-      enumerable: false,
-      configurable: true,
-    })
-  );
+    global.$DefineOwnProperty(
+      "document",
+      new PropertyDescriptor({
+        value: initializeDocument(realm),
+        writable: true,
+        enumerable: false,
+        configurable: true,
+      })
+    );
+  }
 
   global.$DefineOwnProperty(
     "setTimeout",
     new PropertyDescriptor({
       value: new NativeFunctionValue(realm, "global.setTimeout", "", 2, (context, args) => {
-        let callback = args[0].throwIfNotConcrete();
-        if (!(callback instanceof FunctionValue))
+        let callback = args[0];
+        if (callback instanceof ConcreteValue && !(callback instanceof FunctionValue))
           throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "callback arguments must be function");
         if (!realm.useAbstractInterpretation) throw new FatalError("TODO #1003: implement global.setTimeout");
         invariant(realm.generator !== undefined);
@@ -102,8 +108,8 @@ export default function(realm: Realm): void {
     new PropertyDescriptor({
       value: new NativeFunctionValue(realm, "global.setInterval", "", 2, (context, args) => {
         if (!realm.useAbstractInterpretation) throw new FatalError("TODO #1003: implement global.setInterval");
-        let callback = args[0].throwIfNotConcrete();
-        if (!(callback instanceof FunctionValue))
+        let callback = args[0];
+        if (callback instanceof ConcreteValue && !(callback instanceof FunctionValue))
           throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "callback arguments must be function");
         invariant(realm.generator !== undefined);
         let generator = realm.generator;

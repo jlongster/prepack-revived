@@ -59,11 +59,14 @@ export default class TypesDomain {
     let resultType = Value;
     switch (op) {
       case "+":
-        if (lType === undefined || rType === undefined) return TypesDomain.topVal;
-        if (Value.isTypeCompatibleWith(lType, StringValue) || Value.isTypeCompatibleWith(rType, StringValue)) {
+        if (
+          (lType !== undefined && Value.isTypeCompatibleWith(lType, StringValue)) ||
+          (rType !== undefined && Value.isTypeCompatibleWith(rType, StringValue))
+        ) {
           resultType = StringValue;
           break;
         }
+        if (lType === undefined || rType === undefined) return TypesDomain.topVal;
       // eslint-disable-line no-fallthrough
       case "-":
         if (lType === undefined || rType === undefined) return TypesDomain.topVal;

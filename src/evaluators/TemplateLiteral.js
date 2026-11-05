@@ -13,16 +13,10 @@ import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import { AbstractValue, StringValue, Value } from "../values/index.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { computeBinary } from "./BinaryExpression.js";
 import { Environment, Leak, To } from "../singletons.js";
 import { createOperationDescriptor } from "../utils/generator.js";
 import type { BabelNodeTemplateLiteral } from "@babel/types";
-
-function concatStrings(realm: Realm, x: Value, y: Value, loc): Value {
-  if (x instanceof StringValue && y instanceof StringValue) return new StringValue(realm, x.value + y.value);
-  if (x instanceof StringValue && x.value === "") return y;
-  if (y instanceof StringValue && y.value === "") return x;
-  return AbstractValue.createFromBinaryOp(realm, "+", x, y, loc);
-}
 
 // ECMA262 12.2.9
 export default function(
@@ -36,8 +30,8 @@ export default function(
   for (let i = 0; i < ast.quasis.length; i++) {
     let elem = ast.quasis[i];
     let cooked = elem.value.cooked;
-    if (typeof cooked === "string" && cooked !== "") {
-      result = concatStrings(realm, result, new StringValue(realm, cooked), ast.loc);
+    if (typeof cooked === "string" && cooked.length > 0) {
+      result = computeBinary(realm, "+", result, new StringValue(realm, cooked));
     }
 
     let expr = ast.expressions[i];
@@ -70,7 +64,7 @@ export default function(
       } else {
         strVal = new StringValue(realm, To.ToStringPartial(realm, val));
       }
-      result = concatStrings(realm, result, strVal, ast.loc);
+      result = computeBinary(realm, "+", result, strVal);
     }
   }
 
