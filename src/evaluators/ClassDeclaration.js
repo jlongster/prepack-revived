@@ -210,6 +210,7 @@ export function ClassDefinitionEvaluation(
 
       // 14. Let F be constructorInfo.[[closure]]
       F = constructorInfo.$Closure;
+      proto.originalConstructor = F;
 
       // Assign the empty constructor boolean
       F.$HasEmptyConstructor = emptyConstructor;

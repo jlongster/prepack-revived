@@ -55,6 +55,7 @@ import { Logger } from "../utils/logger.js";
 import { Modules } from "../utils/modules.js";
 import { HeapInspector } from "../utils/HeapInspector.js";
 import {
+  canEmbedClassProperty,
   canIgnoreClassLengthProperty,
   canSerializePromiseAsResolved,
   ClassPropertiesToIgnore,
@@ -552,6 +553,16 @@ export class ResidualHeapVisitor {
       if (homeObject instanceof ObjectValue && homeObject.$IsClassPrototype) {
         isClass = true;
       }
+    } else if (val instanceof ECMAScriptSourceFunctionValue && val.$HomeObject instanceof ObjectValue) {
+      let homeObject = val.$HomeObject;
+      if (homeObject.$IsClassPrototype && homeObject.originalConstructor instanceof ECMAScriptSourceFunctionValue) {
+        this.visitValue(homeObject.originalConstructor);
+      } else if (
+        homeObject instanceof ECMAScriptSourceFunctionValue &&
+        homeObject.$FunctionKind === "classConstructor"
+      ) {
+        this.visitValue(homeObject);
+      }
     }
     this.visitObjectProperties(val);
 
@@ -795,77 +806,92 @@ export class ResidualHeapVisitor {
   }
 
   _visitClass(classFunc: ECMAScriptSourceFunctionValue, classPrototype: ObjectValue): void {
+    let claimedMethods = new Set();
     let visitClassMethod = (propertyNameOrSymbol, methodFunc, methodType, isStatic) => {
-      if (methodFunc instanceof ECMAScriptSourceFunctionValue) {
-        // if the method does not have a $HomeObject, it's not a class method
-        if (methodFunc.$HomeObject !== undefined) {
-          if (methodFunc !== classFunc) {
-            this._visitClassMethod(methodFunc, methodType, classPrototype, !!isStatic);
-          }
-        }
+      if (methodFunc instanceof ECMAScriptSourceFunctionValue && methodFunc !== classFunc) {
+        claimedMethods.add(methodFunc);
+        this._visitClassMethod(classFunc, propertyNameOrSymbol, methodFunc, methodType, classPrototype, !!isStatic);
       }
     };
-    for (let [propertyName, method] of classPrototype.properties) {
-      withDescriptorValue(propertyName, method.descriptor, visitClassMethod);
-    }
-    for (let [symbol, method] of classPrototype.symbols) {
-      withDescriptorValue(symbol, method.descriptor, visitClassMethod);
-    }
-
-    // handle class inheritance
-    if (!(classFunc.$Prototype instanceof NativeFunctionValue)) {
-      this.visitValue(classFunc.$Prototype);
-    }
 
     if (classPrototype.properties.has("constructor")) {
       let constructor = classPrototype.properties.get("constructor");
-
       invariant(constructor !== undefined);
-      // check if the constructor was deleted, as it can't really be deleted
-      // it just gets set to empty (the default again)
       if (constructor.descriptor === undefined) {
         classFunc.$HasEmptyConstructor = true;
-      } else {
-        let visitClassProperty = (propertyNameOrSymbol, methodFunc, methodType) => {
-          visitClassMethod(propertyNameOrSymbol, methodFunc, methodType, true);
-        };
-        // check if we have any static methods we need to include
-        let constructorFunc = Get(this.realm, classPrototype, "constructor");
-        invariant(constructorFunc instanceof ObjectValue);
-        for (let [propertyName, method] of constructorFunc.properties) {
-          if (
-            !ClassPropertiesToIgnore.has(propertyName) &&
-            method.descriptor !== undefined &&
-            !(
-              propertyName === "length" && canIgnoreClassLengthProperty(constructorFunc, method.descriptor, this.logger)
-            )
-          ) {
-            withDescriptorValue(propertyName, method.descriptor, visitClassProperty);
-          }
-        }
       }
     }
+
+    for (let [propertyName, method] of classPrototype.properties) {
+      if (
+        propertyName === "constructor" &&
+        method.descriptor instanceof PropertyDescriptor &&
+        method.descriptor.value === classFunc
+      ) {
+        continue;
+      }
+      if (canEmbedClassProperty(classPrototype, classFunc, method, claimedMethods)) {
+        withDescriptorValue(propertyName, method.descriptor, visitClassMethod);
+      }
+    }
+    for (let [symbol, method] of classPrototype.symbols) {
+      if (canEmbedClassProperty(classPrototype, classFunc, method, claimedMethods)) {
+        withDescriptorValue(symbol, method.descriptor, visitClassMethod);
+      }
+    }
+
+    // handle class inheritance (including built-in superclasses such as Map, Set, Array, Error)
+    if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
+      this.visitValue(classFunc.$Prototype);
+    }
+
+    let visitStaticClassMethod = (propertyNameOrSymbol, methodFunc, methodType) => {
+      visitClassMethod(propertyNameOrSymbol, methodFunc, methodType, true);
+    };
+    for (let [propertyName, method] of classFunc.properties) {
+      if (
+        propertyName !== "prototype" &&
+        !ClassPropertiesToIgnore.has(propertyName) &&
+        method.descriptor !== undefined &&
+        !(propertyName === "length" && canIgnoreClassLengthProperty(classFunc, method.descriptor, this.logger)) &&
+        canEmbedClassProperty(classFunc, classFunc, method, claimedMethods)
+      ) {
+        withDescriptorValue(propertyName, method.descriptor, visitStaticClassMethod);
+      }
+    }
+    for (let [symbol, method] of classFunc.symbols) {
+      if (canEmbedClassProperty(classFunc, classFunc, method, claimedMethods)) {
+        withDescriptorValue(symbol, method.descriptor, visitStaticClassMethod);
+      }
+    }
+
     this.classMethodInstances.set(classFunc, {
+      classConstructor: classFunc,
       classPrototype,
       methodType: "constructor",
       classSuperNode: undefined,
       classMethodIsStatic: false,
+      classMethodKey: "constructor",
       classMethodKeyNode: undefined,
       classMethodComputed: false,
     });
   }
 
   _visitClassMethod(
+    classFunc: ECMAScriptSourceFunctionValue,
+    key: string | SymbolValue,
     methodFunc: ECMAScriptSourceFunctionValue,
     methodType: "get" | "set" | "value",
     classPrototype: ObjectValue,
     isStatic: boolean
   ): void {
     this.classMethodInstances.set(methodFunc, {
+      classConstructor: classFunc,
       classPrototype,
       methodType: methodType === "value" ? "method" : methodType,
       classSuperNode: undefined,
       classMethodIsStatic: isStatic,
+      classMethodKey: key,
       classMethodKeyNode: undefined,
       classMethodComputed: !!methodFunc.$HasComputedName,
     });

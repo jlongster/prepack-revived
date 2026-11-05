@@ -19,6 +19,7 @@ import {
   NullValue,
   ObjectValue,
   SymbolValue,
+  UndefinedValue,
   Value,
 } from "../values/index.js";
 import type { Effects, Realm, SideEffectType } from "../realm.js";
@@ -134,14 +135,64 @@ export function withDescriptorValue(
     if (descriptor.value !== undefined) {
       func(propertyNameOrSymbol, descriptor.value, "value");
     } else {
-      if (descriptor.get !== undefined) {
+      if (descriptor.get !== undefined && !(descriptor.get instanceof UndefinedValue)) {
         func(propertyNameOrSymbol, descriptor.get, "get");
       }
-      if (descriptor.set !== undefined) {
+      if (descriptor.set !== undefined && !(descriptor.set instanceof UndefinedValue)) {
         func(propertyNameOrSymbol, descriptor.set, "set");
       }
     }
   }
+}
+
+export function canEmbedClassProperty(
+  owner: ObjectValue,
+  classFunc: ObjectValue,
+  pb: PropertyBinding,
+  claimedMethods: Set<FunctionValue>
+): boolean {
+  if (pb.pathNode !== undefined) return false;
+  let desc = pb.descriptor;
+  if (!(desc instanceof PropertyDescriptor)) return false;
+  if (!!desc.enumerable || !desc.configurable) return false;
+  if (desc.value !== undefined) {
+    return (
+      !!desc.writable &&
+      desc.value instanceof ECMAScriptSourceFunctionValue &&
+      desc.value !== classFunc &&
+      desc.value.$HomeObject === owner &&
+      !claimedMethods.has(desc.value)
+    );
+  }
+  let hasGet = desc.get !== undefined && !(desc.get instanceof UndefinedValue);
+  let hasSet = desc.set !== undefined && !(desc.set instanceof UndefinedValue);
+  if (!hasGet && !hasSet) return false;
+  if (hasGet) {
+    if (
+      !(
+        desc.get instanceof ECMAScriptSourceFunctionValue &&
+        desc.get !== classFunc &&
+        desc.get.$HomeObject === owner &&
+        !claimedMethods.has(desc.get)
+      )
+    ) {
+      return false;
+    }
+  }
+  if (hasSet) {
+    if (
+      !(
+        desc.set instanceof ECMAScriptSourceFunctionValue &&
+        desc.set !== classFunc &&
+        desc.set.$HomeObject === owner &&
+        !claimedMethods.has(desc.set)
+      )
+    ) {
+      return false;
+    }
+  }
+  if (hasGet && hasSet && desc.get === desc.set) return false;
+  return true;
 }
 
 export const ClassPropertiesToIgnore: Set<string> = new Set(["arguments", "name", "caller"]);
@@ -212,7 +263,13 @@ export function getObjectPrototypeMetadata(
   if (obj.$IsClassPrototype) {
     skipPrototype = true;
   }
-  if (proto && proto.$IsClassPrototype) {
+  if (
+    proto &&
+    proto.$IsClassPrototype &&
+    obj.getKind() === "Object" &&
+    !IsArray(realm, obj) &&
+    !(obj instanceof FunctionValue)
+  ) {
     invariant(proto instanceof ObjectValue);
     // we now need to check if the prototpe has a constructor
     let _constructor = proto.properties.get("constructor");

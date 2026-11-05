@@ -1997,7 +1997,7 @@ export class PropertiesImplementation {
       // 9. Let desc be the PropertyDescriptor{[[Get]]: closure, [[Enumerable]]: enumerable, [[Configurable]]: true}.
       let desc = new PropertyDescriptor({
         get: closure,
-        enumerable: true,
+        enumerable: enumerable,
         configurable: true,
       });
 
@@ -2038,7 +2038,7 @@ export class PropertiesImplementation {
       // 8. Let desc be the PropertyDescriptor{[[Set]]: closure, [[Enumerable]]: enumerable, [[Configurable]]: true}.
       let desc = new PropertyDescriptor({
         set: closure,
-        enumerable: true,
+        enumerable: enumerable,
         configurable: true,
       });
 

@@ -9,7 +9,7 @@
 
 /* @flow */
 
-import { FatalError } from "../errors.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { Realm } from "../realm.js";
 import { FunctionValue, ECMAScriptSourceFunctionValue, ObjectValue } from "../values/index.js";
 import type { SerializerOptions } from "../options.js";
@@ -26,7 +26,9 @@ import type {
   BabelNodeSpreadElement,
   BabelNodeFunctionExpression,
   BabelNodeArrowFunctionExpression,
+  BabelNodeVariableDeclarator,
 } from "@babel/types";
+import traverseFast from "../utils/traverse-fast.js";
 import type { FunctionBodyAstNode } from "../types.js";
 import type { NameGenerator } from "../utils/NameGenerator.js";
 import invariant from "../invariant.js";
@@ -50,6 +52,7 @@ import { getOrDefault } from "./utils.js";
 type ResidualFunctionsResult = {
   unstrictFunctionBodies: Array<BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression>,
   strictFunctionBodies: Array<BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression>,
+  strictFunctionDeclarators: Array<BabelNodeVariableDeclarator>,
 };
 
 export class ResidualFunctions {
@@ -305,18 +308,23 @@ export class ResidualFunctions {
     this.getStatistics().functions = functionEntries.length;
     let unstrictFunctionBodies: Array<BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression> = [];
     let strictFunctionBodies: Array<BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression> = [];
+    let strictFunctionDeclarators: Array<BabelNodeVariableDeclarator> = [];
     let registerFunctionStrictness = (
       node:
         | BabelNodeFunctionExpression
         | BabelNodeArrowFunctionExpression
         | BabelNodeClassMethod
         | BabelNodeClassExpression,
-      strict: boolean
+      strict: boolean,
+      declarator?: BabelNodeVariableDeclarator
     ) => {
       if (t.isFunctionExpression(node) || t.isArrowFunctionExpression(node)) {
         (strict ? strictFunctionBodies : unstrictFunctionBodies).push(
           ((node: any): BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression)
         );
+        if (strict && declarator !== undefined) {
+          strictFunctionDeclarators.push(declarator);
+        }
       }
     };
     let funcNodes: Map<FunctionValue, BabelNodeFunctionExpression> = new Map();
@@ -328,7 +336,7 @@ export class ResidualFunctions {
         | BabelNodeFunctionExpression
         | BabelNodeArrowFunctionExpression
         | BabelNodeClassExpression
-    ) => {
+    ): BabelNodeVariableDeclarator => {
       let { functionValue } = instance;
 
       if (instance.initializationStatements.length > 0) {
@@ -349,7 +357,8 @@ export class ResidualFunctions {
         ); // .bind call
         body = getFunctionBody(instance);
       }
-      body.push(t.variableDeclaration("var", [t.variableDeclarator(funcId, funcOrClassNode)]));
+      let declarator = t.variableDeclarator(funcId, funcOrClassNode);
+      body.push(t.variableDeclaration("var", [declarator]));
       let prototypeId = this.functionPrototypes.get(functionValue);
       if (prototypeId !== undefined) {
         let id = this.locationService.getLocation(functionValue);
@@ -360,6 +369,7 @@ export class ResidualFunctions {
           ])
         );
       }
+      return declarator;
     };
 
     // Emit code for ModifiedBindings for additional functions
@@ -453,11 +463,12 @@ export class ResidualFunctions {
       let id = this.locationService.getLocation(funcValue);
       invariant(id !== undefined);
 
+      let declarator = defineFunction(instance, id, funcOrClassNode);
       registerFunctionStrictness(
         funcOrClassNode,
-        funcValue instanceof ECMAScriptSourceFunctionValue && funcValue.$Strict
+        funcValue instanceof ECMAScriptSourceFunctionValue && funcValue.$Strict,
+        declarator
       );
-      defineFunction(instance, id, funcOrClassNode);
     }
 
     // Process normal functions
@@ -529,6 +540,19 @@ export class ResidualFunctions {
                 rawClassMethod
               ).instantiate();
 
+              let scopeInitialization = [];
+              for (let scope of scopeInstances.values()) {
+                scopeInitialization = scopeInitialization.concat(
+                  this.referentializer.getReferentializedScopeInitialization(scope, t.numericLiteral(scope.id))
+                );
+              }
+              if (scopeInitialization.length > 0) {
+                classMethod.body = t.blockStatement(
+                  scopeInitialization.concat(classMethod.body.body),
+                  classMethod.body.directives
+                );
+              }
+
               // add the class method to the class expression node body
               if (isConstructor) {
                 funcOrClassNode.body.body.unshift(classMethod);
@@ -545,6 +569,34 @@ export class ResidualFunctions {
               funcOrClassNode.superClass = classSuperNode;
             }
           } else {
+            if (functionValue.$HomeObject !== undefined) {
+              let usesSuper = false;
+              let checkSuper = node => {
+                if (node.type === "Super") {
+                  usesSuper = true;
+                  return true;
+                }
+                return (
+                  node.type === "ClassExpression" ||
+                  node.type === "ClassDeclaration" ||
+                  node.type === "ObjectMethod" ||
+                  node.type === "FunctionExpression" ||
+                  node.type === "FunctionDeclaration"
+                );
+              };
+              for (let p of params) traverseFast(p, checkSuper);
+              if (!usesSuper) traverseFast(funcBody, checkSuper);
+              if (usesSuper) {
+                let error = new CompilerDiagnostic(
+                  "a detached method using super cannot be serialized outside a class or object literal",
+                  funcBody.loc,
+                  "PP0022",
+                  "FatalError"
+                );
+                this.realm.handleError(error);
+                throw new FatalError();
+              }
+            }
             let isLexical = instance.functionValue.$ThisMode === "lexical";
             funcOrClassNode = new ResidualFunctionInstantiator(
               factoryFunctionInfos,
@@ -570,10 +622,10 @@ export class ResidualFunctions {
           let id = this.locationService.getLocation(functionValue);
           invariant(id !== undefined);
 
-          registerFunctionStrictness(funcOrClassNode, functionValue.$Strict);
           invariant(id !== undefined);
           invariant(funcOrClassNode !== undefined);
-          defineFunction(instance, id, funcOrClassNode);
+          let declarator = defineFunction(instance, id, funcOrClassNode);
+          registerFunctionStrictness(funcOrClassNode, functionValue.$Strict, declarator);
         }
       };
 
@@ -654,10 +706,11 @@ export class ResidualFunctions {
         }
 
         // factory functions do not depend on any nested generator scope, so they go to the prelude
-        let factoryDeclaration = t.variableDeclaration("var", [t.variableDeclarator(factoryId, factoryNode)]);
+        let factoryDeclarator = t.variableDeclarator(factoryId, factoryNode);
+        let factoryDeclaration = t.variableDeclaration("var", [factoryDeclarator]);
         this.prelude.push(factoryDeclaration);
 
-        registerFunctionStrictness(factoryNode, normalInstances[0].functionValue.$Strict);
+        registerFunctionStrictness(factoryNode, normalInstances[0].functionValue.$Strict, factoryDeclarator);
 
         for (let instance of normalInstances) {
           let { functionValue, residualFunctionBindings, insertionPoint } = instance;
@@ -700,19 +753,37 @@ export class ResidualFunctions {
 
             let callArgs: Array<BabelNodeExpression | BabelNodeSpreadElement> = [t.thisExpression()];
             for (let flatArg of flatArgs) callArgs.push(flatArg);
-            for (let param of params) {
-              if (param.type !== "Identifier") {
-                throw new FatalError("TODO: do not know how to deal with non-Identifier parameters");
+            let hasNonIdentifierParam = params.some(param => param.type !== "Identifier");
+            let wrapperParams: Array<BabelNodeLVal>;
+            if (!hasNonIdentifierParam) {
+              wrapperParams = params;
+              for (let param of params) {
+                callArgs.push(((param: any): BabelNodeIdentifier));
               }
-              callArgs.push(((param: any): BabelNodeIdentifier));
+            } else {
+              let arity = params.length;
+              for (let i = 0; i < params.length; i++) {
+                if (t.isAssignmentPattern(params[i]) || t.isRestElement(params[i])) {
+                  arity = i;
+                  break;
+                }
+              }
+              wrapperParams = [];
+              for (let i = 0; i < arity; i++) {
+                let paramId = t.identifier(this.factoryNameGenerator.generate("p"));
+                wrapperParams.push(paramId);
+                callArgs.push(paramId);
+              }
+              let restId = t.identifier(this.factoryNameGenerator.generate("args"));
+              wrapperParams.push(t.restElement(restId));
+              callArgs.push(t.spreadElement(restId));
             }
 
             let callee = t.memberExpression(factoryId, t.identifier("call"));
 
             let childBody = t.blockStatement([t.returnStatement(t.callExpression(callee, callArgs))]);
 
-            funcNode = t.functionExpression(null, params, childBody);
-            registerFunctionStrictness(funcNode, functionValue.$Strict);
+            funcNode = t.functionExpression(null, wrapperParams, childBody);
           } else {
             funcNode = t.callExpression(
               t.memberExpression(factoryId, t.identifier("bind")),
@@ -720,7 +791,10 @@ export class ResidualFunctions {
             );
           }
 
-          defineFunction(instance, functionId, funcNode);
+          let declarator = defineFunction(instance, functionId, funcNode);
+          if (t.isFunctionExpression(funcNode)) {
+            registerFunctionStrictness(funcNode, functionValue.$Strict, declarator);
+          }
         }
       }
     }
@@ -779,7 +853,7 @@ export class ResidualFunctions {
       body.unshift(...prelude);
     }
 
-    return { unstrictFunctionBodies, strictFunctionBodies };
+    return { unstrictFunctionBodies, strictFunctionBodies, strictFunctionDeclarators };
   }
   _getOrCreateClassNode(classPrototype: ObjectValue): BabelNodeClassExpression {
     if (!this.classes.has(classPrototype)) {

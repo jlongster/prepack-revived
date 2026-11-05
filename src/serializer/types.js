@@ -11,7 +11,7 @@
 
 import { DeclarativeEnvironmentRecord, type Binding } from "../environment.js";
 import { AbstractValue, ConcreteValue, ObjectValue, Value } from "../values/index.js";
-import type { ECMAScriptSourceFunctionValue, FunctionValue } from "../values/index.js";
+import type { ECMAScriptSourceFunctionValue, FunctionValue, SymbolValue } from "../values/index.js";
 import type {
   BabelNodeExpression,
   BabelNodeStatement,
@@ -66,10 +66,12 @@ export type AdditionalFunctionInfo = {
 };
 
 export type ClassMethodInstance = {|
+  classConstructor: FunctionValue,
   classPrototype: ObjectValue,
   methodType: "constructor" | "method" | "get" | "set",
-  classSuperNode: void | BabelNodeIdentifier,
+  classSuperNode: void | BabelNodeExpression,
   classMethodIsStatic: boolean,
+  classMethodKey?: string | SymbolValue,
   classMethodKeyNode: void | BabelNodeExpression,
   classMethodComputed: boolean,
 |};
