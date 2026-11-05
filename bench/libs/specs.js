@@ -816,6 +816,421 @@ const SPECS = [
       });
     })`,
   },
+
+  {
+    id: "moment-timezone",
+    name: "Moment Timezone (full IANA data)",
+    kind: "library",
+    tier: "large",
+    buildType: "umd",
+    packages: ["moment", "moment-timezone"],
+    description:
+      "Moment core + full Moment Timezone data (~0.91 MB); module init unpacks base-60 IANA transition tables and links for 590+ timezones.",
+    build(nmDir) {
+      return (
+        readPkgFile(nmDir, "moment/moment.js") +
+        "\n;\n" +
+        readPkgFile(nmDir, "moment-timezone/builds/moment-timezone-with-data.js")
+      );
+    },
+    smokeCode: `(function(root) {
+      var moment = root.moment;
+      var zones = ["America/New_York", "Europe/London", "Asia/Tokyo", "Australia/Sydney", "Asia/Kolkata", "Pacific/Auckland"];
+      var winterUtc = "2026-01-15T18:30:00Z";
+      var summerUtc = "2026-07-15T18:30:00Z";
+      var conversions = zones.map(function(z) {
+        var w = moment.tz(winterUtc, z);
+        var s = moment.tz(summerUtc, z);
+        return {
+          zone: z,
+          winter: w.format("YYYY-MM-DD HH:mm:ss z (Z)"),
+          winterDst: w.isDST(),
+          summer: s.format("YYYY-MM-DD HH:mm:ss z (Z)"),
+          summerDst: s.isDST()
+        };
+      });
+      var beforeSpringForward = moment.tz("2026-03-08T06:30:00Z", "America/New_York");
+      var afterSpringForward = beforeSpringForward.clone().add(1, "hour");
+      var hopped = afterSpringForward.clone().tz("Asia/Tokyo");
+      return JSON.stringify({
+        tzVersion: moment.tz.version,
+        dataVersion: moment.tz.dataVersion,
+        zoneCount: moment.tz.names().length,
+        conversions: conversions,
+        springBefore: beforeSpringForward.format("YYYY-MM-DD HH:mm z"),
+        springAfter: afterSpringForward.format("YYYY-MM-DD HH:mm z"),
+        hoppedTokyo: hopped.format("YYYY-MM-DD HH:mm z")
+      });
+    })`,
+  },
+
+  {
+    id: "prettier",
+    name: "Prettier Standalone (+ Babel, PostCSS, HTML parsers)",
+    kind: "library",
+    tier: "large",
+    buildType: "umd",
+    packages: ["prettier"],
+    description:
+      "Prettier standalone formatter bundled with Babel, PostCSS, and HTML parser plugins (~1.07 MB); builds printer AST dispatchers and parser grammars at init.",
+    build(nmDir) {
+      const files = [
+        "prettier/standalone.js",
+        "prettier/parser-babel.js",
+        "prettier/parser-postcss.js",
+        "prettier/parser-html.js",
+      ];
+      return files.map(f => readPkgFile(nmDir, f)).join("\n;\n");
+    },
+    smokeCode: `(function(root) {
+      var prettier = root.prettier;
+      var plugins = root.prettierPlugins;
+      var jsInput = "const compute=({items,taxRate=0.08})=>items.filter(x=>x.qty>0).map((it,idx)=>({idx,sku:it.sku,gross:+(it.qty*it.price*(1+taxRate)).toFixed(2)}));";
+      var cssInput = ".card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.card-grid>.item:hover{color:#336699;transform:translateY(-2px)}";
+      var htmlInput = "<section class='hero' data-mode='dark'><h1>  Prepack   Benchmark </h1><p>Fast <strong>startup</strong> &amp; compact bundles.</p></section>";
+      var jsFormatted = prettier.format(jsInput, {
+        parser: "babel",
+        plugins: plugins,
+        printWidth: 68,
+        singleQuote: true,
+        trailingComma: "all"
+      });
+      var cssFormatted = prettier.format(cssInput, {
+        parser: "css",
+        plugins: plugins,
+        printWidth: 68
+      });
+      var htmlFormatted = prettier.format(htmlInput, {
+        parser: "html",
+        plugins: plugins,
+        printWidth: 68
+      });
+      return JSON.stringify({
+        version: prettier.version,
+        js: jsFormatted,
+        css: cssFormatted,
+        html: htmlFormatted
+      });
+    })`,
+  },
+
+  {
+    id: "highlight-js",
+    name: "Highlight.js (all 190+ languages)",
+    kind: "library",
+    tier: "large",
+    buildType: "esbuild-iife",
+    packages: ["highlight.js"],
+    description:
+      "Full Highlight.js syntax highlighter (~1.72 MB ES2015 IIFE); module init registers all 193 language grammar factories and freezes core tables.",
+    build(nmDir, esbuild) {
+      const entry = `
+        import hljs from "highlight.js";
+        (${ROOT_EXPR}).hljs = hljs;
+      `;
+      const res = esbuild.buildSync({
+        stdin: { contents: entry, resolveDir: path.dirname(nmDir) },
+        bundle: true,
+        format: "iife",
+        platform: "browser",
+        target: "es2015",
+        write: false,
+      });
+      return res.outputFiles[0].text;
+    },
+    smokeCode: `(function(root) {
+      var hljs = root.hljs;
+      var snippets = [
+        ["javascript", "export async function fetchJson(url) { const res = await fetch(url); return { ok: res.ok, status: 200 }; }"],
+        ["python", "@dataclass\\nclass Vector:\\n    x: float\\n    y: float\\n    def norm(self) -> float:\\n        return (self.x ** 2 + self.y ** 2) ** 0.5"],
+        ["rust", "pub fn sum_even(xs: &[i64]) -> i64 { xs.iter().copied().filter(|n| n % 2 == 0).sum() }"],
+        ["sql", "SELECT dept, COUNT(*) AS cnt, AVG(salary) AS avg_sal FROM employees WHERE active = TRUE GROUP BY dept HAVING COUNT(*) > 5;"],
+        ["xml", "<manifest version=\\"1.0\\"><service name=\\"gateway\\" port=\\"8080\\"><tls enabled=\\"true\\"/></service></manifest>"]
+      ];
+      var highlighted = snippets.map(function(pair) {
+        var r = hljs.highlight(pair[1], { language: pair[0], ignoreIllegals: true });
+        return { lang: pair[0], relevance: r.relevance, html: r.value };
+      });
+      var auto = hljs.highlightAuto("fn main() { let mut v: Vec<u32> = vec![1, 2, 3]; println!(\\"{:?}\\", v); }", ["rust", "javascript", "python", "cpp"]);
+      return JSON.stringify({
+        version: hljs.versionString,
+        languageCount: hljs.listLanguages().length,
+        tsAliases: hljs.getLanguage("typescript").aliases,
+        highlighted: highlighted,
+        autoLang: auto.language,
+        autoRelevance: auto.relevance
+      });
+    })`,
+  },
+
+  {
+    id: "three",
+    name: "Three.js (math + scene graph)",
+    kind: "library",
+    tier: "large",
+    buildType: "esbuild-iife",
+    packages: ["three"],
+    description:
+      "Three.js 3D engine (~1.90 MB ES2015 IIFE); module init constructs math LUTs, color management spaces, shader chunks, uniform libraries, and geometry/material classes.",
+    build(nmDir, esbuild) {
+      const entry = `
+        import * as THREE from "three";
+        (${ROOT_EXPR}).THREE = THREE;
+      `;
+      const res = esbuild.buildSync({
+        stdin: { contents: entry, resolveDir: path.dirname(nmDir) },
+        bundle: true,
+        format: "iife",
+        platform: "browser",
+        target: "es2015",
+        write: false,
+      });
+      return res.outputFiles[0].text;
+    },
+    smokeCode: `(function(root) {
+      var THREE = root.THREE;
+      var round6 = function(n) {
+        return Math.abs(n) < 1e-12 ? 0 : Math.round(n * 1000000) / 1000000;
+      };
+      var pos = new THREE.Vector3(3, -4, 12);
+      var quat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+      var scale = new THREE.Vector3(2, 2, 2);
+      var m4 = new THREE.Matrix4().compose(pos, quat, scale);
+      var inv = m4.clone().invert();
+      var identCheck = m4.clone().multiply(inv);
+      var transformed = new THREE.Vector3(1, 0, 0).applyMatrix4(m4);
+
+      var ray = new THREE.Ray(new THREE.Vector3(0, 0, 10), new THREE.Vector3(0, 0, -1));
+      var box = new THREE.Box3(new THREE.Vector3(-2, -2, -2), new THREE.Vector3(2, 2, 2));
+      var hit = ray.intersectBox(box, new THREE.Vector3());
+
+      var scene = new THREE.Scene();
+      scene.name = "bench-scene";
+      var rig = new THREE.Group();
+      rig.name = "rig";
+      rig.position.set(10, 5, -3);
+      rig.rotation.set(0, Math.PI / 4, 0);
+
+      var boxGeo = new THREE.BoxGeometry(2, 4, 6);
+      var stdMat = new THREE.MeshStandardMaterial({ color: 0x336699, roughness: 0.4, metalness: 0.2 });
+      var crate = new THREE.Mesh(boxGeo, stdMat);
+      crate.name = "crate";
+      crate.position.set(1, 2, 3);
+      rig.add(crate);
+
+      var sphereGeo = new THREE.SphereGeometry(1.5, 8, 6);
+      var basicMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, wireframe: true });
+      var orb = new THREE.Mesh(sphereGeo, basicMat);
+      orb.name = "orb";
+      orb.position.set(-2, 0.5, 1);
+      rig.add(orb);
+
+      var sun = new THREE.DirectionalLight(0xffffff, 1.25);
+      sun.name = "sun";
+      sun.position.set(5, 10, 7);
+      scene.add(rig);
+      scene.add(sun);
+      scene.updateMatrixWorld(true);
+
+      var cam = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 1000);
+      cam.position.set(0, 8, 20);
+      cam.lookAt(0, 0, 0);
+      cam.updateMatrixWorld(true);
+      cam.updateProjectionMatrix();
+      var crateWorld = crate.getWorldPosition(new THREE.Vector3());
+      var crateNdc = crateWorld.clone().project(cam);
+
+      var uuidMap = {};
+      var uuidSeq = 0;
+      var uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      function canonicalize(val) {
+        if (typeof val === "string") {
+          if (uuidRe.test(val)) {
+            if (!uuidMap[val]) uuidMap[val] = "uuid-" + (++uuidSeq);
+            return uuidMap[val];
+          }
+          return val;
+        }
+        if (typeof val === "number") return round6(val);
+        if (Array.isArray(val)) return val.map(canonicalize);
+        if (val && typeof val === "object") {
+          var out = {};
+          var keys = Object.keys(val);
+          for (var i = 0; i < keys.length; i++) {
+            out[keys[i]] = canonicalize(val[keys[i]]);
+          }
+          return out;
+        }
+        return val;
+      }
+      var serialized = canonicalize(scene.toJSON());
+
+      return JSON.stringify({
+        revision: THREE.REVISION,
+        det: round6(m4.determinant()),
+        identDiag: [round6(identCheck.elements[0]), round6(identCheck.elements[5]), round6(identCheck.elements[10]), round6(identCheck.elements[15])],
+        transformed: [round6(transformed.x), round6(transformed.y), round6(transformed.z)],
+        rayHit: hit ? [round6(hit.x), round6(hit.y), round6(hit.z)] : null,
+        crateWorld: [round6(crateWorld.x), round6(crateWorld.y), round6(crateWorld.z)],
+        crateNdc: [round6(crateNdc.x), round6(crateNdc.y), round6(crateNdc.z)],
+        geoCount: serialized.geometries.length,
+        matCount: serialized.materials.length,
+        childNames: serialized.object.children.map(function(c) { return c.name + ":" + c.type; }),
+        rigMatrix: serialized.object.children[0].matrix
+      });
+    })`,
+  },
+
+  {
+    id: "mathjs",
+    name: "mathjs (eager typed-function registry)",
+    kind: "library",
+    tier: "large",
+    buildType: "esbuild-iife",
+    packages: ["mathjs"],
+    description:
+      "Init-heavy math engine (~2.11 MB IIFE); module init constructs 300+ multi-signature functions via typed-function, unit tables, physical constants, and expression algebra.",
+    build(nmDir, esbuild) {
+      const entry = `
+        import * as mathNs from "mathjs";
+        const math = Object.assign({}, mathNs);
+        (${ROOT_EXPR}).math = math;
+      `;
+      const res = esbuild.buildSync({
+        stdin: { contents: entry, resolveDir: path.dirname(nmDir) },
+        bundle: true,
+        format: "iife",
+        platform: "browser",
+        target: "es2020",
+        write: false,
+      });
+      return res.outputFiles[0].text;
+    },
+    smokeCode: `(function(root) {
+      var m = root.math;
+      var round6 = function(n) { return Math.round(n * 1000000) / 1000000; };
+      var matA = [[4, 2, 1], [0, 3, -1], [2, 1, 5]];
+      var solved = m.lusolve(matA, [9, 4, 17]).valueOf().map(function(row) { return round6(row[0]); });
+      var invA = m.inv(matA).map(function(row) { return row.map(round6); });
+      var quad = m.compile("a * x^2 + b * x + c");
+      var fracSum = m.add(m.fraction(1, 3), m.fraction(1, 6));
+      return JSON.stringify({
+        version: m.version,
+        det: round6(m.det(matA)),
+        solved: solved,
+        invRow0: invA[0],
+        deriv: m.derivative("x^3 + 2*x^2 - 5*x + 7", "x").toString(),
+        simplified: m.simplify("2 * x + 3 * x + x^2 / x").toString(),
+        quadAt4: quad.evaluate({ a: 2, b: -3, c: 5, x: 4 }),
+        complexProd: m.evaluate("(2 + 3i) * (4 - 5i)").toString(),
+        fraction: fracSum.n + "/" + fracSum.d,
+        inches: round6(m.unit("5.08 cm").toNumber("inch"))
+      });
+    })`,
+  },
+
+  {
+    id: "babel-standalone",
+    name: "@babel/standalone (preset-env + preset-react)",
+    kind: "library",
+    tier: "large",
+    buildType: "umd",
+    packages: ["@babel/standalone"],
+    description:
+      "Standalone Babel 7 compiler (~5.25 MB UMD); module init registers @babel/parser, @babel/traverse, @babel/generator, core-js compat tables, 100+ plugins, and built-in presets.",
+    build(nmDir) {
+      return readPkgFile(nmDir, "@babel/standalone/babel.js");
+    },
+    smokeCode: `(function(root) {
+      var Babel = root.Babel;
+      var snippet = [
+        "class Acc {",
+        "  constructor(base = 10) { this.base = base; }",
+        "  compute(xs, ...extra) {",
+        "    const all = [...xs, ...extra];",
+        "    return all.reduce((sum, item) => sum + ((item?.val ?? 1) ** 2), this.base);",
+        "  }",
+        "}",
+        "export const renderBadge = ({ label, count = 0 }) => <span className='badge'>{\`\${label}:\${count}\`}</span>;"
+      ].join("\\n");
+      var transformed = Babel.transform(snippet, {
+        filename: "sample.jsx",
+        presets: [
+          ["env", { targets: { ie: "11" }, modules: "commonjs" }],
+          ["react", { runtime: "classic" }]
+        ],
+        ast: true,
+        comments: false
+      });
+      return JSON.stringify({
+        version: Babel.version,
+        presetCount: Object.keys(Babel.availablePresets).length,
+        pluginCount: Object.keys(Babel.availablePlugins).length,
+        topNodeTypes: transformed.ast.program.body.map(function(n) { return n.type; }),
+        code: transformed.code
+      });
+    })`,
+  },
+
+  {
+    id: "typescript",
+    name: "TypeScript Compiler (lib/typescript.js)",
+    kind: "library",
+    tier: "large",
+    buildType: "standalone-script",
+    packages: ["typescript"],
+    description:
+      "Full TypeScript 5.9 compiler (~8.90 MB standalone script); module init constructs scanner/parser/binder/checker/emitter dispatch tables, token maps, and diagnostic catalogs.",
+    build(nmDir) {
+      return (
+        readPkgFile(nmDir, "typescript/lib/typescript.js") +
+        `\n;if (typeof ts !== "undefined") ${ROOT_EXPR}.ts = ts;\n`
+      );
+    },
+    smokeCode: `(function(root) {
+      var ts = root.ts;
+      var src = [
+        "export const enum Priority { Low = 1, Medium = 2, High = 3 }",
+        "export interface Task<T = string> { readonly id: number; payload: T; priority?: Priority; }",
+        "export class Queue<T> {",
+        "  private items: Task<T>[] = [];",
+        "  constructor(public readonly name: string) {}",
+        "  enqueue(task: Task<T>): number {",
+        "    this.items.push({ ...task, priority: task.priority ?? Priority.Medium });",
+        "    return this.items.length;",
+        "  }",
+        "  highCount(): number {",
+        "    return this.items.filter(t => t.priority === Priority.High).length;",
+        "  }",
+        "}"
+      ].join("\\n");
+      var transpiled = ts.transpileModule(src, {
+        fileName: "queue.ts",
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2017,
+          strict: true
+        }
+      });
+      var sf = ts.createSourceFile("queue.ts", src, ts.ScriptTarget.ES2022, true);
+      var nodeCount = 0;
+      var identCount = 0;
+      function visit(node) {
+        nodeCount++;
+        if (ts.isIdentifier(node)) identCount++;
+        ts.forEachChild(node, visit);
+      }
+      visit(sf);
+      return JSON.stringify({
+        version: ts.version,
+        diagCount: transpiled.diagnostics ? transpiled.diagnostics.length : 0,
+        stmtKinds: sf.statements.map(function(s) { return ts.SyntaxKind[s.kind]; }),
+        nodeCount: nodeCount,
+        identCount: identCount,
+        outputText: transpiled.outputText
+      });
+    })`,
+  },
 ];
 
 module.exports = { SPECS };
