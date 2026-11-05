@@ -41,8 +41,47 @@ import {
 } from "../../methods/index.js";
 import { Create, Join, Properties, To } from "../../singletons.js";
 import { createOperationDescriptor } from "../../utils/generator.js";
+import { IntervalDomain } from "../../domains/index.js";
+
+// The maximum number of distinct values an abstract array length may have for array methods to
+// evaluate once per possible length and join the results.
+const MAX_LENGTH_CASES = 8;
 
 export default function(realm: Realm, obj: ObjectValue): void {
+  // Calls f with ToLength(lenVal). If lenVal is abstract, but known to be one of a few numbers,
+  // f is evaluated once per possible length, under the path condition that lenVal has that value,
+  // and the effects and results are joined.
+  function withConcreteLength(lenVal: Value, f: number => Value): Value {
+    if (lenVal instanceof AbstractValue) {
+      let lengths = IntervalDomain.enumerate(lenVal, MAX_LENGTH_CASES, true);
+      if (lengths !== undefined) {
+        let conditions = new Map();
+        for (let n of lengths) {
+          let v = new NumberValue(realm, n);
+          let condition = AbstractValue.createFromBinaryOp(realm, "===", lenVal, v, lenVal.expressionLocation);
+          if (condition instanceof AbstractValue || condition.mightNotBeFalse()) conditions.set(v, condition);
+        }
+        let values = new Set(conditions.keys());
+        if (values.size === 1) {
+          for (let v of values) return f(To.ToLength(realm, v));
+        }
+        if (values.size > 1 && Array.from(conditions.values()).every(c => c instanceof AbstractValue)) {
+          return Join.mapAndJoin(
+            realm,
+            values,
+            v => {
+              let condition = conditions.get(v);
+              invariant(condition !== undefined);
+              return condition;
+            },
+            v => f(To.ToLength(realm, v))
+          );
+        }
+      }
+    }
+    return f(To.ToLength(realm, lenVal.throwIfNotConcrete()));
+  }
+
   // ECMA262 22.1.3.31
   obj.defineNativeProperty(realm.intrinsics.SymbolIterator, realm.intrinsics.ArrayProto_values);
 
@@ -1164,36 +1203,36 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
-    let len = To.ToLength(realm, Get(realm, O, new StringValue(realm, "length")));
+    return withConcreteLength(Get(realm, O, new StringValue(realm, "length")), len => {
+      // 3. Let items be a List whose elements are, in left to right order, the arguments that were passed to realm function invocation.
+      let items = argCount > 0 ? args.slice() : [];
 
-    // 3. Let items be a List whose elements are, in left to right order, the arguments that were passed to realm function invocation.
-    let items = argCount > 0 ? args : [];
+      // 4. Let argCount be the number of elements in items.
+      argCount;
 
-    // 4. Let argCount be the number of elements in items.
-    argCount;
+      // 5. If len + argCount > 2^53-1, throw a TypeError exception.
+      if (len + argCount > Math.pow(2, 53) - 1) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Array.prototype");
+      }
 
-    // 5. If len + argCount > 2^53-1, throw a TypeError exception.
-    if (len + argCount > Math.pow(2, 53) - 1) {
-      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Array.prototype");
-    }
+      // 6. Repeat, while items is not empty
+      while (items.length) {
+        // a. Remove the first element from items and let E be the value of the element.
+        let E = items.shift();
 
-    // 6. Repeat, while items is not empty
-    while (items.length) {
-      // a. Remove the first element from items and let E be the value of the element.
-      let E = items.shift();
+        // b. Perform ? Set(O, ! ToString(len), E, true).
+        Properties.Set(realm, O, new StringValue(realm, len + ""), E, true);
 
-      // b. Perform ? Set(O, ! ToString(len), E, true).
-      Properties.Set(realm, O, new StringValue(realm, len + ""), E, true);
+        // c. Let len be len+1.
+        len++;
+      }
 
-      // c. Let len be len+1.
-      len++;
-    }
+      // 7. Perform ? Set(O, "length", len, true).
+      Properties.Set(realm, O, new StringValue(realm, "length"), new NumberValue(realm, len), true);
 
-    // 7. Perform ? Set(O, "length", len, true).
-    Properties.Set(realm, O, new StringValue(realm, "length"), new NumberValue(realm, len), true);
-
-    // 8. Return len.
-    return new NumberValue(realm, len);
+      // 8. Return len.
+      return new NumberValue(realm, len);
+    });
   });
 
   // ECMA262 22.1.3.19

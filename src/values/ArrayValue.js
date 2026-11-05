@@ -27,6 +27,7 @@ import invariant from "../invariant.js";
 import { NestedOptimizedFunctionSideEffect } from "../errors.js";
 import { PropertyDescriptor } from "../descriptors.js";
 import { SimpleNormalCompletion } from "../completions.js";
+import { IntervalDomain } from "../domains/index.js";
 
 type ArrayNestedOptimizedFunctionType = "map" | "filter";
 type PossibleNestedOptimizedFunctions = [
@@ -283,14 +284,42 @@ export default class ArrayValue extends ObjectValue {
       oldLenDesc = oldLenDesc.throwIfNotConcrete(this.$Realm);
 
       // c. Let oldLen be oldLenDesc.[[Value]].
-      let oldLen = oldLenDesc.value;
-      invariant(oldLen instanceof Value);
-      oldLen = oldLen.throwIfNotConcrete();
-      invariant(oldLen instanceof NumberValue, "expected number value");
-      oldLen = oldLen.value;
+      let oldLenValue = oldLenDesc.value;
+      invariant(oldLenValue instanceof Value);
 
       // d. Let index be ! ToUint32(P).
       let index = To.ToUint32(this.$Realm, typeof P === "string" ? new StringValue(this.$Realm, P) : P);
+
+      if (oldLenValue instanceof AbstractValue) {
+        let range = IntervalDomain.of(oldLenValue);
+        if (range !== undefined && range.integral && !range.mayBeNaN && range.lo === range.hi) {
+          // The path conditions pin down the length.
+          oldLenValue = new NumberValue(this.$Realm, range.lo);
+        } else if (range !== undefined && range.integral && !range.mayBeNaN && oldLenDesc.writable !== false) {
+          // The length is abstract, but bounded. Define the element and update the length to
+          // max(oldLen, index + 1), deciding the comparison with the range when possible.
+          let succeeded = Properties.OrdinaryDefineOwnProperty(this.$Realm, A, P, Desc);
+          if (succeeded === false) return false;
+          if (index < range.lo) return true;
+          let newLen = new NumberValue(this.$Realm, index + 1);
+          if (index < range.hi) {
+            let indexIsBeyondLength = AbstractValue.createFromBinaryOp(
+              this.$Realm,
+              "<=",
+              oldLenValue,
+              new NumberValue(this.$Realm, index)
+            );
+            newLen = AbstractValue.createFromConditionalOp(this.$Realm, indexIsBeyondLength, newLen, oldLenValue);
+          }
+          oldLenDesc.value = newLen;
+          succeeded = Properties.OrdinaryDefineOwnProperty(this.$Realm, A, "length", oldLenDesc);
+          invariant(succeeded, "expected length definition to succeed");
+          return true;
+        }
+      }
+      let oldLen = oldLenValue.throwIfNotConcrete();
+      invariant(oldLen instanceof NumberValue, "expected number value");
+      oldLen = oldLen.value;
 
       // e. If index ≥ oldLen and oldLenDesc.[[Writable]] is false, return false.
       if (index >= oldLen && oldLenDesc.writable === false) return false;
