@@ -27,11 +27,19 @@
  */
 
 import { EnvironmentRecord, type LexicalEnvironment } from "../environment.js";
-import type { Effects, Realm } from "../realm.js";
-import { ECMAScriptSourceFunctionValue, NumberValue, ObjectValue, StringValue, Value } from "../values/index.js";
+import { Effects, type Realm } from "../realm.js";
+import {
+  ECMAScriptSourceFunctionValue,
+  NumberValue,
+  ObjectValue,
+  StringValue,
+  UndefinedValue,
+  Value,
+} from "../values/index.js";
 import {
   AbruptCompletion,
   Completion,
+  SimpleNormalCompletion,
   JoinedAbruptCompletions,
   JoinedNormalAndAbruptCompletions,
 } from "../completions.js";
@@ -351,6 +359,26 @@ function checkTrialEffects(realm: Realm, effects: Effects, firstEnvId: number): 
   return undefined;
 }
 
+// The initializer of a for statement runs exactly once, before the loop. Evaluate it here if possible, so that the
+// loop starts out with known values and the residual loop does not need to contain it.
+function evaluateForInit(
+  realm: Realm,
+  ast: BabelNodeStatement,
+  strictCode: boolean,
+  env: LexicalEnvironment
+): BabelNodeStatement {
+  if (ast.type !== "ForStatement") return ast;
+  let init = ast.init;
+  if (init == null || (init.type === "VariableDeclaration" && init.kind !== "var")) return ast;
+  let stmt = init.type === "VariableDeclaration" ? init : t.expressionStatement((init: any));
+  let effects = evaluateSpeculatively(realm, () =>
+    realm.evaluateForEffects(() => env.evaluate(stmt, strictCode), undefined, "residualLoop/init")
+  );
+  if (!(effects instanceof Effects) || !(effects.result instanceof SimpleNormalCompletion)) return ast;
+  realm.applyEffects(effects, "residualLoop/init");
+  return (({ ...ast, init: null }: any): BabelNodeStatement);
+}
+
 export function residualizeLoop(
   realm: Realm,
   ast: BabelNodeStatement,
@@ -360,6 +388,7 @@ export function residualizeLoop(
   reason: string
 ): Value {
   invariant(realm.isInPureScope());
+  ast = evaluateForInit(realm, ast, strictCode, env);
   let transformed = transformLoop(ast, labelSet);
   let state = transformed.state;
   if (state.unsupported !== undefined) fail(realm, `${state.unsupported} (${reason})`, ast.loc);
@@ -449,7 +478,7 @@ function emitResidualLoop(
         if (thisVal !== undefined) args.push(thisVal);
         return AbstractValue.createTemporalFromBuildFunction(
           realm,
-          needsExitCode ? NumberValue : Value,
+          needsExitCode ? NumberValue : UndefinedValue,
           args,
           createOperationDescriptor("FOR_STATEMENT_FUNC", { usesThis: thisVal !== undefined })
         );
