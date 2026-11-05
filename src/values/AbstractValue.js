@@ -25,6 +25,7 @@ import {
   AbstractObjectValue,
   BooleanValue,
   ConcreteValue,
+  IntegralValue,
   NullValue,
   NumberValue,
   ObjectValue,
@@ -283,10 +284,10 @@ export default class AbstractValue extends Value {
         if (x.implies(val, depth + 1)) return true;
       }
     } else if (this.kind === "!==") {
-      // (0 !== x) => x since undefined, null, false, 0, NaN and "" are excluded by the !== and all other values are thruthy
+      // (0 !== x) => Boolean(x) only when x is known to be a finite integer (IntegralValue).
       let [x, y] = this.args;
-      if (x instanceof NumberValue && x.value === 0) return y.equals(val);
-      if (y instanceof NumberValue && y.value === 0) return x.equals(val);
+      if (x instanceof NumberValue && x.value === 0) return y.getType() === IntegralValue && y.equals(val);
+      if (y instanceof NumberValue && y.value === 0) return x.getType() === IntegralValue && x.equals(val);
     } else if ((this.kind === "===" || this.kind === "==") && (val.kind === "===" || val.kind === "==")) {
       let [x, y] = this.args;
       let [vx, vy] = val.args;
@@ -359,7 +360,7 @@ export default class AbstractValue extends Value {
       }
       if (nx.kind === "abstractConcreteUnion") return false; // can't use two valued logic for this.
       // !x => !val if val => x since if val is false x can be any value and if val is true then x must be true
-      return val.implies(nx);
+      return val.implies(nx, depth + 1);
     } else if (this.kind === "conditional") {
       let [c, x, y] = this.args;
       // (c ? x : y) => !val if x is false and y is true and c = val

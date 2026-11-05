@@ -31,8 +31,8 @@ export class PathConditionsImplementation extends PathConditions {
   _baseConditions: void | PathConditionsImplementation;
   _impliedConditions: void | Set<AbstractValue>;
   _impliedNegatives: void | Set<AbstractValue>;
-  _failedImplications: void | Set<AbstractValue>;
-  _failedNegativeImplications: void | Set<AbstractValue>;
+  _failedImplications: void | Map<AbstractValue, number>;
+  _failedNegativeImplications: void | Map<AbstractValue, number>;
 
   add(c: AbstractValue): void {
     invariant(!this._readonly);
@@ -79,7 +79,10 @@ export class PathConditionsImplementation extends PathConditions {
     if (this._assumedConditions.has(e)) return true;
     if (this._impliedConditions !== undefined && this._impliedConditions.has(e)) return true;
     if (this._impliedNegatives !== undefined && this._impliedNegatives.has(e)) return false;
-    if (this._failedImplications !== undefined && this._failedImplications.has(e)) return false;
+    if (this._failedImplications !== undefined) {
+      let failedDepth = this._failedImplications.get(e);
+      if (failedDepth !== undefined && failedDepth <= depth) return false;
+    }
     if (depth > 10) return false;
     if (this._baseConditions !== undefined && this._baseConditions.implies(e, depth + 1)) return true;
     for (let assumedCondition of this._assumedConditions) {
@@ -118,8 +121,8 @@ export class PathConditionsImplementation extends PathConditions {
       let [x] = e.args;
       if (this.impliesNot(x, depth + 1)) return this.cacheImplicationSuccess(e);
     }
-    if (this._failedImplications === undefined) this._failedImplications = new Set();
-    this._failedImplications.add(e);
+    if (this._failedImplications === undefined) this._failedImplications = new Map();
+    this._failedImplications.set(e, depth);
     return false;
   }
 
@@ -137,7 +140,10 @@ export class PathConditionsImplementation extends PathConditions {
     if (this._assumedConditions.has(e)) return false;
     if (this._impliedConditions !== undefined && this._impliedConditions.has(e)) return false;
     if (this._impliedNegatives !== undefined && this._impliedNegatives.has(e)) return true;
-    if (this._failedNegativeImplications !== undefined && this._failedNegativeImplications.has(e)) return false;
+    if (this._failedNegativeImplications !== undefined) {
+      let failedDepth = this._failedNegativeImplications.get(e);
+      if (failedDepth !== undefined && failedDepth <= depth) return false;
+    }
     if (depth > 10) return false;
     if (this._baseConditions !== undefined && this._baseConditions.impliesNot(e, depth + 1)) return true;
     for (let assumedCondition of this._assumedConditions) {
@@ -176,8 +182,8 @@ export class PathConditionsImplementation extends PathConditions {
       let [x] = e.args;
       if (this.implies(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
     }
-    if (this._failedNegativeImplications === undefined) this._failedNegativeImplications = new Set();
-    this._failedNegativeImplications.add(e);
+    if (this._failedNegativeImplications === undefined) this._failedNegativeImplications = new Map();
+    this._failedNegativeImplications.set(e, depth);
     return false;
   }
 
@@ -230,6 +236,8 @@ export class PathConditionsImplementation extends PathConditions {
           }
         } finally {
           this._baseConditions = savedBaseConditions;
+          this._failedImplications = undefined;
+          this._failedNegativeImplications = undefined;
         }
         savedBaseConditions.refineBaseConditons(realm, total, refinementTarget);
       }
@@ -363,14 +371,15 @@ function pushPathCondition(condition: Value): void {
       if (left instanceof ConcreteValue && right instanceof AbstractValue) [left, right] = [right, left];
       if (left instanceof AbstractValue && (right instanceof UndefinedValue || right instanceof NullValue)) {
         if (condition.kind === "!=") {
-          // x != null => x!==null && x!==undefined
-          pushPathCondition(left);
+          // x != null => x !== null && x !== undefined (x may still be falsy: 0, "", false, NaN)
           let leftNeNull = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.null);
           let leftNeUndefined = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.undefined);
+          if (!leftNeNull.mightNotBeFalse() || !leftNeUndefined.mightNotBeFalse()) throw new InfeasiblePathError();
           pushPathCondition(leftNeNull);
           pushPathCondition(leftNeUndefined);
         } else if (condition.kind === "==") {
-          // x == null => x===null || x===undefined
+          // x == null => !x && (x === null || x === undefined)
+          if (!left.mightNotBeTrue()) throw new InfeasiblePathError();
           pushInversePathCondition(left);
           let leftEqNull = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.null);
           let leftEqUndefined = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.undefined);
@@ -378,6 +387,7 @@ function pushPathCondition(condition: Value): void {
           if (!leftEqNull.mightNotBeFalse()) c = leftEqUndefined;
           else if (!leftEqUndefined.mightNotBeFalse()) c = leftEqNull;
           else c = AbstractValue.createFromLogicalOp(realm, "||", leftEqNull, leftEqUndefined);
+          if (!c.mightNotBeFalse()) throw new InfeasiblePathError();
           pushPathCondition(c);
         }
         return;
@@ -410,13 +420,26 @@ function pushInversePathCondition(condition: Value): void {
       let right = condition.args[1];
       if (left instanceof ConcreteValue && right instanceof AbstractValue) [left, right] = [right, left];
       if (left instanceof AbstractValue && (right instanceof UndefinedValue || right instanceof NullValue)) {
-        let op = condition.kind === "!=" ? "===" : "!==";
-        if (op === "!==") pushPathCondition(left);
-        else pushInversePathCondition(left);
-        let leftEqNull = AbstractValue.createFromBinaryOp(realm, op, left, realm.intrinsics.null);
-        if (leftEqNull.mightNotBeFalse()) pushPathCondition(leftEqNull);
-        let leftEqUndefined = AbstractValue.createFromBinaryOp(realm, op, left, realm.intrinsics.undefined);
-        if (leftEqUndefined.mightNotBeFalse()) pushPathCondition(leftEqUndefined);
+        if (condition.kind === "==") {
+          // !(x == null) <=> x != null => x !== null && x !== undefined
+          let leftNeNull = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.null);
+          let leftNeUndefined = AbstractValue.createFromBinaryOp(realm, "!==", left, realm.intrinsics.undefined);
+          if (!leftNeNull.mightNotBeFalse() || !leftNeUndefined.mightNotBeFalse()) throw new InfeasiblePathError();
+          pushPathCondition(leftNeNull);
+          pushPathCondition(leftNeUndefined);
+        } else {
+          // !(x != null) <=> x == null => !x && (x === null || x === undefined)
+          if (!left.mightNotBeTrue()) throw new InfeasiblePathError();
+          pushInversePathCondition(left);
+          let leftEqNull = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.null);
+          let leftEqUndefined = AbstractValue.createFromBinaryOp(realm, "===", left, realm.intrinsics.undefined);
+          let c;
+          if (!leftEqNull.mightNotBeFalse()) c = leftEqUndefined;
+          else if (!leftEqUndefined.mightNotBeFalse()) c = leftEqNull;
+          else c = AbstractValue.createFromLogicalOp(realm, "||", leftEqNull, leftEqUndefined);
+          if (!c.mightNotBeFalse()) throw new InfeasiblePathError();
+          pushPathCondition(c);
+        }
         return;
       }
     }
