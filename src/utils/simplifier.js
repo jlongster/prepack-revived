@@ -278,12 +278,20 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       invariant(notc instanceof AbstractValue);
       if (Path.implies(notc, depth + 1)) return y;
       if (!isCondition) {
-        if (Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, x), depth + 1)) return x;
+        if (
+          cannotDifferOnlyByZeroSign(value, x) &&
+          Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, x), depth + 1)
+        )
+          return x;
         if (!x.mightBeNumber() && Path.implies(AbstractValue.createFromBinaryOp(realm, "!==", value, x), depth + 1))
           return y;
         if (!y.mightBeNumber() && Path.implies(AbstractValue.createFromBinaryOp(realm, "!==", value, y), depth + 1))
           return x;
-        if (Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, y), depth + 1)) return y;
+        if (
+          cannotDifferOnlyByZeroSign(value, y) &&
+          Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, y), depth + 1)
+        )
+          return y;
       }
       // c ? x : x <=> x
       if (x.equals(y)) return x;
@@ -486,6 +494,14 @@ function simplifyWithEmpty(realm: Realm, value: AbstractValue, isCondition: bool
   }
   if (c.equals(c0) && x.equals(x0) && y.equals(y0)) return value;
   return AbstractValue.createFromConditionalOp(realm, c, x, y, loc, isCondition, true);
+}
+
+// Returns true when `a === b` guarantees `Object.is(a, b)` (i.e. {a, b} cannot be {-0, +0}).
+function cannotDifferOnlyByZeroSign(a: Value, b: Value): boolean {
+  if (!a.mightBeNumber() || !b.mightBeNumber()) return true;
+  let ia = IntervalDomain.of(a);
+  let ib = IntervalDomain.of(b);
+  return ia !== undefined && ib !== undefined && !ia.mayBeNegZero && !ib.mayBeNegZero;
 }
 
 function decideByIntervals(realm: Realm, op: any, args: Array<Value>): void | BooleanValue {
