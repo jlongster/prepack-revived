@@ -49,7 +49,8 @@ export class WidenImplementation {
       for (let b of this._newlyWidenedBindings) delete b.phiNode;
       for (let pb of this._newlyWidenedProperties) delete pb.pathNode;
     }
-    [this._newlyWidenedBindings, this._newlyWidenedProperties] = saved;
+    this._newlyWidenedBindings = saved[0];
+    this._newlyWidenedProperties = saved[1];
   }
 
   _widenArrays(
