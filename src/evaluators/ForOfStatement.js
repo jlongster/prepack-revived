@@ -23,6 +23,7 @@ import {
   JoinedAbruptCompletions,
   JoinedNormalAndAbruptCompletions,
   NormalCompletion,
+  SimpleNormalCompletion,
 } from "../completions.js";
 import {
   AbstractObjectValue,
@@ -223,165 +224,183 @@ export function ForInOfBodyEvaluation(
     // b. Let assignmentPattern be the parse of the source text corresponding to lhs using AssignmentPattern as the goal symbol.
   }
 
+  let matchesCurrentLoopContinue = (c: Completion) =>
+    c instanceof ContinueCompletion && (!c.target || (labelSet != null && labelSet.indexOf(c.target) >= 0));
+  let matchesUnlabeledBreak = (c: Completion) => c instanceof BreakCompletion && !c.target;
+
   // 5. Repeat
-  while (true) {
-    // a. Let nextResult be ? IteratorStep(iterator).
-    let nextResult = IteratorStep(realm, iterator);
+  let loopCompletion = realm.evaluateCompletionInSavedCompletionScope(() => {
+    while (true) {
+      // a. Let nextResult be ? IteratorStep(iterator).
+      let nextResult = IteratorStep(realm, iterator);
 
-    // b. If nextResult is false, return NormalCompletion(V).
-    if (!nextResult) {
-      // This is a join point for the paths that left earlier iterations with a break.
-      let exitResult = Functions.incorporateSavedCompletion(realm, V);
-      if (exitResult instanceof JoinedNormalAndAbruptCompletions) {
-        let selector = c => c instanceof BreakCompletion && !c.target;
-        exitResult = Completion.normalizeSelectedCompletions(selector, exitResult);
-        realm.composeWithSavedCompletion(exitResult);
+      // b. If nextResult is false, return NormalCompletion(V).
+      if (!nextResult) {
+        let exitCompletion = Functions.incorporateSavedCompletion(realm, V);
+        if (
+          (exitCompletion instanceof JoinedNormalAndAbruptCompletions ||
+            exitCompletion instanceof JoinedAbruptCompletions) &&
+          exitCompletion.containsSelectedCompletion(matchesUnlabeledBreak)
+        ) {
+          exitCompletion = Completion.normalizeSelectedCompletions(matchesUnlabeledBreak, exitCompletion);
+        }
+        invariant(exitCompletion instanceof Completion || exitCompletion instanceof Value);
+        return exitCompletion;
       }
-      return V;
-    }
 
-    // c. Let nextValue be ? IteratorValue(nextResult).
-    let nextValue = IteratorValue(realm, nextResult);
+      // c. Let nextValue be ? IteratorValue(nextResult).
+      let nextValue = IteratorValue(realm, nextResult);
 
-    // d. If lhsKind is either assignment or varBinding, then
-    let iterationEnv: void | LexicalEnvironment;
-    let lhsRef;
-    if (lhsKind === "assignment" || lhsKind === "varBinding") {
-      // i. If destructuring is false, then
-      if (!destructuring) {
-        // 1. Let lhsRef be the result of evaluating lhs. (It may be evaluated repeatedly.)
-        lhsRef = env.evaluateCompletion(lhs, strictCode);
-      }
-    } else {
-      // e. Else,
-      // i. Assert: lhsKind is lexicalBinding.
-      invariant(lhsKind === "lexicalBinding", "expected lhsKind to be lexicalBinding");
-      invariant(lhs.type === "VariableDeclaration");
-
-      // ii. Assert: lhs is a ForDeclaration.
-
-      // iii. Let iterationEnv be NewDeclarativeEnvironment(oldEnv).
-      iterationEnv = Environment.NewDeclarativeEnvironment(realm, oldEnv);
-
-      // iv. Perform BindingInstantiation for lhs passing iterationEnv as the argument.
-      BindingInstantiation(realm, lhs, iterationEnv);
-
-      // v. Set the running execution context's LexicalEnvironment to iterationEnv.
-      realm.getRunningContext().lexicalEnvironment = iterationEnv;
-      env = iterationEnv;
-
-      // vi. If destructuring is false, then
-      if (!destructuring) {
-        let names = Environment.BoundNames(realm, lhs);
-
-        // 1. Assert: lhs binds a single name.
-        invariant(names.length === 1, "expected single name");
-
-        // 2. Let lhsName be the sole element of BoundNames of lhs.
-        let lhsName = names[0];
-
-        // 3. Let lhsRef be ! ResolveBinding(lhsName).
-        lhsRef = Environment.ResolveBinding(realm, lhsName, strictCode);
-      }
-    }
-
-    // f. If destructuring is false, then
-    let status;
-    try {
-      if (!destructuring) {
-        // i. If lhsRef is an abrupt completion, then
-        if (lhsRef instanceof AbruptCompletion) {
-          // 1. Let status be lhsRef.
-          status = lhsRef;
-        } else if (lhsKind === "lexicalBinding") {
-          // ii. Else if lhsKind is lexicalBinding, then
-          // 1. Let status be InitializeReferencedBinding(lhsRef, nextValue).
-          invariant(lhsRef instanceof Reference);
-          status = Environment.InitializeReferencedBinding(realm, lhsRef, nextValue);
-        } else {
-          // iii. Else,
-          // 1. Let status be PutValue(lhsRef, nextValue).
-          invariant(lhsRef !== undefined);
-          status = Properties.PutValue(realm, lhsRef, nextValue);
+      // d. If lhsKind is either assignment or varBinding, then
+      let iterationEnv: void | LexicalEnvironment;
+      let lhsRef;
+      if (lhsKind === "assignment" || lhsKind === "varBinding") {
+        // i. If destructuring is false, then
+        if (!destructuring) {
+          // 1. Let lhsRef be the result of evaluating lhs. (It may be evaluated repeatedly.)
+          lhsRef = env.evaluateCompletion(lhs, strictCode);
         }
       } else {
-        // g. Else,
-        // i. If lhsKind is assignment, then
-        if (lhsKind === "assignment") {
-          invariant(lhs.type === "ArrayPattern" || lhs.type === "ObjectPattern");
+        // e. Else,
+        // i. Assert: lhsKind is lexicalBinding.
+        invariant(lhsKind === "lexicalBinding", "expected lhsKind to be lexicalBinding");
+        invariant(lhs.type === "VariableDeclaration");
 
-          // 1. Let status be the result of performing DestructuringAssignmentEvaluation of assignmentPattern using nextValue as the argument.
-          status = DestructuringAssignmentEvaluation(realm, lhs, nextValue, strictCode, iterationEnv || env);
-        } else if (lhsKind === "varBinding") {
-          // ii. Else if lhsKind is varBinding, then
-          // 1. Assert: lhs is a ForBinding.
+        // ii. Assert: lhs is a ForDeclaration.
 
-          // 2. Let status be the result of performing BindingInitialization for lhs passing nextValue and undefined as the arguments.
-          status = Environment.BindingInitialization(realm, lhs, nextValue, strictCode, undefined);
-        } else {
-          // iii. Else,
-          // 1. Assert: lhsKind is lexicalBinding.
-          invariant(lhsKind === "lexicalBinding");
+        // iii. Let iterationEnv be NewDeclarativeEnvironment(oldEnv).
+        iterationEnv = Environment.NewDeclarativeEnvironment(realm, oldEnv);
 
-          // 2. Assert: lhs is a ForDeclaration.
+        // iv. Perform BindingInstantiation for lhs passing iterationEnv as the argument.
+        BindingInstantiation(realm, lhs, iterationEnv);
 
-          // 3. Let status be the result of performing BindingInitialization for lhs passing nextValue and iterationEnv as arguments.
-          invariant(iterationEnv !== undefined);
-          status = Environment.BindingInitialization(realm, lhs, nextValue, strictCode, iterationEnv);
+        // v. Set the running execution context's LexicalEnvironment to iterationEnv.
+        realm.getRunningContext().lexicalEnvironment = iterationEnv;
+        env = iterationEnv;
+
+        // vi. If destructuring is false, then
+        if (!destructuring) {
+          let names = Environment.BoundNames(realm, lhs);
+
+          // 1. Assert: lhs binds a single name.
+          invariant(names.length === 1, "expected single name");
+
+          // 2. Let lhsName be the sole element of BoundNames of lhs.
+          let lhsName = names[0];
+
+          // 3. Let lhsRef be ! ResolveBinding(lhsName).
+          lhsRef = Environment.ResolveBinding(realm, lhsName, strictCode);
         }
       }
-    } catch (e) {
-      if (e instanceof AbruptCompletion) {
-        status = e;
-      } else {
-        throw e;
-      }
-    }
 
-    // h. If status is an abrupt completion, then
-    if (status instanceof AbruptCompletion) {
-      // i. Set the running execution context's LexicalEnvironment to oldEnv.
+      // f. If destructuring is false, then
+      let status;
+      try {
+        if (!destructuring) {
+          // i. If lhsRef is an abrupt completion, then
+          if (lhsRef instanceof AbruptCompletion) {
+            // 1. Let status be lhsRef.
+            status = lhsRef;
+          } else if (lhsKind === "lexicalBinding") {
+            // ii. Else if lhsKind is lexicalBinding, then
+            // 1. Let status be InitializeReferencedBinding(lhsRef, nextValue).
+            invariant(lhsRef instanceof Reference);
+            status = Environment.InitializeReferencedBinding(realm, lhsRef, nextValue);
+          } else {
+            // iii. Else,
+            // 1. Let status be PutValue(lhsRef, nextValue).
+            invariant(lhsRef !== undefined);
+            status = Properties.PutValue(realm, lhsRef, nextValue);
+          }
+        } else {
+          // g. Else,
+          // i. If lhsKind is assignment, then
+          if (lhsKind === "assignment") {
+            invariant(lhs.type === "ArrayPattern" || lhs.type === "ObjectPattern");
+
+            // 1. Let status be the result of performing DestructuringAssignmentEvaluation of assignmentPattern using nextValue as the argument.
+            status = DestructuringAssignmentEvaluation(realm, lhs, nextValue, strictCode, iterationEnv || env);
+          } else if (lhsKind === "varBinding") {
+            // ii. Else if lhsKind is varBinding, then
+            // 1. Assert: lhs is a ForBinding.
+
+            // 2. Let status be the result of performing BindingInitialization for lhs passing nextValue and undefined as the arguments.
+            status = Environment.BindingInitialization(realm, lhs, nextValue, strictCode, undefined);
+          } else {
+            // iii. Else,
+            // 1. Assert: lhsKind is lexicalBinding.
+            invariant(lhsKind === "lexicalBinding");
+
+            // 2. Assert: lhs is a ForDeclaration.
+
+            // 3. Let status be the result of performing BindingInitialization for lhs passing nextValue and iterationEnv as arguments.
+            invariant(iterationEnv !== undefined);
+            status = Environment.BindingInitialization(realm, lhs, nextValue, strictCode, iterationEnv);
+          }
+        }
+      } catch (e) {
+        if (e instanceof AbruptCompletion) {
+          status = e;
+        } else {
+          throw e;
+        }
+      }
+
+      // h. If status is an abrupt completion, then
+      if (status instanceof AbruptCompletion) {
+        // i. Set the running execution context's LexicalEnvironment to oldEnv.
+        realm.getRunningContext().lexicalEnvironment = oldEnv;
+
+        // ii. Return ? IteratorClose(iterator, status).
+        throw IteratorClose(realm, iterator, status);
+      }
+
+      // i. Let result be the result of evaluating stmt.
+      let stmtResult = env.evaluateCompletion(stmt, strictCode);
+      invariant(stmtResult instanceof Value || stmtResult instanceof AbruptCompletion);
+
+      // j. Set the running execution context's LexicalEnvironment to oldEnv.
+
+      let lexEnv = realm.getRunningContext().lexicalEnvironment;
+      if (lexEnv !== oldEnv) realm.onDestroyScope(lexEnv);
       realm.getRunningContext().lexicalEnvironment = oldEnv;
+      env = oldEnv;
 
-      // ii. Return ? IteratorClose(iterator, status).
-      throw IteratorClose(realm, iterator, status);
+      let result = Functions.incorporateSavedCompletion(realm, stmtResult);
+      invariant(result !== undefined);
+      if (result instanceof Value) result = new SimpleNormalCompletion(result);
+
+      // k. If LoopContinues(result, labelSet) is false, return ? IteratorClose(iterator, UpdateEmpty(result, V)).
+      if (!LoopContinues(realm, result, labelSet)) {
+        invariant(result instanceof AbruptCompletion);
+        result = UpdateEmpty(realm, result, V);
+        invariant(result instanceof AbruptCompletion);
+        result = IteratorClose(realm, iterator, result);
+        if (result instanceof BreakCompletion && !result.target) {
+          return result.value;
+        }
+        if (result instanceof JoinedAbruptCompletions && result.containsSelectedCompletion(matchesUnlabeledBreak)) {
+          return Completion.normalizeSelectedCompletions(matchesUnlabeledBreak, result);
+        }
+        return result;
+      }
+
+      if (
+        (result instanceof JoinedNormalAndAbruptCompletions || result instanceof JoinedAbruptCompletions) &&
+        result.containsSelectedCompletion(matchesCurrentLoopContinue)
+      ) {
+        result = Completion.normalizeSelectedCompletions(matchesCurrentLoopContinue, result);
+      }
+      invariant(result instanceof Completion);
+      result = realm.composeWithSavedCompletion(result);
+
+      // l. If result.[[Value]] is not empty, let V be result.[[Value]].
+      let resultValue = InternalGetResultValue(realm, result);
+      if (!(resultValue instanceof EmptyValue)) V = resultValue;
     }
-
-    // i. Let result be the result of evaluating stmt.
-    let result = env.evaluateCompletion(stmt, strictCode);
-    invariant(result instanceof Value || result instanceof AbruptCompletion);
-    // This is a join point for break and continue completions that happened on some paths only
-    // (as in ForBodyEvaluation): without it, a conditional `continue` would be ignored.
-    result = Functions.incorporateSavedCompletion(realm, result);
-    invariant(result !== undefined);
-
-    // j. Set the running execution context's LexicalEnvironment to oldEnv.
-
-    let lexEnv = realm.getRunningContext().lexicalEnvironment;
-    if (lexEnv !== oldEnv) realm.onDestroyScope(lexEnv);
-    realm.getRunningContext().lexicalEnvironment = oldEnv;
-    env = oldEnv;
-
-    // k. If LoopContinues(result, labelSet) is false, return ? IteratorClose(iterator, UpdateEmpty(result, V)).
-    if (!LoopContinues(realm, result, labelSet)) {
-      invariant(result instanceof AbruptCompletion);
-      result = UpdateEmpty(realm, result, V);
-      invariant(result instanceof AbruptCompletion);
-      throw IteratorClose(realm, iterator, result);
-    }
-
-    if (result instanceof JoinedNormalAndAbruptCompletions) {
-      result = Completion.normalizeSelectedCompletions(c => c instanceof ContinueCompletion, result);
-    }
-    if (result instanceof Completion) result = realm.composeWithSavedCompletion(result);
-
-    // l. If result.[[Value]] is not empty, let V be result.[[Value]].
-    let resultValue = InternalGetResultValue(realm, result);
-    if (!(resultValue instanceof EmptyValue)) V = resultValue;
-  }
-
-  /* istanbul ignore next */
-  invariant(false); // can't get here but there is no other way to make Flow happy
+    invariant(false);
+  });
+  return realm.returnOrThrowCompletion(loopCompletion);
 }
 
 export default function(

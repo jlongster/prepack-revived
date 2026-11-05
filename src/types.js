@@ -150,6 +150,8 @@ export type PropertyBinding = {
   // contains a operation descriptor that produces a member expression that resolves to this property binding (location)
   pathNode?: AbstractValue,
   internalSlot?: boolean,
+  // set if the property was created after a write with an unknown name: the unknown property's value at that time
+  createdAfterUnknownWrite?: Value | Descriptor,
 };
 
 export type LexicalEnvironmentTypes = "global" | "module" | "script" | "function" | "block" | "catch" | "loop" | "with";
@@ -541,7 +543,8 @@ export type FunctionType = {
     ParameterList: Array<BabelNodeLVal>,
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
-    Strict: boolean
+    Strict: boolean,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue,
 
   // ECMA262 9.2.7
@@ -597,7 +600,8 @@ export type FunctionType = {
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
     Strict: boolean,
-    prototype?: ObjectValue
+    prototype?: ObjectValue,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue,
 
   // ECMA262 18.2.1.2

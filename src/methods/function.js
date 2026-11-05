@@ -98,6 +98,10 @@ function InternalCall(
     // 2. If F's [[FunctionKind]] internal slot is "classConstructor", throw a TypeError exception.
     if (F.$FunctionKind === "classConstructor")
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "not callable");
+    if (F.$IsAsync) {
+      AbstractValue.reportIntrospectionError(F, "async function call");
+      throw new FatalError();
+    }
 
     // Recursion driven by abstract values becomes a residual call instead of being unrolled.
     let residualCall = tryResidualizeRecursiveCall(realm, F, thisArgument, argsList);
@@ -849,7 +853,7 @@ export class FunctionImplementation {
 
     // 4. Let Strict be the value of the [[Strict]] internal slot of F.
     let Strict = F.$Strict;
-    if (!Strict) {
+    if (!Strict && kind === "normal" && F.$FunctionKind === "normal" && !F.$IsAsync) {
       Properties.DefinePropertyOrThrow(
         realm,
         F,
@@ -894,13 +898,15 @@ export class FunctionImplementation {
     ParameterList: Array<BabelNodeLVal>,
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
-    Strict: boolean
+    Strict: boolean,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue {
     // 1. Let functionPrototype be the intrinsic object %Generator%.
     let functionPrototype = realm.intrinsics.Generator;
 
     // 2. Let F be FunctionAllocate(functionPrototype, Strict, "generator").
     let F = this.FunctionAllocate(realm, functionPrototype, Strict, "generator");
+    if (isAsync) F.$IsAsync = true;
 
     // 3. Return FunctionInitialize(F, kind, ParameterList, Body, Scope).
     return this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
@@ -1206,9 +1212,9 @@ export class FunctionImplementation {
       if (savedCompletion instanceof JoinedNormalAndAbruptCompletions) {
         let subsequentEffects = realm.getCapturedEffects(c);
         realm.stopEffectCaptureAndUndoEffects(savedCompletion);
+        realm.savedCompletion = savedCompletion.composedWith;
         let joinedEffects = Join.composeWithEffects(savedCompletion, subsequentEffects);
         realm.applyEffects(joinedEffects);
-        realm.savedCompletion = savedCompletion.composedWith;
         if (realm.savedCompletion !== undefined) return this.incorporateSavedCompletion(realm, joinedEffects.result);
         return joinedEffects.result;
       }
@@ -1248,7 +1254,8 @@ export class FunctionImplementation {
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
     Strict: boolean,
-    prototype?: ObjectValue
+    prototype?: ObjectValue,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue {
     // 1. If the prototype argument was not passed, then
     if (!prototype) {
@@ -1258,7 +1265,7 @@ export class FunctionImplementation {
 
     // 2. If kind is not Normal, let allocKind be "non-constructor".
     let allocKind;
-    if (kind !== "normal") {
+    if (kind !== "normal" || isAsync) {
       allocKind = "non-constructor";
     } else {
       // 3. Else, let allocKind be "normal".
@@ -1267,6 +1274,7 @@ export class FunctionImplementation {
 
     // 4. Let F be FunctionAllocate(prototype, Strict, allocKind).
     let F = this.FunctionAllocate(realm, prototype, Strict, allocKind);
+    if (isAsync) F.$IsAsync = true;
 
     // ECMAScript 2016, section 17:
     //   "Every other data property described in clauses 18 through 26 and in Annex B.2 has the attributes { [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: true } unless otherwise specified."
@@ -1274,7 +1282,7 @@ export class FunctionImplementation {
     // However, in non-strict mode this behavior is not desired, so we will add them as own properties of each `FunctionValue`, in accordance with ECMA 17.
     // Note: "arguments" ***MUST NOT*** be set if the function is in strict mode or is an arrow, method, constructor, or generator function.
     //   See 16.2 "Forbidden Extensions"
-    if (!Strict && kind === "normal") {
+    if (!Strict && kind === "normal" && !isAsync) {
       Properties.DefinePropertyOrThrow(
         realm,
         F,
@@ -1571,7 +1579,16 @@ export class FunctionImplementation {
     }
 
     // 6. Let closure be FunctionCreate(kind, StrictFormalParameters, FunctionBody, scope, strict). If functionPrototype was passed as a parameter, then pass its value as the prototype optional argument of FunctionCreate.
-    let closure = this.FunctionCreate(realm, kind, prop.params, prop.body, scope, strict, functionPrototype);
+    let closure = this.FunctionCreate(
+      realm,
+      kind,
+      prop.params,
+      prop.body,
+      scope,
+      strict,
+      functionPrototype,
+      !!prop.async
+    );
 
     // 7. Perform MakeMethod(closure, object).
     this.MakeMethod(realm, closure, obj);

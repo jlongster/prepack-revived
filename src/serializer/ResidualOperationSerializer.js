@@ -142,9 +142,6 @@ export class ResidualOperationSerializer {
       case "PROPERTY_ASSIGNMENT":
         babelNode = this._serializePropertyAssignment(data, nodes, context, valuesToProcess);
         break;
-      case "PROPERTY_DELETE":
-        babelNode = this._serializePropertyDelete(data, nodes);
-        break;
       case "THROW":
         babelNode = this._serializeThrow(data, nodes);
         break;
@@ -210,6 +207,9 @@ export class ResidualOperationSerializer {
         break;
       case "UNARY_EXPRESSION":
         babelNode = this._serializeUnaryExpression(data, nodes);
+        break;
+      case "PROPERTY_DELETE":
+        babelNode = this._serializePropertyDelete(data, nodes);
         break;
       case "ABSTRACT_PROPERTY":
         babelNode = this._serializeAbstractProperty(data, nodes);
@@ -583,7 +583,7 @@ export class ResidualOperationSerializer {
     [oldValNode]: Array<BabelNodeExpression>
   ): BabelNodeExpression {
     invariant(incrementor !== undefined);
-    return t.binaryExpression(incrementor, oldValNode, t.numericLiteral(1));
+    return t.binaryExpression(incrementor, t.unaryExpression("+", oldValNode, true), t.numericLiteral(1));
   }
 
   _serializeDerivedAbstractInvariant(
@@ -922,8 +922,8 @@ export class ResidualOperationSerializer {
   _serializePropertyDelete(
     {  }: OperationDescriptorData,
     [objectNode, propName]: Array<BabelNodeExpression>
-  ): BabelNodeStatement {
-    return t.expressionStatement(t.unaryExpression("delete", memberExpressionHelper(objectNode, propName)));
+  ): BabelNodeExpression {
+    return t.unaryExpression("delete", memberExpressionHelper(objectNode, propName));
   }
 
   _serializeGetBinding(

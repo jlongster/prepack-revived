@@ -11,18 +11,24 @@
 
 import type { BabelNodeSourceLocation } from "@babel/types";
 import { AbruptCompletion } from "../completions.js";
+import { cloneDescriptor, PropertyDescriptor } from "../descriptors.js";
+import type { Binding } from "../environment.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import invariant from "../invariant.js";
-import { type Effects, type PropertyBindings, Realm } from "../realm.js";
+import { type Effects, type PersistentReadTracker, type PropertyBindings, Realm } from "../realm.js";
 import type { PropertyBinding, ReactComponentTreeConfig } from "../types.js";
 import { ignoreErrorsIn } from "../utils/errors.js";
+import { createOperationDescriptor } from "../utils/generator.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  BooleanValue,
   BoundFunctionValue,
   ECMAScriptSourceFunctionValue,
   FunctionValue,
+  NumberValue,
   ObjectValue,
+  StringValue,
   UndefinedValue,
   EmptyValue,
   Value,
@@ -38,7 +44,6 @@ import { handleReportedSideEffect } from "./utils.js";
 import type { ArgModel } from "../types.js";
 import { optionalStringOfLocation } from "../utils/babelhelpers";
 import { Properties, Utils } from "../singletons.js";
-import { PropertyDescriptor } from "../descriptors.js";
 
 type AdditionalFunctionEntry = {
   value: ECMAScriptSourceFunctionValue | AbstractValue,
@@ -51,6 +56,7 @@ export class Functions {
     this.realm = realm;
     this.moduleTracer = moduleTracer;
     this._writeEffects = new Map();
+    this._conflictWriteProperties = new Map();
     this._noopFunction = undefined;
     this._optimizedFunctionId = 0;
     this.reactFunctionMap = new Map();
@@ -59,6 +65,7 @@ export class Functions {
   realm: Realm;
   moduleTracer: ModuleTracer;
   _writeEffects: WriteEffects;
+  _conflictWriteProperties: Map<FunctionValue, PropertyBindings>;
   _noopFunction: void | ECMAScriptSourceFunctionValue;
   _optimizedFunctionId: number;
   reactFunctionMap: Map<FunctionValue, FunctionValue>;
@@ -239,18 +246,203 @@ export class Functions {
         let error = new CompilerDiagnostic(msg, location, "PP1007", "Warning");
         realm.handleError(error);
       };
-      const functionCall = () =>
-        realm.wrapInGlobalEnv(() => {
-          let functionEffects = realm.evaluateForEffects(call, undefined, "additional function");
-          // Temporary changes that are undone before the function returns are not side effects.
-          Utils.dropNetZeroModifications(functionEffects, functionValue);
-          Utils.reportSideEffectsFromEffects(realm, functionEffects, functionValue, (sideEffectType, binding, loc) =>
-            handleReportedSideEffect(logCompilerDiagnostic, sideEffectType, binding, loc)
-          );
-          return functionEffects;
-        });
-      let effects: Effects = realm.isInPureScope() ? functionCall() : realm.evaluateWithPureScope(functionCall);
+      const evalWithTracker = (
+        invokeCall: () => Value,
+        reportSideEffects: boolean
+      ): [Effects, PersistentReadTracker] => {
+        let tracker: PersistentReadTracker = {
+          entryPathConditions: realm.pathConditions,
+          definitelyWrittenBindings: new Set(),
+          definitelyWrittenGlobalProps: new Set(),
+          readBindings: new Set(),
+          readGlobalProps: new Set(),
+          readObjectKeys: new Map(),
+        };
+        let savedTracker = realm.persistentReadTracker;
+        realm.persistentReadTracker = tracker;
+        try {
+          const runPure = () =>
+            realm.wrapInGlobalEnv(() => {
+              let functionEffects = realm.evaluateForEffects(invokeCall, undefined, "additional function");
+              // Temporary changes that are undone before the function returns are not side effects.
+              Utils.dropNetZeroModifications(functionEffects, functionValue);
+              if (reportSideEffects) {
+                Utils.reportSideEffectsFromEffects(
+                  realm,
+                  functionEffects,
+                  functionValue,
+                  (sideEffectType, binding, loc) =>
+                    handleReportedSideEffect(logCompilerDiagnostic, sideEffectType, binding, loc)
+                );
+              }
+              return functionEffects;
+            });
+          let eff = realm.isInPureScope() ? runPure() : realm.evaluateWithPureScope(runPure);
+          return [eff, tracker];
+        } finally {
+          realm.persistentReadTracker = savedTracker;
+        }
+      };
+
+      let [effects, tracker] = evalWithTracker(call, true);
       invariant(effects);
+      let conflictProperties: PropertyBindings = new Map(effects.modifiedProperties);
+
+      if (!realm.instantRender.enabled) {
+        let havocBindings: Set<Binding> = new Set();
+        let havocGlobalProps: Map<string, typeof Value> = new Map();
+        let havocObjects: Set<ObjectValue> = new Set();
+        let cannotHavoc = false;
+
+        const inferCandidateType = (v1: Value, v2: void | Value): typeof Value => {
+          for (let candidate of [NumberValue, StringValue, BooleanValue]) {
+            if (
+              Value.isTypeCompatibleWith(v1.getType(), candidate) &&
+              (v2 === undefined || Value.isTypeCompatibleWith(v2.getType(), candidate))
+            ) {
+              return candidate;
+            }
+          }
+          return Value;
+        };
+
+        const collectSelfConflicts = (eff: Effects, tr: PersistentReadTracker): boolean => {
+          let added = false;
+          for (let [binding, entry] of eff.modifiedBindings) {
+            if (
+              !havocBindings.has(binding) &&
+              binding.environment.creatingOptimizedFunction !== functionValue &&
+              Utils.isBindingMutationOutsideFunction(binding, entry, functionValue) &&
+              tr.readBindings.has(binding)
+            ) {
+              if (!binding.mutable || !binding.initialized) {
+                cannotHavoc = true;
+              } else if (!binding.hasLeaked) {
+                havocBindings.add(binding);
+                added = true;
+              }
+            }
+          }
+          let globalObj = realm.$GlobalObject;
+          for (let [pb, postDesc] of eff.modifiedProperties) {
+            if (ObjectValue.refuseSerializationOnPropertyBinding(pb)) continue;
+            let obj = pb.object;
+            if (!(obj instanceof ObjectValue) || eff.createdObjects.has(obj)) continue;
+            if (obj === globalObj) {
+              let pbKey = pb.key;
+              if (typeof pbKey === "string" && tr.readGlobalProps.has(pbKey)) {
+                let pbDesc = pb.descriptor;
+                let postVal = postDesc instanceof PropertyDescriptor ? postDesc.value : undefined;
+                let existingType = havocGlobalProps.get(pbKey);
+                if (existingType !== undefined) {
+                  if (
+                    existingType !== Value &&
+                    (!(postVal instanceof Value) || !Value.isTypeCompatibleWith(postVal.getType(), existingType))
+                  ) {
+                    havocGlobalProps.set(pbKey, Value);
+                    added = true;
+                  }
+                } else if (pbDesc instanceof PropertyDescriptor && pbDesc.value instanceof Value && pbDesc.writable) {
+                  let candType =
+                    postDesc === undefined || (postDesc instanceof PropertyDescriptor && postVal instanceof Value)
+                      ? inferCandidateType(pbDesc.value, postVal instanceof Value ? postVal : undefined)
+                      : Value;
+                  havocGlobalProps.set(pbKey, candType);
+                  added = true;
+                } else {
+                  cannotHavoc = true;
+                }
+              }
+              continue;
+            }
+            if (obj.isIntrinsic() || havocObjects.has(obj)) continue;
+            let readKeys = tr.readObjectKeys.get(obj);
+            if (readKeys === undefined) continue;
+            let overlaps =
+              pb === obj.unknownProperty || readKeys.has("*") || typeof pb.key !== "string" || readKeys.has(pb.key);
+            if (overlaps) {
+              if (obj.symbols.size === 0 && obj.mightNotBeFinalObject()) {
+                havocObjects.add(obj);
+                added = true;
+              } else {
+                cannotHavoc = true;
+              }
+            }
+          }
+          return added;
+        };
+
+        if (collectSelfConflicts(effects, tracker) || cannotHavoc) {
+          let converged = false;
+          for (let attempt = 0; attempt < 5 && !cannotHavoc; attempt++) {
+            this.realm.optimizedFunctions = new Map();
+            let reEvalFailed = false;
+            let reEvalPair: null | [Effects, PersistentReadTracker] = null;
+            let savedLiveBindings = realm.liveOuterBindings;
+            realm.liveOuterBindings = havocBindings;
+            try {
+              reEvalPair = evalWithTracker(() => {
+                for (let obj of havocObjects) {
+                  obj.leak();
+                }
+                let globalObject = realm.$GlobalObject;
+                invariant(globalObject instanceof ObjectValue);
+                for (let [name, propType] of havocGlobalProps) {
+                  let pb = globalObject.properties.get(name);
+                  invariant(pb !== undefined);
+                  let pbDesc = pb.descriptor;
+                  invariant(pbDesc instanceof PropertyDescriptor);
+                  let liveVal = AbstractValue.createTemporalFromBuildFunction(
+                    realm,
+                    propType,
+                    [globalObject, new StringValue(realm, name)],
+                    createOperationDescriptor("OBJECT_GET_PARTIAL"),
+                    { skipInvariant: true, isPure: true }
+                  );
+                  let desc = cloneDescriptor(pbDesc);
+                  invariant(desc !== undefined);
+                  desc.value = liveVal;
+                  realm.recordModifiedProperty(pb);
+                  pb.descriptor = desc;
+                }
+                return call();
+              }, false);
+            } catch (e) {
+              if (!(e instanceof FatalError)) throw e;
+              reEvalFailed = true;
+            } finally {
+              realm.liveOuterBindings = savedLiveBindings;
+            }
+            if (reEvalFailed || reEvalPair === null) break;
+            let [reEvalEffects, reEvalTracker] = reEvalPair;
+            // Remove synthetic _isLeaked entries on pre-existing havoced objects so global heap serialization
+            // still emits their initial properties, while keeping the live reads/writes in reEvalEffects.generator.
+            for (let [pb] of reEvalEffects.modifiedProperties) {
+              if (pb.internalSlot && pb.key === "_isLeaked" && havocObjects.has((pb.object: any))) {
+                reEvalEffects.modifiedProperties.delete(pb);
+              } else {
+                conflictProperties.set(pb, reEvalEffects.modifiedProperties.get(pb));
+              }
+            }
+            effects = reEvalEffects;
+            if (!collectSelfConflicts(reEvalEffects, reEvalTracker) && !cannotHavoc) {
+              converged = true;
+              break;
+            }
+          }
+          if (!converged) {
+            let diag = new CompilerDiagnostic(
+              "Optimized function mutates persistent state across invocations in a way that could not be summarized",
+              functionValue.expressionLocation,
+              "PP1010",
+              "RecoverableError"
+            );
+            if (realm.handleError(diag) !== "Recover") throw new FatalError();
+          }
+        }
+      }
+
+      this._conflictWriteProperties.set(functionValue, conflictProperties);
       let additionalFunctionEffects = createAdditionalEffects(
         this.realm,
         effects,
@@ -335,7 +527,7 @@ export class Functions {
             fun1Name,
             fun2Name,
             conflicts,
-            e1.modifiedProperties,
+            this._conflictWriteProperties.get(fun1) || e1.modifiedProperties,
             isParentOf(fun1, fun2),
             Utils.createModelledFunctionCall(this.realm, fun2)
           );

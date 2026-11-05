@@ -13,6 +13,7 @@ import type { PropertyKeyValue } from "../types.js";
 import type { ECMAScriptFunctionValue } from "../values/index.js";
 import {
   EnvironmentRecord,
+  FunctionEnvironmentRecord,
   GlobalEnvironmentRecord,
   LexicalEnvironment,
   mightBecomeAnObject,
@@ -227,6 +228,8 @@ export function PrepareForOrdinaryCall(
 
   // 10. Set the VariableEnvironment of calleeContext to localEnv.
   calleeContext.variableEnvironment = localEnv;
+  let localEnvRec = localEnv.environmentRecord;
+  if (localEnvRec instanceof FunctionEnvironmentRecord) calleeContext.functionEnvironmentRecord = localEnvRec;
 
   // 11. If callerContext is not already suspended, suspend callerContext.
   callerContext.suspend();
@@ -440,15 +443,26 @@ export function OrdinaryCallEvaluateBody(
         // c contains return completions and possibly also normal completions (which are implicitly "return undefined;")
         // and c also contains throw completions. Hence we assert:
         invariant(c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions);
+        let bottom = realm.intrinsics.__bottomValue;
+        if (
+          !c.containsSelectedCompletion(
+            r => (r instanceof NormalCompletion || r instanceof ReturnCompletion) && r.value !== bottom
+          )
+        ) {
+          return new ThrowCompletion(
+            Join.joinValuesOfSelectedCompletions(r => r instanceof ThrowCompletion && r.value !== bottom, c),
+            c.location
+          );
+        }
 
         // We want to add only the throw completions to priorSavedCompletion (but must keep their conditions in tact).
         // The (joined) return completions must be returned to our caller
         let rc = c;
         Completion.makeAllNormalCompletionsResultInUndefined(c);
-        c = Completion.normalizeSelectedCompletions(r => r instanceof ReturnCompletion, c);
-        invariant(c.containsSelectedCompletion(r => r instanceof NormalCompletion));
-        let rv = Join.joinValuesOfSelectedCompletions(r => r instanceof NormalCompletion, c);
-        if (c.containsSelectedCompletion(r => r instanceof ThrowCompletion)) {
+        c = Completion.normalizeSelectedCompletions(r => r instanceof ReturnCompletion && r.value !== bottom, c);
+        invariant(c.containsSelectedCompletion(r => r instanceof NormalCompletion && r.value !== bottom));
+        let rv = Join.joinValuesOfSelectedCompletions(r => r instanceof NormalCompletion && r.value !== bottom, c);
+        if (c.containsSelectedCompletion(r => r instanceof ThrowCompletion && r.value !== bottom)) {
           realm.composeWithSavedCompletion(c);
           if (rv instanceof AbstractValue) {
             rv = realm.simplifyAndRefineAbstractValue(rv);

@@ -39,10 +39,12 @@ export default function(
     }
 
     // 3. Let F be GeneratorFunctionCreate(Normal, FormalParameters, GeneratorBody, scope, strict).
-    let F = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
+    let F = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, env, strict, !!ast.async);
+    if (ast.id && ast.id.name) F.__originalName = ast.id.name;
 
     // 4. Let prototype be ObjectCreate(%GeneratorPrototype%).
     let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
+    prototype.originalConstructor = F;
 
     // 5. Perform DefinePropertyOrThrow(F, "prototype", PropertyDescriptor{[[Value]]: prototype, [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: false}).
     Properties.DefinePropertyOrThrow(
@@ -74,11 +76,13 @@ export default function(
     }
 
     // 3. Let F be FunctionCreate(Normal, FormalParameters, FunctionBody, scope, strict).
-    let F = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
+    let F = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, env, strict, undefined, !!ast.async);
     if (ast.id && ast.id.name) F.__originalName = ast.id.name;
 
-    // 4. Perform MakeConstructor(F).
-    MakeConstructor(realm, F);
+    if (!ast.async) {
+      // 4. Perform MakeConstructor(F).
+      MakeConstructor(realm, F);
+    }
 
     // 5. Perform SetFunctionName(F, name).
     Functions.SetFunctionName(realm, F, name);

@@ -26,6 +26,7 @@ import {
   AbstractObjectValue,
   BooleanValue,
   ConcreteValue,
+  IntegralValue,
   NullValue,
   NumberValue,
   ObjectValue,
@@ -186,11 +187,24 @@ export default class AbstractValue extends Value {
     let thisArgs = this.args;
     let n = thisArgs.length;
 
+    let operationDescriptorsAreEqual = (d1: void | OperationDescriptor, d2: void | OperationDescriptor): boolean => {
+      if (d1 === d2) return true;
+      if (d1 === undefined || d2 === undefined) return false;
+      if (d1.type !== d2.type) return false;
+      let k1 = Object.keys(d1.data);
+      let k2 = Object.keys(d2.data);
+      if (k1.length !== k2.length) return false;
+      for (let k of k1) {
+        if ((d1.data: any)[k] !== (d2.data: any)[k]) return false;
+      }
+      return true;
+    };
+
     let argsAreEqual = () => {
       invariant(x instanceof AbstractValue);
       let xArgs = x.args;
       let m = xArgs.length;
-      invariant(n === m); // Will be true if kinds are the same. Caller should see to it.
+      if (n !== m) return false;
       for (let i = 0; i < n; i++) {
         let a = thisArgs[i];
         let b = xArgs[i];
@@ -205,7 +219,10 @@ export default class AbstractValue extends Value {
         this.kind === x.kind &&
         this.hashValue === x.hashValue &&
         ((this.intrinsicName && this.intrinsicName.length > 0 && this.intrinsicName === x.intrinsicName) ||
-          (n > 0 && argsAreEqual())))
+          (this.intrinsicName === x.intrinsicName &&
+            operationDescriptorsAreEqual(this.operationDescriptor, x.operationDescriptor) &&
+            n > 0 &&
+            argsAreEqual())))
     );
   }
 
@@ -267,25 +284,30 @@ export default class AbstractValue extends Value {
         if (!x.mightNotBeFalse()) {
           // (c ? false : y) => vx !== undefined && vx !== null if y => vx, since val is false unless y is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return y.implies(vx, depth + 1, pc);
+            return y instanceof AbstractValue && y.implies(vx, depth + 1, pc);
           // (c ? false : y) => undefined !== vy && null !== vy if y => vy, since val is false unless y is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return y.implies(vy, depth + 1, pc);
+            return y instanceof AbstractValue && y.implies(vy, depth + 1, pc);
         } else if (!y.mightNotBeFalse()) {
           // (c ? x : false) => vx !== undefined && vx !== null if x => vx, since val is false unless x is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return x.implies(vx, depth + 1, pc);
+            return x instanceof AbstractValue && x.implies(vx, depth + 1, pc);
           // (c ? x : false) => undefined !== vy && null !== vy if x => vy, since val is false unless x is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return x.implies(vy, depth + 1, pc);
+            return x instanceof AbstractValue && x.implies(vy, depth + 1, pc);
         }
       }
 
       // (c ? x : false) => c && x (if c or x were falsy, (c ? x : false) could not be true)
       if (!y.mightNotBeFalse()) {
-        if (c.implies(val, depth + 1, pc)) return true;
-        if (x.implies(val, depth + 1, pc)) return true;
+        if (c instanceof AbstractValue && c.implies(val, depth + 1, pc)) return true;
+        if (x instanceof AbstractValue && x.implies(val, depth + 1, pc)) return true;
       }
+    } else if (this.kind === "!==") {
+      // (0 !== x) => Boolean(x) only when x is known to be a finite integer (IntegralValue).
+      let [x, y] = this.args;
+      if (x instanceof NumberValue && x.value === 0) return y.getType() === IntegralValue && y.equals(val);
+      if (y instanceof NumberValue && y.value === 0) return x.getType() === IntegralValue && x.equals(val);
     } else if ((this.kind === "===" || this.kind === "==") && (val.kind === "===" || val.kind === "==")) {
       let [x, y] = this.args;
       let [vx, vy] = val.args;
@@ -338,15 +360,15 @@ export default class AbstractValue extends Value {
     let pc = context || this.$Realm.pathConditions;
     if (this.kind === "||") {
       let [x, y] = this.args;
-      let xi = x.impliesNot(val, depth + 1, pc);
+      let xi = x instanceof AbstractValue && x.impliesNot(val, depth + 1, pc);
       if (!xi) return false;
-      let yi = y.impliesNot(val, depth + 1, pc);
+      let yi = y instanceof AbstractValue && y.impliesNot(val, depth + 1, pc);
       return yi;
     } else if (this.kind === "&&") {
       let [x, y] = this.args;
-      let xi = x.impliesNot(val, depth + 1, pc);
+      let xi = x instanceof AbstractValue && x.impliesNot(val, depth + 1, pc);
       if (xi) return true;
-      let yi = y.impliesNot(val, depth + 1, pc);
+      let yi = y instanceof AbstractValue && y.impliesNot(val, depth + 1, pc);
       return yi;
     } else if (this.kind === "!") {
       let [nx] = this.args;
@@ -372,24 +394,24 @@ export default class AbstractValue extends Value {
         if (!x.mightNotBeFalse()) {
           // (c ? false : y) => !(vx === undefined) && !(vx === null) if y => vx, since val is false unless y is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return y.implies(vx, depth + 1, pc);
-          // (c ? false : y) => !(undefined === vy) && !(null === vy) if y => vy, since val is false unless y is true
+            return y instanceof AbstractValue && y.implies(vx, depth + 1, pc);
+          // (c ? false : y) => undefined !== vy && null !== vy if y => vy, since val is false unless y is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return y.implies(vy, depth + 1, pc);
+            return y instanceof AbstractValue && y.implies(vy, depth + 1, pc);
         } else if (!y.mightNotBeFalse()) {
           // (c ? x : false) => !(vx === undefined) && !(vx === null) if x => vx, since val is false unless x is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return x.implies(vx, depth + 1, pc);
+            return x instanceof AbstractValue && x.implies(vx, depth + 1, pc);
           // (c ? x : false) => !(undefined === vy) && !(null !== vy) if x => vy, since val is false unless x is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return x.implies(vy, depth + 1, pc);
+            return x instanceof AbstractValue && x.implies(vy, depth + 1, pc);
         }
       }
 
       // (c ? x : false) => c && x (if c or x were falsy, (c ? x : false) could not be true)
       if (!y.mightNotBeFalse()) {
-        if (c.impliesNot(val, depth + 1, pc)) return true;
-        if (x.impliesNot(val, depth + 1, pc)) return true;
+        if (c instanceof AbstractValue && c.impliesNot(val, depth + 1, pc)) return true;
+        if (x instanceof AbstractValue && x.impliesNot(val, depth + 1, pc)) return true;
       }
     } else if (this.kind === "===" && val.kind === "===") {
       // x === y and y !== z => !(x === z)
@@ -577,7 +599,6 @@ export default class AbstractValue extends Value {
   }
 
   promoteEmptyToUndefined(): Value {
-    if (this.values.isTop()) return this;
     if (!this.mightBeEmpty) return this;
     if (this.kind === "conditional") {
       let [c, x, y] = this.args;
@@ -589,6 +610,7 @@ export default class AbstractValue extends Value {
         this.expressionLocation
       );
     }
+    if (this.values.isTop()) return this;
     let cond = AbstractValue.createFromBinaryOp(this.$Realm, "===", this, this.$Realm.intrinsics.empty);
     let result = AbstractValue.createFromConditionalOp(this.$Realm, cond, this.$Realm.intrinsics.undefined, this);
     if (result instanceof AbstractValue) result.values = this.values.promoteEmptyToUndefined();
@@ -1007,12 +1029,24 @@ export default class AbstractValue extends Value {
   static convertToTemporalIfArgsAreTemporal(realm: Realm, val: AbstractValue, condArgs?: Array<Value>): AbstractValue {
     if (condArgs === undefined) condArgs = val.args;
 
-    let temporalArg = condArgs.find(arg => arg.isTemporal());
+    function containsTemporal(arg: Value): boolean {
+      if (arg.isTemporal()) return true;
+      if (arg instanceof AbstractValue) {
+        for (let subArg of arg.args) {
+          if (containsTemporal(subArg)) return true;
+        }
+      }
+      return false;
+    }
+
+    let temporalArg = condArgs.find(containsTemporal);
     if (temporalArg !== undefined) {
       let realmGenerator = realm.generator;
       invariant(realmGenerator !== undefined);
       invariant(val.operationDescriptor !== undefined);
-      return realmGenerator.deriveAbstract(val.types, val.values, val.args, val.operationDescriptor);
+      return realmGenerator.deriveAbstract(val.types, val.values, val.args, val.operationDescriptor, {
+        isPure: true,
+      });
     } else {
       return val;
     }

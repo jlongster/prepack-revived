@@ -926,7 +926,7 @@ export class Generator {
   }
 
   emitConditionalThrow(value: Value): void {
-    if (value instanceof EmptyValue) return;
+    if (value instanceof EmptyValue || value === this.realm.intrinsics.__bottomValue) return;
     this._issueThrowCompilerDiagnostic(value);
     let args = [];
     function collectArgs(val: Value): void {
@@ -1346,9 +1346,13 @@ export class Generator {
               invariant(thisLastEntryOperationDescriptor.data.generators);
               let [entryGenerator1, entryGenerator2] = operationDescriptor.data.generators;
               let [thisLastEntryGenerator1, thisLastEntryGenerator2] = thisLastEntryOperationDescriptor.data.generators;
+              // Values declared inside the earlier join may be referenced (through a conditional value) by the
+              // later one; merging would place such a use inside the very if statement that declares them.
               if (
                 entryGenerator1.pathConditions.equals(thisLastEntryGenerator1.pathConditions) &&
-                entryGenerator2.pathConditions.equals(thisLastEntryGenerator2.pathConditions)
+                entryGenerator2.pathConditions.equals(thisLastEntryGenerator2.pathConditions) &&
+                !declaresValues(thisLastEntryGenerator1) &&
+                !declaresValues(thisLastEntryGenerator2)
               ) {
                 if (!entryGenerator1.empty())
                   entryGenerator1._entries.forEach(e => thisLastEntryGenerator1._entries.push(e));
@@ -1375,6 +1379,14 @@ export class Generator {
       operationDescriptor: createOperationDescriptor("JOIN_GENERATORS", { generators }),
     });
   }
+}
+
+function declaresValues(generator: Generator): boolean {
+  return generator._entries.some(entry => {
+    if (entry instanceof TemporalOperationEntry && entry.declared !== undefined) return true;
+    let dependencies = entry.getDependencies();
+    return dependencies !== undefined && dependencies.some(declaresValues);
+  });
 }
 
 type TemporalOperationEntryOptimizationStatus = "NO_OPTIMIZATION" | "POSSIBLE_OPTIMIZATION";

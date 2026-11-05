@@ -50,7 +50,15 @@ export default function(
       envRec.CreateImmutableBinding(name, false);
 
       // 7. Let closure be GeneratorFunctionCreate(Normal, FormalParameters, GeneratorBody, funcEnv, strict).
-      let closure = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
+      let closure = Functions.GeneratorFunctionCreate(
+        realm,
+        "normal",
+        ast.params,
+        ast.body,
+        funcEnv,
+        strict,
+        !!ast.async
+      );
       closure.loc = ast.loc;
       closure.__originalName = name;
 
@@ -102,12 +110,23 @@ export default function(
       //if (realm.modifiedBindings) realm.modifiedBindings.delete(name);
 
       // 7. Let closure be FunctionCreate(Normal, FormalParameters, FunctionBody, funcEnv, strict).
-      let closure = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
+      let closure = Functions.FunctionCreate(
+        realm,
+        "normal",
+        ast.params,
+        ast.body,
+        funcEnv,
+        strict,
+        undefined,
+        !!ast.async
+      );
       closure.loc = ast.loc;
       closure.__originalName = name;
 
-      // 8. Perform MakeConstructor(closure).
-      MakeConstructor(realm, closure);
+      if (ast.async !== true) {
+        // 8. Perform MakeConstructor(closure).
+        MakeConstructor(realm, closure);
+      }
 
       // 9. Perform SetFunctionName(closure, name).
       Functions.SetFunctionName(realm, closure, new StringValue(realm, name));
@@ -127,7 +146,15 @@ export default function(
       let scope = env;
 
       // 3. Let closure be GeneratorFunctionCreate(Normal, FormalParameters, GeneratorBody, scope, strict).
-      let closure = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, scope, strict);
+      let closure = Functions.GeneratorFunctionCreate(
+        realm,
+        "normal",
+        ast.params,
+        ast.body,
+        scope,
+        strict,
+        !!ast.async
+      );
 
       // 4. Let prototype be ObjectCreate(%GeneratorPrototype%).
       let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
@@ -156,11 +183,22 @@ export default function(
       let scope = env;
 
       // 3. Let closure be FunctionCreate(Normal, FormalParameters, FunctionBody, scope, strict).
-      let closure = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, scope, strict);
+      let closure = Functions.FunctionCreate(
+        realm,
+        "normal",
+        ast.params,
+        ast.body,
+        scope,
+        strict,
+        undefined,
+        !!ast.async
+      );
       closure.loc = ast.loc;
 
-      // 4. Perform MakeConstructor(closure).
-      MakeConstructor(realm, closure);
+      if (ast.async !== true) {
+        // 4. Perform MakeConstructor(closure).
+        MakeConstructor(realm, closure);
+      }
 
       // 5. Return closure.
       return closure;

@@ -90,11 +90,13 @@ export class Referentializer {
   }
 
   createLeakedIds(referentializationScope: ReferentializationScope): Array<BabelNodeStatement> {
-    const leakedIds = [];
+    // Leaked ids are kept across serializer passes (see cleanInstance), so the same name may occur more than once.
+    const leakedIds = new Map();
     const serializedScopes = this._getReferentializationState(referentializationScope).serializedScopes;
-    for (const scopeBinding of serializedScopes.values()) leakedIds.push(...scopeBinding.leakedIds);
-    if (leakedIds.length === 0) return [];
-    return [t.variableDeclaration("var", leakedIds.map(id => t.variableDeclarator(id)))];
+    for (const scopeBinding of serializedScopes.values())
+      for (const id of scopeBinding.leakedIds) leakedIds.set(id.name, id);
+    if (leakedIds.size === 0) return [];
+    return [t.variableDeclaration("var", Array.from(leakedIds.values()).map(id => t.variableDeclarator(id)))];
   }
 
   _isDirectSingleScope(referentializationScope: ReferentializationScope): boolean {
@@ -328,7 +330,6 @@ export class Referentializer {
           let scope = refState.serializedScopes.get(declarativeEnvironmentRecord);
           if (scope) {
             scope.initializationValues = [];
-            scope.leakedIds = [];
           }
         }
       }

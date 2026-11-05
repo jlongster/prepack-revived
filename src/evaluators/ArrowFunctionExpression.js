@@ -41,7 +41,16 @@ export default function(
   let parameters = ast.params;
 
   // 4. Let closure be FunctionCreate(Arrow, parameters, ConciseBody, scope, strict).
-  let closure = Functions.FunctionCreate(realm, "arrow", parameters, ConciseBody, scope, strict);
+  let closure = Functions.FunctionCreate(
+    realm,
+    "arrow",
+    parameters,
+    ConciseBody,
+    scope,
+    strict,
+    undefined,
+    !!ast.async
+  );
   closure.loc = ast.loc;
 
   // 5. Return closure.

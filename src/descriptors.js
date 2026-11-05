@@ -79,11 +79,11 @@ export class PropertyDescriptor extends Descriptor {
 
 // Only internal properties (those starting with $ / where internalSlot of owning property binding is true) will ever have array values.
 export class InternalSlotDescriptor extends Descriptor {
-  value: void | Value | Array<any>;
+  value: void | Value | Array<any> | Uint8Array | number | null;
 
-  constructor(value?: void | Value | Array<any>) {
+  constructor(value?: void | Value | Array<any> | Uint8Array | number | null) {
     super();
-    this.value = Array.isArray(value) ? value.slice(0) : value;
+    this.value = Array.isArray(value) || value instanceof Uint8Array ? value.slice(0) : value;
   }
 
   mightHaveBeenDeleted(): boolean {

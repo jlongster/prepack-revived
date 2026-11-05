@@ -11,11 +11,13 @@
 
 import type { Realm } from "../realm.js";
 import type { PropertyKeyValue, Descriptor } from "../types.js";
-import { ObjectValue, NumberValue, StringValue, Value, UndefinedValue } from "./index.js";
+import { AbstractValue, ObjectValue, NumberValue, StringValue, Value, UndefinedValue } from "./index.js";
 import { IsInteger, IsArrayIndex, IsAccessorDescriptor, IsDetachedBuffer, IsPropertyKey } from "../methods/is.js";
 import { OrdinaryGet } from "../methods/get.js";
 import { OrdinaryHasProperty } from "../methods/has.js";
 import { IntegerIndexedElementSet, IntegerIndexedElementGet } from "../methods/typedarray.js";
+import { IntervalDomain } from "../domains/index.js";
+import { createOperationDescriptor } from "../utils/generator.js";
 import { Properties, To } from "../singletons.js";
 import invariant from "../invariant.js";
 import { PropertyDescriptor } from "../descriptors.js";
@@ -237,6 +239,54 @@ export default class IntegerIndexedExotic extends ObjectValue {
 
     // 3. Return ? OrdinarySet(O, P, V, Receiver).
     return Properties.OrdinarySet(this.$Realm, O, P, V, Receiver);
+  }
+
+  $GetPartial(P: AbstractValue | PropertyKeyValue, Receiver: Value): Value {
+    if (!(P instanceof AbstractValue)) return this.$Get(P, Receiver);
+    let buffer = this.$ViewedArrayBuffer;
+    let length = this.$ArrayLength;
+    if (
+      Receiver === this &&
+      buffer !== undefined &&
+      typeof length === "number" &&
+      !IsDetachedBuffer(this.$Realm, buffer) &&
+      !P.mightNotBeNumber() &&
+      this.$Realm.generator !== undefined
+    ) {
+      let range = IntervalDomain.of(P);
+      let inBounds = range !== undefined && range.integral && !range.mayBeNaN && range.lo >= 0 && range.hi < length;
+      return AbstractValue.createTemporalFromBuildFunction(
+        this.$Realm,
+        inBounds ? NumberValue : Value,
+        [this, P],
+        createOperationDescriptor("OBJECT_GET_PARTIAL"),
+        { skipInvariant: true, isPure: true }
+      );
+    }
+    return super.$GetPartial(P, Receiver);
+  }
+
+  $SetPartial(P: AbstractValue | PropertyKeyValue, V: Value, Receiver: Value): boolean {
+    if (!(P instanceof AbstractValue)) return this.$Set(P, V, Receiver);
+    let buffer = this.$ViewedArrayBuffer;
+    if (
+      Receiver === this &&
+      buffer !== undefined &&
+      buffer.mightBeLeakedObject() &&
+      !IsDetachedBuffer(this.$Realm, buffer) &&
+      !P.mightNotBeNumber() &&
+      To.IsToNumberPure(this.$Realm, V) &&
+      this.$Realm.generator !== undefined
+    ) {
+      let coerced: Value = V;
+      if (V instanceof AbstractValue) {
+        let numOrAbs = To.ToNumberOrAbstract(this.$Realm, V);
+        coerced = typeof numOrAbs === "number" ? new NumberValue(this.$Realm, numOrAbs) : numOrAbs;
+      }
+      this.$Realm.generator.emitPropertyAssignment(this, P, coerced);
+      return true;
+    }
+    return super.$SetPartial(P, V, Receiver);
   }
 
   // ECMA262 9.4.5.6

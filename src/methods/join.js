@@ -10,6 +10,7 @@
 /* @flow */
 
 import type { Binding } from "../environment.js";
+import { FatalError } from "../errors.js";
 import type { Bindings, BindingEntry, PropertyBindings, CreatedAbstracts, CreatedObjects, Realm } from "../realm.js";
 import { construct_empty_effects, Effects } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
@@ -104,7 +105,6 @@ export class JoinImplementation {
     if (leftCompletion instanceof JoinedNormalAndAbruptCompletions) {
       if (rightCompletion instanceof JoinedNormalAndAbruptCompletions && leftCompletion.savedEffects !== undefined) {
         rightCompletion.composedWith = leftCompletion;
-        rightCompletion.pathConditionsAtCreation = leftCompletion.pathConditionsAtCreation;
         return rightCompletion;
       }
       let c = this.composeCompletions(leftCompletion.consequent, rightCompletion);
@@ -132,17 +132,19 @@ export class JoinImplementation {
 
   composeWithEffects(completion: Completion, normalEffects: Effects): Effects {
     if (completion instanceof JoinedNormalAndAbruptCompletions) {
+      let singleCompletion = completion.shallowClone();
+      singleCompletion.composedWith = undefined;
       let selectAbrupt = c => c instanceof AbruptCompletion && c.value !== c.value.$Realm.intrinsics.__bottomValue;
-      let composableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectAbrupt, completion);
+      let composableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectAbrupt, singleCompletion);
       let composedNormalCompletion = this.composeCompletions(composableCompletions, normalEffects.result);
       normalEffects.result = composedNormalCompletion;
 
       let selectNormal = c =>
         c instanceof SimpleNormalCompletion && c.value !== c.value.$Realm.intrinsics.__bottomValue;
-      let nonComposableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectNormal, completion);
-      let nonComposedEffects = construct_empty_effects(completion.value.$Realm, nonComposableCompletions);
+      let nonComposableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectNormal, singleCompletion);
+      let nonComposedEffects = construct_empty_effects(singleCompletion.value.$Realm, nonComposableCompletions);
 
-      let joinCondition = AbstractValue.createJoinConditionForSelectedCompletions(selectNormal, completion);
+      let joinCondition = AbstractValue.createJoinConditionForSelectedCompletions(selectNormal, singleCompletion);
       return this.joinEffects(joinCondition, normalEffects, nonComposedEffects);
     } else if (completion instanceof AbruptCompletion) {
       return construct_empty_effects(completion.value.$Realm, completion);
@@ -500,6 +502,23 @@ export class JoinImplementation {
           d2 = b.descriptor; //Get value of property before the split
         }
       }
+      if (b.internalSlot && (b.key === "$ArrayBufferData" || b.key === "$ArrayBufferByteLength")) {
+        let v1 = d1 instanceof InternalSlotDescriptor ? d1.value : undefined;
+        let v2 = d2 instanceof InternalSlotDescriptor ? d2.value : undefined;
+        if (v1 === v2) return d1;
+        if (v1 instanceof Uint8Array && v2 instanceof Uint8Array && v1.length === v2.length) {
+          let same = true;
+          for (let i = 0; i < v1.length; i++) {
+            if (v1[i] !== v2[i]) {
+              same = false;
+              break;
+            }
+          }
+          if (same) return d1;
+        }
+        AbstractValue.reportIntrospectionError(b.object, b.key);
+        throw new FatalError();
+      }
       return this.joinDescriptors(realm, joinCondition, d1, d2);
     };
     return this.joinMaps(m1, m2, join);
@@ -587,7 +606,11 @@ export class JoinImplementation {
         return dc;
       }
       if (d1 instanceof InternalSlotDescriptor && d2 instanceof InternalSlotDescriptor) {
-        return new InternalSlotDescriptor(this.joinValues(realm, d1.value, d2.value, getAbstractValue));
+        let v1 = d1.value;
+        let v2 = d2.value;
+        invariant(!(v1 instanceof Uint8Array) && typeof v1 !== "number" && v1 !== null);
+        invariant(!(v2 instanceof Uint8Array) && typeof v2 !== "number" && v2 !== null);
+        return new InternalSlotDescriptor(this.joinValues(realm, v1, v2, getAbstractValue));
       }
       return new AbstractJoinedDescriptor(joinCondition, d1, d2);
     }

@@ -44,6 +44,7 @@ export default function(realm: Realm): AbstractObjectValue | ObjectValue {
 
   // check if we can use abstracts
   if (realm.useAbstractInterpretation) {
+    document.makeSimple("transitive");
     // common methods on document
     for (let name of functions) {
       let func = createAbstract(realm, "function", `document.${name}`);

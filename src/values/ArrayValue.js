@@ -124,7 +124,8 @@ function modelUnknownPropertyOfSpecializedArray(
   realm: Realm,
   args: Array<Value>,
   array: ArrayValue,
-  possibleNestedOptimizedFunctions: ?PossibleNestedOptimizedFunctions
+  possibleNestedOptimizedFunctions: ?PossibleNestedOptimizedFunctions,
+  elementType: typeof Value = Value
 ): PropertyBinding {
   let sentinelProperty = {
     key: undefined,
@@ -194,7 +195,7 @@ function modelUnknownPropertyOfSpecializedArray(
   }
 
   let aliasSet = AbstractValue.createFromType(realm, Value, "mayAliasSet", [...mayAliasedObjects]);
-  sentinelProperty.descriptor.value = AbstractValue.createFromType(realm, Value, "widened numeric property", [
+  sentinelProperty.descriptor.value = AbstractValue.createFromType(realm, elementType, "widened numeric property", [
     aliasSet,
   ]);
 
@@ -206,6 +207,7 @@ function createArrayWithWidenedNumericProperty(
   args: Array<Value>,
   intrinsicName: string,
   possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions,
+  elementType: typeof Value = Value,
   argShapes?: Array<void | ShapeInformationInterface>
 ): ArrayValue {
   let abstractArrayValue = new ArrayValue(realm, intrinsicName);
@@ -233,7 +235,8 @@ function createArrayWithWidenedNumericProperty(
     realm,
     args,
     abstractArrayValue,
-    possibleNestedOptimizedFunctions
+    possibleNestedOptimizedFunctions,
+    elementType
   );
   return abstractArrayValue;
 }
@@ -246,6 +249,9 @@ export default class ArrayValue extends ObjectValue {
   // For arrays with widened numeric properties that model an abstract input array, the shape of
   // the array (whose element shape is used for the arguments of nested optimized callbacks).
   shape: void | ShapeInformationInterface;
+  _widenedIsDense: void | boolean;
+  _widenedMutated: void | boolean;
+  _lastWidenedLength: void | AbstractValue;
 
   getKind(): ObjectKind {
     return "Array";
@@ -268,6 +274,7 @@ export default class ArrayValue extends ObjectValue {
       return Properties.ArraySetLength(this.$Realm, A, Desc);
     } else if (IsArrayIndex(this.$Realm, P)) {
       if (ArrayValue.isIntrinsicAndHasWidenedNumericProperty(this)) {
+        this.recordWidenedMutation();
         // The length of an array with widenend numeric properties is always abstract
         let succeeded = Properties.OrdinaryDefineOwnProperty(this.$Realm, A, P, Desc);
         if (succeeded === false) return false;
@@ -359,19 +366,60 @@ export default class ArrayValue extends ObjectValue {
     args: Array<Value>,
     operationDescriptor: OperationDescriptor,
     possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions,
+    elementType: typeof Value = Value,
+    isPure: boolean = true,
+    isDense: boolean = false,
     argShapes?: Array<void | ShapeInformationInterface>
   ): ArrayValue {
     invariant(realm.generator !== undefined);
 
     let value = realm.generator.deriveConcreteObject(
-      intrinsicName =>
-        createArrayWithWidenedNumericProperty(realm, args, intrinsicName, possibleNestedOptimizedFunctions, argShapes),
+      intrinsicName => {
+        let arr = createArrayWithWidenedNumericProperty(
+          realm,
+          args,
+          intrinsicName,
+          possibleNestedOptimizedFunctions,
+          elementType,
+          argShapes
+        );
+        if (isDense) arr._widenedIsDense = true;
+        return arr;
+      },
       args,
       operationDescriptor,
-      { isPure: true }
+      { isPure }
     );
     invariant(value instanceof ArrayValue);
     return value;
+  }
+
+  recordWidenedMutation(): void {
+    this._widenedMutated = true;
+    this._widenedIsDense = false;
+    const prop = this.unknownProperty;
+    const propDesc = prop !== undefined ? prop.descriptor : undefined;
+    if (prop !== undefined && propDesc instanceof PropertyDescriptor && propDesc.value instanceof AbstractValue) {
+      let cur = propDesc.value;
+      if (cur.kind === "widened numeric property" && cur.getType() !== Value) {
+        this.$Realm.recordModifiedProperty(prop);
+        let desc = new PropertyDescriptor(propDesc);
+        desc.value = AbstractValue.createFromType(this.$Realm, Value, "widened numeric property", cur.args);
+        prop.descriptor = desc;
+      }
+    }
+  }
+
+  static getWidenedElementType(obj: Value): typeof Value {
+    if (ArrayValue.isIntrinsicAndHasWidenedNumericProperty(obj)) {
+      invariant(
+        obj instanceof ArrayValue && obj.unknownProperty !== undefined && obj.unknownProperty.descriptor !== undefined
+      );
+      const desc = obj.unknownProperty.descriptor.throwIfNotConcrete(obj.$Realm);
+      invariant(desc.value instanceof AbstractValue);
+      return desc.value.getType();
+    }
+    return Value;
   }
 
   static isIntrinsicAndHasWidenedNumericProperty(obj: Value): boolean {

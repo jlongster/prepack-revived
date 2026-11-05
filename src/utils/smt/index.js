@@ -195,7 +195,14 @@ function expandedChildren(v: AbstractValue): void | $ReadOnlyArray<Value> {
   let args = v.args;
   if (v.intrinsicName !== undefined) {
     let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
-    if (entry === undefined || entry.isPure !== true) return undefined;
+    if (
+      entry === undefined ||
+      (entry.isPure !== true &&
+        entry.operationDescriptor.type !== "BINARY_EXPRESSION" &&
+        entry.operationDescriptor.type !== "UNARY_EXPRESSION")
+    ) {
+      return undefined;
+    }
     od = entry.operationDescriptor;
     args = entry.args;
   }

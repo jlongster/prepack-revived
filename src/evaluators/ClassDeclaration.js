@@ -56,9 +56,12 @@ export function ClassDefinitionEvaluation(
   realm: Realm,
   ast: BabelNodeClassDeclaration | BabelNodeClassExpression,
   className: string | void,
-  strictCode: boolean,
+  _strictCode: boolean,
   env: LexicalEnvironment
 ): ECMAScriptSourceFunctionValue {
+  // ECMA262 10.2.1: All parts of a ClassDeclaration or a ClassExpression are strict mode code.
+  let strictCode = true;
+
   // 1. Let lex be the LexicalEnvironment of the running execution context.
   let lex = env;
 
@@ -204,7 +207,14 @@ export function ClassDefinitionEvaluation(
 
     try {
       // 12. Let constructorInfo be the result of performing DefineMethod for constructor with arguments proto and constructorParent as the optional functionPrototype argument.
-      let constructorInfo = Functions.DefineMethod(realm, constructor, proto, env, strictCode, constructorParent);
+      let constructorInfo = Functions.DefineMethod(
+        realm,
+        constructor,
+        proto,
+        classScope,
+        strictCode,
+        constructorParent
+      );
 
       // 13. Assert: constructorInfo is not an abrupt completion.
 
@@ -242,11 +252,11 @@ export function ClassDefinitionEvaluation(
         // a. If IsStatic of m is false, then
         if (!IsStatic(m)) {
           // Let status be the result of performing PropertyDefinitionEvaluation for m with arguments proto and false.
-          Properties.PropertyDefinitionEvaluation(realm, m, proto, (env: any), strictCode, false);
+          Properties.PropertyDefinitionEvaluation(realm, m, proto, (classScope: any), strictCode, false);
         } else {
           // Else,
           // Let status be the result of performing PropertyDefinitionEvaluation for m with arguments F and false.
-          Properties.PropertyDefinitionEvaluation(realm, m, F, (env: any), strictCode, false);
+          Properties.PropertyDefinitionEvaluation(realm, m, F, (classScope: any), strictCode, false);
         }
         // c. If status is an abrupt completion, then
         // i. Set the running execution context's LexicalEnvironment to lex.

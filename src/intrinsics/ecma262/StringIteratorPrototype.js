@@ -11,7 +11,7 @@
 
 import type { Realm } from "../../realm.js";
 import { Create } from "../../singletons.js";
-import { ObjectValue, StringValue } from "../../values/index.js";
+import { AbstractValue, NumberValue, ObjectValue, StringValue, UndefinedValue } from "../../values/index.js";
 import invariant from "../../invariant.js";
 
 export default function(realm: Realm, obj: ObjectValue): void {
@@ -32,15 +32,20 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 4. Let s be O.[[IteratedString]].
     let s = O.$IteratedString;
+    if (s instanceof AbstractValue) s = realm.simplifyAndRefineAbstractValue(s);
+    if (s !== undefined) s = s.throwIfNotConcrete();
 
     // 5. If s is undefined, return CreateIterResultObject(undefined, true).
-    if (!s) {
+    if (!s || s instanceof UndefinedValue) {
       return Create.CreateIterResultObject(realm, realm.intrinsics.undefined, true);
     }
+    invariant(s instanceof StringValue);
 
     // 6. Let position be O.[[StringIteratorNextIndex]].
-    let position = O.$StringIteratorNextIndex;
-    invariant(typeof position === "number");
+    let posVal = O.$StringIteratorNextIndex;
+    invariant(posVal !== undefined);
+    if (posVal instanceof AbstractValue) posVal = realm.simplifyAndRefineAbstractValue(posVal);
+    let position = posVal.throwIfNotConcreteNumber().value;
 
     // 7. Let len be the number of elements in s.
     let len = s.value.length;
@@ -48,7 +53,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 8. If position ≥ len, then
     if (position >= len) {
       // a. Set O.[[IteratedString]] to undefined.
-      O.$IteratedString = undefined;
+      O.$IteratedString = realm.intrinsics.undefined;
 
       // b. Return CreateIterResultObject(undefined, true).
       return Create.CreateIterResultObject(realm, realm.intrinsics.undefined, true);
@@ -78,7 +83,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
     let resultSize = resultString.length;
 
     // 13. Set O.[[StringIteratorNextIndex]] to position + resultSize.
-    O.$StringIteratorNextIndex = position + resultSize;
+    O.$StringIteratorNextIndex = new NumberValue(realm, position + resultSize);
 
     // 14. Return CreateIterResultObject(resultString, false).
     return Create.CreateIterResultObject(realm, new StringValue(realm, resultString), false);

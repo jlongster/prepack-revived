@@ -250,8 +250,9 @@ function CaseBlockEvaluation(
 
     let V = realm.intrinsics.undefined;
 
-    // 4. Repeat for each CaseClause C in A
-    [, V] = EvaluateCaseClauses(A, V);
+    // 3-4. Repeat for each CaseClause C in A
+    let foundInA = false;
+    [foundInA, V] = EvaluateCaseClauses(A, V);
 
     // 5. Let foundInB be false.
     let foundInB = false;
@@ -259,10 +260,13 @@ function CaseBlockEvaluation(
     // 6. Let B be the List containing the CaseClause items in the second CaseClauses, in source text order. If the second CaseClauses is not present, B is « ».
     let B = cases.slice(default_case_num + 1);
 
-    [foundInB, V] = EvaluateCaseClauses(B, V);
+    // 7. If foundInA is false, then
+    if (!foundInA) {
+      [foundInB, V] = EvaluateCaseClauses(B, V);
 
-    // 8. If foundInB is true, return NormalCompletion(V).
-    if (foundInB) return V;
+      // 8. If foundInB is true, return NormalCompletion(V).
+      if (foundInB) return V;
+    }
 
     // 9. Let R be the result of evaluating DefaultClause.
     let R = EvaluateCase(cases[default_case_num]);
