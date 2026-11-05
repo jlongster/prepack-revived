@@ -1,0 +1,18 @@
+// hard: P3
+// source: new
+// goal: break out of a labeled block under an abstract condition; correct join of break completions
+function f(a, b) {
+  var r = "start";
+  block: {
+    if (a) break block;
+    r += "-1";
+    if (b) break block;
+    r += "-2";
+  }
+  return r;
+}
+if (global.__optimize) __optimize(f);
+
+inspect = function() {
+  return [f(true, true), f(false, true), f(false, false)].join(",");
+};
