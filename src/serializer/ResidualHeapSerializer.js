@@ -2192,7 +2192,7 @@ export class ResidualHeapSerializer {
       classMethodInstance.classMethodKeyNode = this.serializeValue(key);
       classMethodInstance.classMethodComputed = true;
       let ownerCmi = this.residualClassMethodInstances.get(classMethodInstance.classConstructor);
-      if (ownerCmi !== undefined) {
+      if (ownerCmi !== undefined && !key.isIntrinsic()) {
         let ref = this.emitter.getBodyReference();
         ownerCmi.minInsertionBody = ref.body;
         ownerCmi.minInsertionIndex = Math.max(ownerCmi.minInsertionIndex || 0, ref.index);
@@ -2353,6 +2353,7 @@ export class ResidualHeapSerializer {
     if (val.temporalAlias === undefined && !this.realm.instantRender.enabled) {
       if (classConstructor !== undefined) {
         if (!this.emitter.getReasonToWaitForDependencies(classConstructor)) {
+          this._recordPrototypeUsage(classConstructor);
           let serializedCtor = this.serializeValue(classConstructor);
           props.push(t.objectProperty(protoExpression, t.memberExpression(serializedCtor, t.identifier("prototype"))));
           prototypeEstablishedInLiteral = true;
@@ -2364,6 +2365,7 @@ export class ResidualHeapSerializer {
         (proto instanceof ObjectValue || proto === this.realm.intrinsics.null) &&
         !this.emitter.getReasonToWaitForDependencies(proto)
       ) {
+        this._recordPrototypeUsage(proto);
         let serializedProto = this.serializeValue(proto);
         props.push(t.objectProperty(protoExpression, serializedProto));
         prototypeEstablishedInLiteral = true;
@@ -2566,6 +2568,19 @@ export class ResidualHeapSerializer {
     return expr;
   }
 
+  // Records that a class (or a class prototype's constructor) is needed at the current emission point, so that
+  // class definitions are not placed after objects created from them.
+  _recordPrototypeUsage(v: Value): void {
+    let fn = v;
+    if (v instanceof ObjectValue && !(v instanceof FunctionValue) && v.$IsClassPrototype) {
+      let ctor = v.properties.get("constructor");
+      fn = ctor !== undefined && ctor.descriptor instanceof PropertyDescriptor ? ctor.descriptor.value : undefined;
+    }
+    if (fn instanceof FunctionValue) {
+      this.residualFunctions.addFunctionUsage(fn, this.emitter.getBodyReference());
+    }
+  }
+
   _serializeValueObjectViaConstructor(
     val: ObjectValue,
     skipPrototype: boolean,
@@ -2580,9 +2595,7 @@ export class ResidualHeapSerializer {
       skipPrototype
     );
     let targetProto = classConstructor ? classConstructor : proto;
-    if (targetProto instanceof FunctionValue) {
-      this.residualFunctions.addFunctionUsage(targetProto, this.emitter.getBodyReference());
-    }
+    this._recordPrototypeUsage(targetProto);
     let serializedProto = this.serializeValue(targetProto);
     if (val.temporalAlias === undefined) {
       if (
