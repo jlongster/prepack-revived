@@ -129,6 +129,24 @@ Fixes beyond the loop/TypedArray work:
 5. **Call depth** (`realm.js`, hot shared file): the default `maxStackDepth` is now 160 instead of 112. Babel's init legitimately nests 121 calls deep (`new State()` inside parser plugin construction); the old limit raised `PP0045`, which then made the enclosing loop fall back to residualization and ended in an internal error. `test/error-handler/stackOverflow.js` still reports `PP0045`.
 6. **Visitor cost was quadratic** (`ResidualHeapVisitor._mark`): the heap visitor recorded one scope entry per (value, referencing residual function) pair, so values shared by thousands of Babel functions were revisited thousands of times (4.25 M visits and still running after 8 minutes). When there are no optimized functions and `--debugScopes` is off, a value already reachable from the global generator does not need further scopes from functions that are themselves reachable from the global generator: `_getTarget` flattens such function scopes back to the global generator, so the target body is unchanged. Visiting finishes in seconds.
 
+### 5.3 Status after merging the `env` and `smt` tracks (latest `revive`)
+
+The environment track made globals open-world by default: `localStorage`, `navigator` and `document` are now unknown environment values, not "absent". That breaks `babel-standalone` again on the default profile, in a new place. The bundled `debug` package does `enable(load())`, and `load()` now returns an unknown value from `localStorage.getItem("debug")`. `enable` then runs `for (... of split)` (Babel's loose for-of helper) over `s.split(",").filter(Boolean)`, an array of unknown length. Prepack can neither unroll nor residualize that loop, so it reports `PP0037`/`PP0001`. This is a clean failure, not a silent miscompile. `revive` fails the same way.
+
+- With `assumptions: {"typeof localStorage": "undefined", "typeof navigator": "undefined", "typeof document": "undefined"}` (the env track's guarded speculation), `babel-standalone` compiles and is digest-equal in `vm` and fresh `node`.
+- **Compile time:** this build first took 613 s (6 GB RSS) on that configuration. Profiling showed that 80% of the time went to `Realm.clearFunctionBindings` and `clearBlockBindings`. Every function return scanned the whole `modifiedBindings` map, which is huge inside Babel's long speculative init. Return now clears only the returning invocation's own `FunctionEnvironmentRecord` bindings, and block exit iterates the scope instead of the map. `markVisibleLocalBindingsAsPotentiallyCaptured` also skips records that are already fully marked. After these changes the same configuration takes **279 s**. `highlight-js` went from 58 s to 13 s.
+- **Code size:** the open-world UMD handling serializes the library once per module-system branch (`exports` / AMD / global). On the default profile this makes `acorn` and `react-ssr-app` 2.4–2.6x larger gzipped, and `node` cold start drops to about 0.5x. `revive` behaves the same; this is not a regression from this branch. With an explicit `--compatibility browser` (profile `browser-opt`), the speed-ups from §4 hold: code-cache `react-ssr-app` **1.61x** and `acorn` **1.22x**.
+- **Next step:** support a residual loop over an array iterator whose array has an abstract length, i.e. the `_createForOfIteratorHelperLoose` pattern. `ArrayIteratorPrototype.next` currently requires a concrete `length`. Part of the path is already fixed here: `Array.prototype[Symbol.iterator]` is now found on widened arrays (`get.js`).
+
+**Bench (22 workloads, `--no-perf`)**, this branch vs `revive`:
+
+| | default OK | best OK | WRONG | FAIL |
+|---|---:|---:|---:|---:|
+| revive | 12 | 15 | 0 | 7 |
+| rwfix | **14** | **17** | 0 | 5 |
+
+The changes are `crc-32` (FAIL -> OK) and `three` (FAIL -> OK).
+
 ## 6. What Remains Unsolved & Next Steps
 
 1. **1-argument table-builder recomputation (`crc-32` `slice_by_16_tables(T0)`)**:
