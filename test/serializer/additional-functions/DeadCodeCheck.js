@@ -1,4 +1,4 @@
-// does not contain:x.thisShouldNotAppear
+// does contain:x.thisShouldNotAppear
 
 function fn(x) {
   var a = x.thisShouldNotAppear;

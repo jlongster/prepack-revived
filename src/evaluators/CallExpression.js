@@ -23,12 +23,10 @@ import {
   FunctionValue,
   IntegralValue,
   NativeFunctionValue,
-  NullValue,
   NumberValue,
   ObjectValue,
   StringValue,
   SymbolValue,
-  UndefinedValue,
   Value,
 } from "../values/index.js";
 import { Reference } from "../environment.js";
@@ -104,6 +102,9 @@ function evaluateReference(
     (realm.isInPureScope() || (refBase.kind === "conditional" && isEnvironmentDerived(refBase)))
   ) {
     let base = refBase;
+    if (!base.mightNotBeNull() || !base.mightNotBeUndefined()) {
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
+    }
     if (base.kind === "conditional") {
       let [condValue, consequentVal, alternateVal] = base.args;
       invariant(condValue instanceof AbstractValue);
@@ -172,13 +173,7 @@ function evaluateConditionalReferenceBase(
             );
             return evaluateReference(consequentRef, ast, strictCode, env, realm);
           }
-          if (
-            !realm.isInPureScope() &&
-            (consequentVal instanceof UndefinedValue || consequentVal instanceof NullValue)
-          ) {
-            throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
-          }
-          return consequentVal;
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
         },
         null,
         "evaluateConditionalReferenceBase consequent"
@@ -196,10 +191,7 @@ function evaluateConditionalReferenceBase(
             );
             return evaluateReference(alternateRef, ast, strictCode, env, realm);
           }
-          if (!realm.isInPureScope() && (alternateVal instanceof UndefinedValue || alternateVal instanceof NullValue)) {
-            throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
-          }
-          return alternateVal;
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
         },
         null,
         "evaluateConditionalReferenceBase alternate"

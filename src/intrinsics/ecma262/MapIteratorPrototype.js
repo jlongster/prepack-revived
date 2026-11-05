@@ -10,7 +10,7 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { StringValue, NumberValue, ObjectValue, UndefinedValue } from "../../values/index.js";
+import { AbstractValue, StringValue, NumberValue, ObjectValue, UndefinedValue } from "../../values/index.js";
 import { Create } from "../../singletons.js";
 import invariant from "../../invariant.js";
 
@@ -32,9 +32,14 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 4. Let m be O.[[Map]].
     let m = O.$Map;
+    if (m instanceof AbstractValue) m = realm.simplifyAndRefineAbstractValue(m);
+    if (m !== undefined) m = m.throwIfNotConcrete();
 
     // 5. Let index be O.[[MapNextIndex]].
-    let index = O.$MapNextIndex.value;
+    let nextIdx = O.$MapNextIndex;
+    invariant(nextIdx !== undefined);
+    if (nextIdx instanceof AbstractValue) nextIdx = realm.simplifyAndRefineAbstractValue(nextIdx);
+    let index = nextIdx.throwIfNotConcreteNumber().value;
 
     // 6. Let itemKind be O.[[MapIterationKind]].
     let itemKind = O.$MapIterationKind;

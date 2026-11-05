@@ -35,6 +35,7 @@ import {
   BooleanValue,
   ECMAScriptSourceFunctionValue,
   FunctionValue,
+  NullValue,
   NumberValue,
   ObjectValue,
   PrimitiveValue,
@@ -455,7 +456,7 @@ function verifyPureCallEffects(
     let fCall = F.$Call;
     invariant(fCall !== undefined);
     let probeArgs = argsList.map(arg =>
-      arg instanceof PrimitiveValue
+      arg instanceof PrimitiveValue && !(arg instanceof NullValue) && !(arg instanceof UndefinedValue)
         ? AbstractValue.createAbstractArgument(realm, "__recursionPureProbe", realm.currentLocation, arg.getType())
         : arg
     );
@@ -578,9 +579,15 @@ function proveResultType(
       realm.errorHandler = d => (d.severity === "Information" || d.severity === "Warning" ? "Recover" : "Fail");
       let effects;
       try {
-        let probeArgs = argsList.map(arg =>
-          AbstractValue.createAbstractArgument(realm, "__recursionProbe", realm.currentLocation, arg.getType())
-        );
+        let probeArgs = argsList.map(arg => {
+          let argType = arg.getType();
+          return AbstractValue.createAbstractArgument(
+            realm,
+            "__recursionProbe",
+            realm.currentLocation,
+            argType === NullValue || argType === UndefinedValue ? Value : argType
+          );
+        });
         bypass = F;
         effects = realm.evaluateForEffects(() => call(thisArgument, probeArgs), undefined, "residual recursion probe");
       } catch (e) {

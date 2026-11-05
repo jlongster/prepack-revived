@@ -19,7 +19,6 @@ import { HashSet, IsArray, Get } from "../methods/index.js";
 import {
   AbstractObjectValue,
   AbstractValue,
-  ArrayValue,
   BoundFunctionValue,
   ECMAScriptFunctionValue,
   ECMAScriptSourceFunctionValue,
@@ -339,7 +338,6 @@ export class ResidualHeapVisitor {
       // Leaked object. Properties are set via assignments
       // TODO #2259: Make deduplication in the face of leaking work for custom accessors
       if (
-        !(obj instanceof ArrayValue) &&
         !obj.mightNotBeLeakedObject() &&
         (descriptor instanceof PropertyDescriptor && (descriptor.get === undefined && descriptor.set === undefined))
       ) {
@@ -350,7 +348,7 @@ export class ResidualHeapVisitor {
     }
 
     // inject properties with computed names
-    if (obj.unknownProperty !== undefined) {
+    if (obj.unknownProperty !== undefined && obj.mightNotBeLeakedObject()) {
       this.visitObjectPropertiesWithComputedNamesDescriptor(obj.unknownProperty.descriptor);
     }
 
@@ -460,6 +458,7 @@ export class ResidualHeapVisitor {
     this._registerAdditionalRoot(val);
 
     this.visitObjectProperties(val);
+    if (!val.mightNotBeLeakedObject()) return;
     const realm = this.realm;
     let lenProperty;
     if (val.mightBeLeakedObject()) {
@@ -1523,6 +1522,26 @@ export class ResidualHeapVisitor {
         return this.visitEquivalentValue(value);
       },
       visitLeakedBinding: (binding: Binding) => {
+        if (
+          additionalFunctionInfo !== undefined &&
+          !binding.hasLeaked &&
+          binding.environment.creatingOptimizedFunction !== additionalFunctionInfo.functionValue
+        ) {
+          let residualBinding = this.getBinding(binding.environment, binding.name);
+          residualBinding.modified = true;
+          let funcInstance = additionalFunctionInfo.instance;
+          if (funcInstance !== undefined) {
+            funcInstance.residualFunctionBindings.set(residualBinding.name, residualBinding);
+          }
+          additionalFunctionInfo.modifiedBindings.set(binding, residualBinding);
+          if (residualBinding.potentialReferentializationScopes.size === 0) {
+            this._enqueueWithUnrelatedScope(this.globalGenerator, () => {
+              this.visitBinding(this.globalGenerator, residualBinding);
+            });
+          }
+          residualBinding.potentialReferentializationScopes.add("GLOBAL");
+          return;
+        }
         let residualBinding = this.getBinding(binding.environment, binding.name);
         let wasModified = residualBinding.modified;
         residualBinding.modified = true;

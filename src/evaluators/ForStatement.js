@@ -110,6 +110,33 @@ function ForBodyEvaluation(
   initialV?: Value,
   initialTestValue?: Value
 ): Value {
+  let loopCompletion = realm.evaluateCompletionInSavedCompletionScope(() =>
+    ForBodyEvaluationInner(
+      realm,
+      test,
+      increment,
+      stmt,
+      perIterationBindings,
+      labelSet,
+      strictCode,
+      initialV,
+      initialTestValue
+    )
+  );
+  return realm.returnOrThrowCompletion(loopCompletion);
+}
+
+function ForBodyEvaluationInner(
+  realm: Realm,
+  test,
+  increment,
+  stmt,
+  perIterationBindings: Array<string>,
+  labelSet: ?Array<string>,
+  strictCode: boolean,
+  initialV?: Value,
+  initialTestValue?: Value
+): Value {
   // 1. Let V be undefined.
   let V: Value = initialV !== undefined ? initialV : realm.intrinsics.undefined;
   let pendingTestValue: void | Value = initialTestValue;
@@ -155,13 +182,17 @@ function ForBodyEvaluation(
 
       // iii. If ToBoolean(testValue) is false, return NormalCompletion(V).
       if (!To.ToBooleanPartial(realm, testValue)) {
-        result = Functions.incorporateSavedCompletion(realm, V);
-        if (result instanceof JoinedNormalAndAbruptCompletions) {
-          let selector = c => c instanceof BreakCompletion && !c.target;
-          result = Completion.normalizeSelectedCompletions(selector, result);
-          result = realm.composeWithSavedCompletion(result);
+        let exitCompletion = Functions.incorporateSavedCompletion(realm, V);
+        let matchesUnlabeledBreak = c => c instanceof BreakCompletion && !c.target;
+        if (
+          (exitCompletion instanceof JoinedNormalAndAbruptCompletions ||
+            exitCompletion instanceof JoinedAbruptCompletions) &&
+          exitCompletion.containsSelectedCompletion(matchesUnlabeledBreak)
+        ) {
+          exitCompletion = Completion.normalizeSelectedCompletions(matchesUnlabeledBreak, exitCompletion);
         }
-        return V;
+        invariant(exitCompletion instanceof Completion || exitCompletion instanceof Value);
+        return realm.returnOrThrowCompletion(exitCompletion);
       }
     }
 
@@ -188,8 +219,13 @@ function ForBodyEvaluation(
       }
       return realm.returnOrThrowCompletion(result);
     }
-    if (result instanceof JoinedNormalAndAbruptCompletions) {
-      result = Completion.normalizeSelectedCompletions(c => c instanceof ContinueCompletion, result);
+    let matchesCurrentLoopContinue = (c: Completion) =>
+      c instanceof ContinueCompletion && (!c.target || (labelSet != null && labelSet.indexOf(c.target) >= 0));
+    if (
+      (result instanceof JoinedNormalAndAbruptCompletions || result instanceof JoinedAbruptCompletions) &&
+      result.containsSelectedCompletion(matchesCurrentLoopContinue)
+    ) {
+      result = Completion.normalizeSelectedCompletions(matchesCurrentLoopContinue, result);
     }
     invariant(result instanceof Completion);
     result = realm.composeWithSavedCompletion(result);
@@ -220,6 +256,9 @@ function ForBodyEvaluation(
       if (possibleInfiniteLoopIterations > 6 || countSavedCompletionNodes(realm.savedCompletion, 65) > 64) {
         failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
       }
+    }
+    if (realm.useAbstractInterpretation && countSavedCompletionNodes(realm.savedCompletion, 65) > 64) {
+      failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
     }
   }
   invariant(false);
@@ -256,6 +295,9 @@ function ForBodyEvaluation(
     if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
       failIfContainsBreakOrReturnOrThrowCompletion(c.consequent);
       failIfContainsBreakOrReturnOrThrowCompletion(c.alternate);
+      if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
+        failIfContainsBreakOrReturnOrThrowCompletion(c.composedWith);
+      }
     }
   }
 }

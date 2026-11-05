@@ -44,7 +44,7 @@ import type { BabelNodeTemplateLiteral } from "@babel/types";
 import { createOperationDescriptor } from "../utils/generator.js";
 import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js";
 import { IsArrayIndex } from "./is.js";
-import { IntervalDomain } from "../domains/index.js";
+import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
 import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
 import { resolveGlobalObjectProperty } from "../intrinsics/env/models.js";
 
@@ -98,6 +98,9 @@ export function OrdinaryGet(
   Receiver: Value,
   dataOnly?: boolean
 ): Value {
+  if (realm.persistentReadTracker !== undefined) {
+    realm.recordPersistentObjectKeyRead(O, typeof P === "string" ? P : P instanceof StringValue ? P.value : "*");
+  }
   // First deal with potential unknown properties.
   let prop = O.unknownProperty;
   if (prop !== undefined && prop.descriptor !== undefined && O.$GetOwnProperty(P) === undefined) {
@@ -369,6 +372,9 @@ export function OrdinaryGetPartial(
   }
 
   if (!(P instanceof AbstractValue)) return O.$Get(P, Receiver);
+  if (realm.persistentReadTracker !== undefined) {
+    realm.recordPersistentObjectKeyRead(O, "*");
+  }
 
   // If the key can only be one of a few strings or numbers, read each of them under the
   // condition that the key has that value.
@@ -408,12 +414,35 @@ export function OrdinaryGetPartial(
       // this name on other parts of the prototype chain.
       // TODO #1675: A fix to 1675 needs to take this into account.
       Leak.value(realm, Receiver);
-      return AbstractValue.createTemporalFromBuildFunction(
-        realm,
-        Value,
-        [Receiver, P],
-        createOperationDescriptor("OBJECT_GET_PARTIAL"),
-        { skipInvariant: true, isPure: true }
+      let isPureWrapperGet =
+        !O.mightBeLeakedObject() &&
+        Receiver instanceof Value &&
+        !Receiver.mightBeObject() &&
+        !Receiver.mightBeNull() &&
+        !Receiver.mightBeUndefined() &&
+        !P.mightBeObject();
+      let propKey = P;
+      invariant(propKey instanceof AbstractValue);
+      if (isPureWrapperGet) {
+        return AbstractValue.createTemporalFromBuildFunction(
+          realm,
+          Value,
+          [Receiver, propKey],
+          createOperationDescriptor("OBJECT_GET_PARTIAL"),
+          { skipInvariant: true, isPure: true }
+        );
+      }
+      return realm.evaluateWithPossibleThrowCompletion(
+        () =>
+          AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            Value,
+            [Receiver, propKey],
+            createOperationDescriptor("OBJECT_GET_PARTIAL"),
+            { skipInvariant: true }
+          ),
+        TypesDomain.topVal,
+        ValuesDomain.topVal
       );
     } else {
       let error = new CompilerDiagnostic(

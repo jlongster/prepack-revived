@@ -11,7 +11,6 @@
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import { SimpleNormalCompletion } from "../completions.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import {
@@ -101,6 +100,53 @@ function evaluateDeleteOperation(expr: Value | Reference, realm: Realm) {
           )
       );
     }
+    invariant(base instanceof Value);
+    if (realm.isInPureScope() && !realm.instantRender.enabled) {
+      let savedHandler = realm.errorHandler;
+      let savedSuppress = realm.suppressDiagnostics;
+      let effects;
+      try {
+        realm.suppressDiagnostics = true;
+        realm.errorHandler = () => "Fail";
+        effects = realm.evaluateForEffects(
+          () => {
+            invariant(base instanceof Value);
+            let baseObj = To.ToObject(realm, base);
+            let deleteStatus = baseObj.$Delete(Environment.GetReferencedName(realm, ref));
+            if (!deleteStatus && Environment.IsStrictReference(realm, ref)) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+            }
+            return new BooleanValue(realm, deleteStatus);
+          },
+          undefined,
+          "evaluateDeleteOperation"
+        );
+      } catch (e) {
+        if (!(e instanceof FatalError)) throw e;
+      } finally {
+        realm.errorHandler = savedHandler;
+        realm.suppressDiagnostics = savedSuppress;
+      }
+      if (effects !== undefined) {
+        realm.applyEffects(effects);
+        return realm.returnOrThrowCompletion(effects.result);
+      }
+      let propName = Environment.GetReferencedNamePartial(realm, ref);
+      let propVal = typeof propName === "string" ? new StringValue(realm, propName) : propName;
+      Leak.value(realm, base);
+      Leak.value(realm, propVal);
+      return realm.evaluateWithPossibleThrowCompletion(
+        () =>
+          AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            BooleanValue,
+            [base, propVal],
+            createOperationDescriptor("PROPERTY_DELETE")
+          ),
+        TypesDomain.topVal,
+        ValuesDomain.topVal
+      );
+    }
     if (!(base instanceof ConcreteValue || base instanceof AbstractObjectValue)) {
       invariant(base instanceof AbstractValue);
       AbstractValue.reportIntrospectionError(base, Environment.GetReferencedName(realm, ref));
@@ -141,7 +187,9 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
   if (ast.operator === "+" || ast.operator === "-" || ast.operator === "~") {
     let val = Environment.GetValue(realm, expr);
     const previousErrorHandler = realm.errorHandler;
+    const savedSuppress = realm.suppressDiagnostics;
     let isPure = true;
+    realm.suppressDiagnostics = true;
     realm.errorHandler = diagnostic => {
       isPure = false;
       return "Recover";
@@ -161,28 +209,31 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
       }
     } finally {
       realm.errorHandler = previousErrorHandler;
+      realm.suppressDiagnostics = savedSuppress;
     }
     if (isPure && effects) {
       realm.applyEffects(effects);
-      if (effects.result instanceof SimpleNormalCompletion) return effects.result.value;
       return realm.returnOrThrowCompletion(effects.result);
     }
-    Leak.value(realm, val, ast.loc);
+    Leak.value(realm, val, ast.argument.loc || ast.loc);
     return realm.evaluateWithPossibleThrowCompletion(
       () =>
         AbstractValue.createTemporalFromBuildFunction(
           realm,
           val.getType() === BigIntValue ? BigIntValue : ast.operator === "~" ? IntegralValue : NumberValue,
           [val],
-          createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix }),
-          { isPure: true }
+          createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix })
         ),
       TypesDomain.topVal,
       ValuesDomain.topVal
     );
   }
   let effects;
+  let savedHandler = realm.errorHandler;
+  let savedSuppress = realm.suppressDiagnostics;
   try {
+    realm.suppressDiagnostics = true;
+    realm.errorHandler = () => "Fail";
     effects = realm.evaluateForEffects(
       () => func(ast, expr, strictCode, realm),
       undefined,
@@ -190,13 +241,11 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
     );
   } catch (error) {
     if (error instanceof FatalError) {
+      realm.errorHandler = savedHandler;
+      realm.suppressDiagnostics = savedSuppress;
+      let value = Environment.GetValue(realm, expr);
       return realm.evaluateWithPossibleThrowCompletion(
         () => {
-          let value = Environment.GetValue(realm, expr);
-
-          // if the value is abstract, then create a unary op for it,
-          // otherwise we rethrow the error as we don't handle it at this
-          // point in time
           if (value instanceof AbstractValue) {
             return AbstractValue.createFromUnaryOp(realm, ast.operator, value);
           }
@@ -208,6 +257,9 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
     } else {
       throw error;
     }
+  } finally {
+    realm.errorHandler = savedHandler;
+    realm.suppressDiagnostics = savedSuppress;
   }
   realm.applyEffects(effects);
   return realm.returnOrThrowCompletion(effects.result);

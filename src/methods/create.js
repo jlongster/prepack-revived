@@ -173,7 +173,7 @@ export class CreateImplementation {
     iterator.$IteratedString = string;
 
     // 4. Set iterator's [[StringIteratorNextIndex]] internal slot to 0.
-    iterator.$StringIteratorNextIndex = 0;
+    iterator.$StringIteratorNextIndex = new NumberValue(realm, 0);
 
     // 5. Return iterator.
     return iterator;

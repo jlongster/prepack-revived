@@ -355,9 +355,17 @@ export class ResidualHeapSerializer {
       isCertainlyLeaked &&
       (descriptor instanceof PropertyDescriptor && (descriptor.get === undefined && descriptor.set === undefined));
 
+    // Properties created after a write with an unknown name are emitted after that write.
+    let createdAfterUnknownWrite = new Map();
+
     // inject properties
     for (let [key, propertyBinding] of properties) {
       invariant(propertyBinding);
+      if (this._isCreatedAfterEmittedUnknownWrite(obj, propertyBinding)) {
+        if (propertyBinding.pathNode === undefined && propertyBinding.descriptor !== undefined)
+          createdAfterUnknownWrite.set(key, propertyBinding);
+        continue;
+      }
 
       if (propertyBinding.pathNode !== undefined) continue; // Property is assigned to inside loop
       let desc = propertyBinding.descriptor;
@@ -384,14 +392,20 @@ export class ResidualHeapSerializer {
     }
 
     // inject properties with computed names
-    if (obj.unknownProperty !== undefined) {
+    if (obj.unknownProperty !== undefined && !isCertainlyLeaked) {
       let desc = obj.unknownProperty.descriptor;
       if (desc !== undefined) {
         let semaphore = this._acquireOneObjectSemaphore(obj);
+        let dependencies = this._getNestedValuesFromAbstractDescriptor(desc, [obj]);
+        for (let propertyBinding of createdAfterUnknownWrite.values()) {
+          invariant(propertyBinding.descriptor !== undefined);
+          dependencies = dependencies.concat(this._getDescriptorValues(propertyBinding.descriptor));
+        }
         this.emitter.emitNowOrAfterWaitingForDependencies(
-          this._getNestedValuesFromAbstractDescriptor(desc, [obj]),
+          dependencies,
           () => {
-            this._emitPropertiesWithComputedNamesDescriptor(obj, desc);
+            this._emitPropertiesWithComputedNamesDescriptor(obj, desc, createdAfterUnknownWrite);
+            this._emitPropertiesCreatedAfterUnknownWrite(obj, createdAfterUnknownWrite, undefined);
             if (semaphore !== undefined) semaphore.releaseOne();
           },
           this.emitter.getBody()
@@ -531,12 +545,16 @@ export class ResidualHeapSerializer {
     return values;
   }
 
-  _emitPropertiesWithComputedNamesDescriptor(obj: ObjectValue, desc: void | Descriptor): void {
+  _emitPropertiesWithComputedNamesDescriptor(
+    obj: ObjectValue,
+    desc: void | Descriptor,
+    createdAfterUnknownWrite?: Map<string, PropertyBinding>
+  ): void {
     if (desc === undefined) return;
     if (desc instanceof PropertyDescriptor) {
       let val = desc.value;
       invariant(val instanceof AbstractValue);
-      this._emitPropertiesWithComputedNames(obj, val);
+      this._emitPropertiesWithComputedNames(obj, val, createdAfterUnknownWrite);
     } else if (desc instanceof AbstractJoinedDescriptor) {
       let serializedCond = this.serializeValue(desc.joinCondition);
 
@@ -585,7 +603,11 @@ export class ResidualHeapSerializer {
     }
   }
 
-  _emitPropertiesWithComputedNames(obj: ObjectValue, absVal: AbstractValue): void {
+  _emitPropertiesWithComputedNames(
+    obj: ObjectValue,
+    absVal: AbstractValue,
+    createdAfterUnknownWrite?: Map<string, PropertyBinding>
+  ): void {
     if (absVal.kind === "widened property") return;
     if (absVal.kind === "template for prototype member expression") return;
     invariant(absVal.args.length === 3);
@@ -596,13 +618,16 @@ export class ResidualHeapSerializer {
       invariant(P instanceof AbstractValue);
       let V = absVal.args[1];
       let earlier_props = absVal.args[2];
-      if (earlier_props instanceof AbstractValue) this._emitPropertiesWithComputedNames(obj, earlier_props);
+      if (earlier_props instanceof AbstractValue)
+        this._emitPropertiesWithComputedNames(obj, earlier_props, createdAfterUnknownWrite);
       let uid = this.getSerializeObjectIdentifier(obj);
       let serializedP = this.serializeValue(P);
       let serializedV = this.serializeValue(V);
       this.emitter.emit(
         t.expressionStatement(t.assignmentExpression("=", t.memberExpression(uid, serializedP, true), serializedV))
       );
+      if (createdAfterUnknownWrite !== undefined)
+        this._emitPropertiesCreatedAfterUnknownWrite(obj, createdAfterUnknownWrite, absVal);
     } else {
       // conditional assignment
       let serializedCond = this.serializeValue(cond);
@@ -648,6 +673,31 @@ export class ResidualHeapSerializer {
         this.emitter.emit(t.ifStatement(t.unaryExpression("!", serializedCond), alternateStatement));
       }
       this.emitter.processValues(valuesToProcess);
+      if (createdAfterUnknownWrite !== undefined)
+        this._emitPropertiesCreatedAfterUnknownWrite(obj, createdAfterUnknownWrite, absVal);
+    }
+  }
+
+  _isCreatedAfterEmittedUnknownWrite(obj: ObjectValue, propertyBinding: PropertyBinding): boolean {
+    return (
+      propertyBinding.createdAfterUnknownWrite !== undefined &&
+      obj.unknownProperty !== undefined &&
+      obj.unknownProperty.descriptor !== undefined &&
+      obj.mightNotBeLeakedObject()
+    );
+  }
+
+  // Emits the properties that were created right after the unknown property had value `unknownValue`,
+  // or all remaining ones if `unknownValue` is undefined.
+  _emitPropertiesCreatedAfterUnknownWrite(
+    obj: ObjectValue,
+    createdAfterUnknownWrite: Map<string, PropertyBinding>,
+    unknownValue: void | AbstractValue
+  ): void {
+    for (let [key, propertyBinding] of createdAfterUnknownWrite) {
+      if (unknownValue !== undefined && propertyBinding.createdAfterUnknownWrite !== unknownValue) continue;
+      createdAfterUnknownWrite.delete(key);
+      this._emitProperty(obj, key, propertyBinding.descriptor);
     }
   }
 
@@ -1497,6 +1547,10 @@ export class ResidualHeapSerializer {
 
   _serializeValueArray(val: ObjectValue): BabelNodeExpression {
     let remainingProperties = new Map(val.properties);
+    if (!val.mightNotBeLeakedObject()) {
+      this._emitObjectProperties(val, remainingProperties);
+      return t.arrayExpression([]);
+    }
 
     let [unconditionalLength, assignmentNotNeeded] = getSuggestedArrayLiteralLength(this.realm, val);
     // Use the unconditional serialized index properties as array initialization list.
@@ -2159,7 +2213,9 @@ export class ResidualHeapSerializer {
       return t.objectExpression(props);
     } else {
       let instantRenderMode = this.realm.instantRender.enabled;
-      let propEntries = Array.from(val.properties.entries());
+      let propEntries = Array.from(val.properties.entries()).filter(
+        ([, propertyBinding]) => !this._isCreatedAfterEmittedUnknownWrite(val, propertyBinding)
+      );
       let lastEmbeddedIdx = -1;
       for (let idx = 0; idx < propEntries.length; idx++) {
         let [key, propertyBinding] = propEntries[idx];
