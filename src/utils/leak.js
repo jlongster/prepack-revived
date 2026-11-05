@@ -137,6 +137,7 @@ export class LeakImplementation {
     } else {
       // This function decides what values are descended into by leaking
       function leakingFilter(val: Value) {
+        if (!val.mightBeObject()) return false;
         if (val instanceof AbstractValue) {
           // To ensure that we don't forget to provide arguments
           // that can be leaked, we require at least one argument.
@@ -159,7 +160,6 @@ export class LeakImplementation {
             (val.mightNotBeLeakedObject() &&
               objectsTrackedForLeaks.has(val) &&
               !TestIntegrityLevel(realm, val, "frozen"))) &&
-          val.mightBeObject() &&
           (!val.isIntrinsic() || (val instanceof ArrayValue && ArrayValue.isIntrinsicAndHasWidenedNumericProperty(val)))
         );
       }
