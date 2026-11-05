@@ -328,8 +328,15 @@ export class ResidualFunctions {
   _shouldUseFactoryFunction(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): boolean {
     invariant(instances.length > 0);
     if (instances.length <= 1) return false;
-    if (instances[0].functionValue.$FunctionKind !== "normal") return false;
-    if (this.residualClassMethodInstances.has(instances[0].functionValue)) return false;
+    for (const instance of instances) {
+      if (
+        this.residualClassMethodInstances.has(instance.functionValue) ||
+        instance.functionValue.$HomeObject !== undefined ||
+        instance.functionValue.$FunctionKind !== "normal"
+      ) {
+        return false;
+      }
+    }
     let hasAnyLeakedIds = false;
     for (const instance of instances)
       for (const scope of instance.scopeInstances.values()) if (scope.leakedIds.length > 0) hasAnyLeakedIds = true;

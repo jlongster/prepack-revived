@@ -40,6 +40,7 @@ import { Properties } from "../singletons.js";
 import { PropertyDescriptor } from "../descriptors.js";
 import { ResidualOptimizedFunctions } from "./ResidualOptimizedFunctions";
 import { checkResidualRecursionSnapshots } from "../methods/recursion.js";
+import { wrapProgramWithAssumptionGuards } from "../intrinsics/env/assumptions.js";
 
 const UNPARENTHESIZED_OPTIONAL_BASES = new Set([
   "Identifier",
@@ -217,6 +218,13 @@ export class Serializer {
         this.logger.logInformation(`Evaluating initialization path...`);
       }
 
+      let originalConcatenatedCode =
+        this.realm.assumptions !== undefined
+          ? sourceFileCollection
+              .toArray()
+              .map(sf => sf.fileContents)
+              .join("\n;\n")
+          : "";
       let code = this._execute(sourceFileCollection, sourceMaps, onParse);
 
       if (this.logger.hasErrors()) return undefined;
@@ -383,6 +391,9 @@ export class Serializer {
       })();
 
       invariant(ast !== undefined);
+      if (this.realm.usedAssumptionGuards.size > 0) {
+        ast = wrapProgramWithAssumptionGuards(this.realm, ast, originalConcatenatedCode);
+      }
       if (this.realm.stripFlow) {
         stripFlowTypeAnnotations(ast);
       }

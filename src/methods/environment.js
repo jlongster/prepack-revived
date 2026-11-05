@@ -56,6 +56,7 @@ import {
 } from "./index.js";
 import { PropertyDescriptor } from "../descriptors.js";
 import { Create, Functions, Properties, To } from "../singletons.js";
+import { resolveFreeGlobal } from "../intrinsics/env/models.js";
 import type {
   BabelNode,
   BabelNodeVariableDeclaration,
@@ -253,6 +254,12 @@ export class EnvironmentImplementation {
               );
               return this._dereference(realm, consequentRef);
             }
+            if (
+              !realm.isInPureScope() &&
+              (consequentVal instanceof UndefinedValue || consequentVal instanceof NullValue)
+            ) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
+            }
             return this._dereference(realm, ref, false);
           },
           null,
@@ -270,6 +277,12 @@ export class EnvironmentImplementation {
                 ref.thisValue
               );
               return this._dereference(realm, alternateRef);
+            }
+            if (
+              !realm.isInPureScope() &&
+              (alternateVal instanceof UndefinedValue || alternateVal instanceof NullValue)
+            ) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
             }
             return this._dereference(realm, ref, false);
           },
@@ -290,12 +303,14 @@ export class EnvironmentImplementation {
     // 3. Let base be GetBase(V).
     let base = this.GetBase(realm, V);
 
-    // 4. If IsUnresolvableReference(V) is true, throw a ReferenceError exception.
+    // 4. If IsUnresolvableReference(V) is true, throw a ReferenceError exception (or resolve in open-world mode).
     if (this.IsUnresolvableReference(realm, V)) {
-      throw realm.createErrorThrowCompletion(
-        realm.intrinsics.ReferenceError,
-        `${V.referencedName.toString()} is not defined`
-      );
+      let refName = V.referencedName.toString();
+      let envVal = resolveFreeGlobal(realm, refName, realm.currentLocation);
+      if (envVal !== undefined) {
+        return envVal;
+      }
+      throw realm.createErrorThrowCompletion(realm.intrinsics.ReferenceError, `${refName} is not defined`);
     }
 
     // 5. If IsPropertyReference(V) is true, then

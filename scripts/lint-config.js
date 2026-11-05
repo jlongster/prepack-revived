@@ -77,8 +77,10 @@ module.exports = {
     // Vendor specific
     MSApp: true,
     ActiveXObject: true,
-    // CommonJS / Node
+    // CommonJS / Node / ES2020
     process: true,
+    globalThis: true,
+    Intl: true,
     // Prepack
     __optimize: true,
     __optimizeReactComponentTree: true,

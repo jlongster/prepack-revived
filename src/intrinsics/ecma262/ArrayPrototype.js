@@ -449,6 +449,24 @@ export default function(realm: Realm, obj: ObjectValue): void {
     let O = To.ToObject(realm, context);
 
     if (
+      O instanceof AbstractObjectValue &&
+      O.envElementType !== undefined &&
+      callbackfn === realm.intrinsics.Boolean &&
+      (!thisArg || thisArg instanceof UndefinedValue) &&
+      realm.generator !== undefined
+    ) {
+      let filtered = AbstractValue.createTemporalFromTemplate(realm, "A.filter(global.Boolean)", ArrayValue, [O], {
+        isPure: true,
+        skipInvariant: true,
+      });
+      if (filtered instanceof AbstractObjectValue) {
+        filtered.envElementType = O.envElementType;
+        if (O.isEnvironmentValue === true) filtered.isEnvironmentValue = true;
+      }
+      return filtered;
+    }
+
+    if (
       ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
       realm.isInPureScope() &&
       O.$GetOwnProperty("filter") === undefined

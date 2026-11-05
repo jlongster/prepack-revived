@@ -12,12 +12,30 @@
 import type { Realm } from "../../realm.js";
 import { AbstractValue, NativeFunctionValue, NumberValue, StringValue, ObjectValue } from "../../values/index.js";
 import { Create, To } from "../../singletons.js";
-import { MakeTime, MakeDate, MakeDay, TimeClip, UTC, ToDateString, thisTimeValue } from "../../methods/date.js";
+import {
+  MakeTime,
+  MakeDate,
+  MakeDay,
+  TimeClip,
+  UTC,
+  ToDateString,
+  thisTimeValue,
+  msPerMinute,
+} from "../../methods/date.js";
 import { FatalError } from "../../errors.js";
+import { Placeholders } from "../../utils/PreludeGenerator.js";
+import { lookupTimezoneOffsetAssumption } from "../env/assumptions.js";
 import invariant from "../../invariant.js";
 import seedrandom from "seedrandom";
 
 const buildDateNowSrc = "global.Date.now()";
+
+// ISO 8601 strings that carry an explicit UTC/offset designator (or ES2015+ date-only UTC form).
+function hasExplicitTimezoneInDateString(str: string): boolean {
+  if (/^\d{4}(-\d{2}(-\d{2})?)?$/.test(str)) return true;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})$/.test(str)) return true;
+  return false;
+}
 
 export default function(realm: Realm): NativeFunctionValue {
   let lastNow;
@@ -55,6 +73,26 @@ export default function(realm: Realm): NativeFunctionValue {
 
       // 3. If NewTarget is not undefined, then
       if (NewTarget) {
+        let maxArgs = Math.min(argCount, 7);
+        let rawSlice = args.slice(0, maxArgs);
+        if (
+          realm.useAbstractInterpretation &&
+          !realm.closedWorld &&
+          rawSlice.some(a => a instanceof AbstractValue) &&
+          rawSlice.every(a => a instanceof NumberValue || (a instanceof AbstractValue && !a.mightNotBeNumber()))
+        ) {
+          let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", { $DateValue: undefined });
+          let params = Placeholders.slice(0, maxArgs).join(", ");
+          O.$DateValue = AbstractValue.createTemporalFromTemplate(
+            realm,
+            `+new global.Date(${params})`,
+            NumberValue,
+            rawSlice,
+            { isPure: true, skipInvariant: true }
+          );
+          return O;
+        }
+
         // a. Let y be ? ToNumber(year).
         let y = To.ToNumber(realm, year);
 
@@ -91,12 +129,38 @@ export default function(realm: Realm): NativeFunctionValue {
         let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", { $DateValue: undefined });
 
         // k. Set the [[DateValue]] internal slot of O to TimeClip(UTC(finalDate)).
-        O.$DateValue = TimeClip(realm, UTC(realm, finalDate));
+        if (isNaN(finalDate)) {
+          O.$DateValue = realm.intrinsics.NaN;
+        } else if (!realm.useAbstractInterpretation || realm.closedWorld) {
+          O.$DateValue = TimeClip(realm, UTC(realm, finalDate));
+        } else {
+          let assumedOffset = lookupTimezoneOffsetAssumption(realm, finalDate);
+          if (assumedOffset !== undefined) {
+            let localTZA = -assumedOffset * msPerMinute;
+            O.$DateValue = TimeClip(realm, finalDate - localTZA);
+          } else {
+            let numericVals = [y, m, dt, h, min, s, milli].slice(0, maxArgs).map(n => new NumberValue(realm, n));
+            let params = Placeholders.slice(0, maxArgs).join(", ");
+            O.$DateValue = AbstractValue.createTemporalFromTemplate(
+              realm,
+              `+new global.Date(${params})`,
+              NumberValue,
+              numericVals,
+              { isPure: true, skipInvariant: true }
+            );
+          }
+        }
 
         // l. Return O.
         return O;
       } else {
         // 4. Else,
+        if (realm.useAbstractInterpretation && !realm.closedWorld) {
+          return AbstractValue.createTemporalFromTemplate(realm, "global.Date()", StringValue, [], {
+            isPure: true,
+            skipInvariant: true,
+          });
+        }
         // a. Let now be the Number that is the time value (UTC) identifying the current time.
         let now = getCurrentTime().throwIfNotConcreteNumber().value;
 
@@ -106,6 +170,31 @@ export default function(realm: Realm): NativeFunctionValue {
     } else if (argCount === 1) {
       // ECMA262 20.3.2.2
       let [value_] = args;
+      if (
+        NewTarget &&
+        realm.useAbstractInterpretation &&
+        value_ instanceof AbstractValue &&
+        !value_.mightNotBeNumber()
+      ) {
+        let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", { $DateValue: undefined });
+        if (
+          value_.operationDescriptor &&
+          value_.operationDescriptor.type === "ABSTRACT_FROM_TEMPLATE" &&
+          value_.operationDescriptor.data.templateSource === buildDateNowSrc
+        ) {
+          O.$DateValue = value_;
+        } else {
+          let clipped = AbstractValue.createFromTemplate(realm, "+new global.Date(A)", NumberValue, [value_]);
+          O.$DateValue = AbstractValue.convertToTemporalIfArgsAreTemporal(realm, clipped, [value_]);
+        }
+        return O;
+      }
+      if (!NewTarget && realm.useAbstractInterpretation && !realm.closedWorld) {
+        return AbstractValue.createTemporalFromTemplate(realm, "global.Date()", StringValue, [], {
+          isPure: true,
+          skipInvariant: true,
+        });
+      }
       let value = value_.throwIfNotConcrete();
 
       // 1. Let numberOfArgs be the number of arguments passed to this function call.
@@ -129,6 +218,21 @@ export default function(realm: Realm): NativeFunctionValue {
 
           // ii. If Type(v) is String, then
           if (v instanceof StringValue) {
+            if (
+              realm.useAbstractInterpretation &&
+              !realm.closedWorld &&
+              lookupTimezoneOffsetAssumption(realm) === undefined &&
+              !hasExplicitTimezoneInDateString(v.value)
+            ) {
+              let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", {
+                $DateValue: undefined,
+              });
+              O.$DateValue = AbstractValue.createTemporalFromTemplate(realm, "+new global.Date(A)", NumberValue, [v], {
+                isPure: true,
+                skipInvariant: true,
+              });
+              return O;
+            }
             // 1. Let tv be the result of parsing v as a date, in exactly the same manner as for the parse
             //    method (20.3.3.2). If the parse resulted in an abrupt completion, tv is the Completion Record.
             tv = new NumberValue(realm, new Date(v.value).getTime());
@@ -145,7 +249,7 @@ export default function(realm: Realm): NativeFunctionValue {
         let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", { $DateValue: undefined });
 
         // d. Set the [[DateValue]] internal slot of O to TimeClip(tv).
-        O.$DateValue = TimeClip(realm, tv);
+        O.$DateValue = tv instanceof AbstractValue ? tv : TimeClip(realm, tv);
 
         // e. Return O.
         return O;
@@ -177,6 +281,12 @@ export default function(realm: Realm): NativeFunctionValue {
         // c. Return O.
         return O;
       } else {
+        if (realm.useAbstractInterpretation && !realm.closedWorld) {
+          return AbstractValue.createTemporalFromTemplate(realm, "global.Date()", StringValue, [], {
+            isPure: true,
+            skipInvariant: true,
+          });
+        }
         // 4. Else,
         // a. Let now be the Number that is the time value (UTC) identifying the current time.
         let now = getCurrentTime().throwIfNotConcreteNumber().value;
@@ -195,11 +305,26 @@ export default function(realm: Realm): NativeFunctionValue {
   // ECMA262 20.3.3.2
   func.defineNativeMethod("parse", 1, (context, [string]) => {
     if (realm.useAbstractInterpretation) {
+      if (string instanceof StringValue) {
+        if (realm.closedWorld || hasExplicitTimezoneInDateString(string.value)) {
+          return new NumberValue(realm, Date.parse(string.value));
+        }
+        return AbstractValue.createTemporalFromTemplate(realm, "global.Date.parse(A)", NumberValue, [string], {
+          isPure: true,
+          skipInvariant: true,
+        });
+      }
+      if (string instanceof AbstractValue && string.getType() === StringValue) {
+        return AbstractValue.createTemporalFromTemplate(realm, "global.Date.parse(A)", NumberValue, [string], {
+          isPure: true,
+          skipInvariant: true,
+        });
+      }
       AbstractValue.reportIntrospectionError(string);
       throw new FatalError();
     } else {
-      const parsedDate = Date.parse(string.value);
-      return new NumberValue(realm, parsedDate);
+      const s = To.ToStringPartial(realm, string);
+      return new NumberValue(realm, Date.parse(s));
     }
   });
 

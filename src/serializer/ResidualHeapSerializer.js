@@ -13,6 +13,7 @@ import { Realm } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
 import { IsArray, Get } from "../methods/index.js";
 import {
+  AbstractObjectValue,
   AbstractValue,
   BigIntValue,
   BooleanValue,
@@ -21,6 +22,7 @@ import {
   EmptyValue,
   FunctionValue,
   NativeFunctionValue,
+  NullValue,
   NumberValue,
   ObjectValue,
   ProxyValue,
@@ -689,7 +691,7 @@ export class ResidualHeapSerializer {
   emitDefinePropertyBody(
     deleteIfMightHaveBeenDeleted: boolean,
     locationFunction: void | (() => BabelNodeLVal),
-    val: ObjectValue,
+    val: ObjectValue | AbstractObjectValue,
     key: string | SymbolValue | AbstractValue,
     desc: Descriptor
   ): BabelNodeStatement {
@@ -720,7 +722,7 @@ export class ResidualHeapSerializer {
       invariant(false);
     }
     invariant(desc instanceof PropertyDescriptor);
-    if (locationFunction !== undefined && this._canEmbedProperty(val, key, desc)) {
+    if (locationFunction !== undefined && val instanceof ObjectValue && this._canEmbedProperty(val, key, desc)) {
       let descValue = desc.value;
       invariant(descValue instanceof Value);
       invariant(!this.emitter.getReasonToWaitForDependencies([descValue, val]), "precondition of _emitProperty");
@@ -2349,7 +2351,10 @@ export class ResidualHeapSerializer {
     }
     let serializedProto = this.serializeValue(targetProto);
     if (val.temporalAlias === undefined) {
-      if (!this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) && !this.realm.isCompatibleWith("mobile")) {
+      if (
+        (!classConstructor && proto instanceof NullValue) ||
+        (!this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) && !this.realm.isCompatibleWith("mobile"))
+      ) {
         return t.callExpression(this.preludeGenerator.memoizeReference("Object.create"), [
           classConstructor ? t.memberExpression(serializedProto, t.identifier("prototype")) : serializedProto,
         ]);

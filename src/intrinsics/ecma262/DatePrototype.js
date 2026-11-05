@@ -10,8 +10,9 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { FatalError } from "../../errors.js";
-import { StringValue, ObjectValue, NumberValue } from "../../values/index.js";
+import { AbstractValue, StringValue, ObjectValue, NumberValue } from "../../values/index.js";
+import { Placeholders } from "../../utils/PreludeGenerator.js";
+import { lookupTimezoneOffsetAssumption } from "../env/assumptions.js";
 import {
   Invoke,
   MakeTime,
@@ -38,101 +39,59 @@ import { To } from "../../singletons";
 import invariant from "../../invariant.js";
 
 export default function(realm: Realm, obj: ObjectValue): void {
-  // ECMA262 20.3.4.2
-  obj.defineNativeMethod("getDate", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
+  function defineLocalGetter(name: string, computeFromLocalTime: (t: number, localTime: number) => number): void {
+    obj.defineNativeMethod(name, 0, context => {
+      let tv = thisTimeValue(realm, context);
+      if (tv instanceof NumberValue) {
+        let t = tv.value;
+        if (isNaN(t)) return realm.intrinsics.NaN;
+        if (!realm.useAbstractInterpretation || realm.closedWorld) {
+          return new NumberValue(realm, computeFromLocalTime(t, LocalTime(realm, t)));
+        }
+        let assumedOffset = lookupTimezoneOffsetAssumption(realm, t);
+        if (assumedOffset !== undefined) {
+          let localTime = t - assumedOffset * msPerMinute;
+          return new NumberValue(realm, computeFromLocalTime(t, localTime));
+        }
+        return AbstractValue.createTemporalFromTemplate(realm, `(new global.Date(A)).${name}()`, NumberValue, [tv], {
+          isPure: true,
+          skipInvariant: true,
+        });
+      }
+      if (realm.useAbstractInterpretation && tv instanceof AbstractValue && !tv.mightNotBeNumber()) {
+        return AbstractValue.createTemporalFromTemplate(realm, `(new global.Date(A)).${name}()`, NumberValue, [tv], {
+          isPure: true,
+          skipInvariant: true,
+        });
+      }
+      let t = tv.throwIfNotConcreteNumber().value;
+      if (isNaN(t)) return realm.intrinsics.NaN;
+      return new NumberValue(realm, computeFromLocalTime(t, LocalTime(realm, t)));
+    });
+  }
 
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
+  function defineUTCGetter(name: string, computeFromUTC: (t: number) => number): void {
+    obj.defineNativeMethod(name, 0, context => {
+      let tv = thisTimeValue(realm, context);
+      if (realm.useAbstractInterpretation && tv instanceof AbstractValue && !tv.mightNotBeNumber()) {
+        let res = AbstractValue.createFromTemplate(realm, `(new global.Date(A)).${name}()`, NumberValue, [tv]);
+        return AbstractValue.convertToTemporalIfArgsAreTemporal(realm, res, [tv]);
+      }
+      let t = tv.throwIfNotConcreteNumber().value;
+      if (isNaN(t)) return realm.intrinsics.NaN;
+      return new NumberValue(realm, computeFromUTC(t));
+    });
+  }
 
-    // 3. Return DateFromTime(LocalTime(t)).
-    return new NumberValue(realm, DateFromTime(realm, LocalTime(realm, t)));
-  });
-
-  // ECMA262 20.3.4.3
-  obj.defineNativeMethod("getDay", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return WeekDay(LocalTime(t)).
-    return new NumberValue(realm, WeekDay(realm, LocalTime(realm, t)));
-  });
-
-  // ECMA262 20.3.4.4
-  obj.defineNativeMethod("getFullYear", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return YearFromTime(LocalTime(t)).
-    return new NumberValue(realm, YearFromTime(realm, LocalTime(realm, t)));
-  });
-
-  // ECMA262 20.3.4.5
-  obj.defineNativeMethod("getHours", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return HourFromTime(LocalTime(t)).
-    return new NumberValue(realm, HourFromTime(realm, LocalTime(realm, t)));
-  });
-
-  // ECMA262 20.3.4.6
-  obj.defineNativeMethod("getMilliseconds", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return msFromTime(LocalTime(t)).
-    return new NumberValue(realm, msFromTime(realm, LocalTime(realm, t)));
-  });
-
-  // ECMA262 20.3.4.7
-  obj.defineNativeMethod("getMinutes", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return MinFromTime(LocalTime(t)).
-    return new NumberValue(realm, MinFromTime(realm, LocalTime(realm, t)));
-  });
-
-  // ECMA262 20.3.4.8
-  obj.defineNativeMethod("getMonth", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return MonthFromTime(LocalTime(t)).
-    return new NumberValue(realm, MonthFromTime(realm, LocalTime(realm, t)));
-  });
-
-  // ECMA262 20.3.4.9
-  obj.defineNativeMethod("getSeconds", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return SecFromTime(LocalTime(t)).
-    return new NumberValue(realm, SecFromTime(realm, LocalTime(realm, t)));
-  });
+  // ECMA262 20.3.4.2 - 20.3.4.9
+  defineLocalGetter("getDate", (t, lt) => DateFromTime(realm, lt));
+  defineLocalGetter("getDay", (t, lt) => WeekDay(realm, lt));
+  defineLocalGetter("getFullYear", (t, lt) => YearFromTime(realm, lt));
+  defineLocalGetter("getHours", (t, lt) => HourFromTime(realm, lt));
+  defineLocalGetter("getMilliseconds", (t, lt) => msFromTime(realm, lt));
+  defineLocalGetter("getMinutes", (t, lt) => MinFromTime(realm, lt));
+  defineLocalGetter("getMonth", (t, lt) => MonthFromTime(realm, lt));
+  defineLocalGetter("getSeconds", (t, lt) => SecFromTime(realm, lt));
 
   // ECMA262 20.3.4.10
   obj.defineNativeMethod("getTime", 0, context => {
@@ -141,113 +100,20 @@ export default function(realm: Realm, obj: ObjectValue): void {
   });
 
   // ECMA262 20.3.4.11
-  obj.defineNativeMethod("getTimezoneOffset", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return (t - LocalTime(t)) / msPerMinute.
-    return new NumberValue(realm, (t - LocalTime(realm, t)) / msPerMinute);
+  defineLocalGetter("getTimezoneOffset", (t, lt) => {
+    let diff = (t - lt) / msPerMinute;
+    return diff === 0 ? 0 : diff;
   });
 
-  // ECMA262 20.3.4.12
-  obj.defineNativeMethod("getUTCDate", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return DateFromTime(t).
-    return new NumberValue(realm, DateFromTime(realm, t));
-  });
-
-  // ECMA262 20.3.4.13
-  obj.defineNativeMethod("getUTCDay", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return WeekDay(t).
-    return new NumberValue(realm, WeekDay(realm, t));
-  });
-
-  // ECMA262 20.3.4.14
-  obj.defineNativeMethod("getUTCFullYear", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return YearFromTime(t).
-    return new NumberValue(realm, YearFromTime(realm, t));
-  });
-
-  // ECMA262 20.3.4.15
-  obj.defineNativeMethod("getUTCHours", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return HourFromTime(t).
-    return new NumberValue(realm, HourFromTime(realm, t));
-  });
-
-  // ECMA262 20.3.4.16
-  obj.defineNativeMethod("getUTCMilliseconds", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return msFromTime(t).
-    return new NumberValue(realm, msFromTime(realm, t));
-  });
-
-  // ECMA262 20.3.4.17
-  obj.defineNativeMethod("getUTCMinutes", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return MinFromTime(t).
-    return new NumberValue(realm, MinFromTime(realm, t));
-  });
-
-  // ECMA262 20.3.4.18
-  obj.defineNativeMethod("getUTCMonth", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return MonthFromTime(t).
-    return new NumberValue(realm, MonthFromTime(realm, t));
-  });
-
-  // ECMA262 20.3.4.19
-  obj.defineNativeMethod("getUTCSeconds", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-    invariant(context instanceof ObjectValue);
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return SecFromTime(t).
-    return new NumberValue(realm, SecFromTime(realm, t));
-  });
+  // ECMA262 20.3.4.12 - 20.3.4.19
+  defineUTCGetter("getUTCDate", t => DateFromTime(realm, t));
+  defineUTCGetter("getUTCDay", t => WeekDay(realm, t));
+  defineUTCGetter("getUTCFullYear", t => YearFromTime(realm, t));
+  defineUTCGetter("getUTCHours", t => HourFromTime(realm, t));
+  defineUTCGetter("getUTCMilliseconds", t => msFromTime(realm, t));
+  defineUTCGetter("getUTCMinutes", t => MinFromTime(realm, t));
+  defineUTCGetter("getUTCMonth", t => MonthFromTime(realm, t));
+  defineUTCGetter("getUTCSeconds", t => SecFromTime(realm, t));
 
   // ECMA262 20.3.4.20
   obj.defineNativeMethod("setDate", 1, (context, [date]) => {
@@ -673,14 +539,76 @@ export default function(realm: Realm, obj: ObjectValue): void {
     return v;
   });
 
+  function defineLocaleDateMethod(name: "toLocaleDateString" | "toLocaleString" | "toLocaleTimeString"): void {
+    obj.defineNativeMethod(name, 0, (context, args, argCount) => {
+      let tv = thisTimeValue(realm, context);
+      let passedArgs = args.slice(0, argCount);
+      if (realm.useAbstractInterpretation) {
+        if (tv instanceof AbstractValue && tv.mightNotBeNumber()) {
+          tv.throwIfNotConcreteNumber();
+        }
+        if (tv instanceof NumberValue && isNaN(tv.value) && passedArgs.length === 0) {
+          return new StringValue(realm, "Invalid Date");
+        }
+        let allInputs = [tv, ...passedArgs];
+        let argParams = Placeholders.slice(1, 1 + passedArgs.length).join(", ");
+        return AbstractValue.createTemporalFromTemplate(
+          realm,
+          `(new global.Date(A)).${name}(${argParams})`,
+          StringValue,
+          allInputs,
+          { skipInvariant: true }
+        );
+      }
+      let t = tv.throwIfNotConcreteNumber().value;
+      let serializedArgs = passedArgs.map(a => a.serialize());
+      let d = new Date(t);
+      let formatted =
+        name === "toLocaleDateString"
+          ? d.toLocaleDateString(...serializedArgs)
+          : name === "toLocaleTimeString"
+          ? d.toLocaleTimeString(...serializedArgs)
+          : d.toLocaleString(...serializedArgs);
+      return new StringValue(realm, formatted);
+    });
+  }
+
+  function defineLocalStringMethod(name: "toDateString" | "toTimeString"): void {
+    obj.defineNativeMethod(name, 0, context => {
+      let tv = thisTimeValue(realm, context);
+      if (tv instanceof NumberValue && isNaN(tv.value)) {
+        return new StringValue(realm, "Invalid Date");
+      }
+      if (realm.useAbstractInterpretation && !realm.closedWorld) {
+        if (tv instanceof AbstractValue && tv.mightNotBeNumber()) tv.throwIfNotConcreteNumber();
+        return AbstractValue.createTemporalFromTemplate(realm, `(new global.Date(A)).${name}()`, StringValue, [tv], {
+          isPure: true,
+          skipInvariant: true,
+        });
+      }
+      let t = tv.throwIfNotConcreteNumber().value;
+      let d = new Date(t);
+      return new StringValue(realm, name === "toDateString" ? d.toDateString() : d.toTimeString());
+    });
+  }
+
   // ECMA262 20.3.4.35
-  obj.defineNativeMethod("toDateString", 0, context => {
-    throw new FatalError("TODO #1005: implement Date.prototype.toDateString");
-  });
+  defineLocalStringMethod("toDateString");
 
   // ECMA262 20.3.4.36
   obj.defineNativeMethod("toISOString", 0, context => {
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
+    let tv = thisTimeValue(realm, context);
+    if (
+      realm.useAbstractInterpretation &&
+      realm.isInPureScope() &&
+      tv instanceof AbstractValue &&
+      !tv.mightNotBeNumber()
+    ) {
+      return AbstractValue.createTemporalFromTemplate(realm, "(new global.Date(A)).toISOString()", StringValue, [tv], {
+        skipInvariant: true,
+      });
+    }
+    let t = tv.throwIfNotConcreteNumber().value;
     if (!isFinite(t)) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.RangeError);
     }
@@ -705,20 +633,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
     return Invoke(realm, O, "toISOString");
   });
 
-  // ECMA262 20.3.4.38
-  obj.defineNativeMethod("toLocaleDateString", 0, context => {
-    throw new FatalError("TODO #1005: implement Date.prototype.toLocaleDateString");
-  });
-
-  // ECMA262 20.3.4.39
-  obj.defineNativeMethod("toLocaleString", 0, context => {
-    throw new FatalError("TODO #1005: implement Date.prototype.toLocaleString");
-  });
-
-  // ECMA262 20.3.4.40
-  obj.defineNativeMethod("toLocaleTimeString", 0, context => {
-    throw new FatalError("TODO #1005: implement Date.prototype.toLocaleTimeString");
-  });
+  // ECMA262 20.3.4.38 - 20.3.4.40
+  defineLocaleDateMethod("toLocaleDateString");
+  defineLocaleDateMethod("toLocaleString");
+  defineLocaleDateMethod("toLocaleTimeString");
 
   // ECMA262 20.3.4.41
   obj.defineNativeMethod("toString", 0, context => {
@@ -726,28 +644,38 @@ export default function(realm: Realm, obj: ObjectValue): void {
     let O = context;
 
     // 2. If O does not have a [[DateValue]] internal slot, then
-    let tv;
-    if (O.$DateValue === undefined) {
-      // a. Let tv be NaN.
-      tv = NaN;
-    } else {
-      // 3. Else,
-      // a. Let tv be thisTimeValue(O).
-      tv = thisTimeValue(realm, O).throwIfNotConcreteNumber().value;
+    if (O instanceof ObjectValue && O.$DateValue === undefined) {
+      return new StringValue(realm, "Invalid Date");
     }
-
+    let tv = thisTimeValue(realm, O);
+    if (tv instanceof NumberValue && isNaN(tv.value)) {
+      return new StringValue(realm, "Invalid Date");
+    }
+    if (realm.useAbstractInterpretation && !realm.closedWorld) {
+      if (tv instanceof AbstractValue && tv.mightNotBeNumber()) tv.throwIfNotConcreteNumber();
+      return AbstractValue.createTemporalFromTemplate(realm, "(new global.Date(A)).toString()", StringValue, [tv], {
+        isPure: true,
+        skipInvariant: true,
+      });
+    }
+    let t = tv.throwIfNotConcreteNumber().value;
     // 4. Return ToDateString(tv).
-    return new StringValue(realm, ToDateString(realm, tv));
+    return new StringValue(realm, ToDateString(realm, t));
   });
 
   // ECMA262 20.3.4.42
-  obj.defineNativeMethod("toTimeString", 0, context => {
-    throw new FatalError("TODO #1005: implement Date.prototype.toTimeString");
-  });
+  defineLocalStringMethod("toTimeString");
 
   // ECMA262 20.3.4.43
   obj.defineNativeMethod("toUTCString", 0, context => {
-    throw new FatalError("TODO #1005: implement Date.prototype.toUTCString");
+    let tv = thisTimeValue(realm, context);
+    if (realm.useAbstractInterpretation && tv instanceof AbstractValue && !tv.mightNotBeNumber()) {
+      let res = AbstractValue.createFromTemplate(realm, "(new global.Date(A)).toUTCString()", StringValue, [tv]);
+      return AbstractValue.convertToTemporalIfArgsAreTemporal(realm, res, [tv]);
+    }
+    let t = tv.throwIfNotConcreteNumber().value;
+    if (isNaN(t)) return new StringValue(realm, "Invalid Date");
+    return new StringValue(realm, new Date(t).toUTCString());
   });
 
   // ECMA262 20.3.4.44
@@ -792,16 +720,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   );
 
   // B.2.4.1
-  obj.defineNativeMethod("getYear", 0, context => {
-    // 1. Let t be ? thisTimeValue(this value).
-    let t = thisTimeValue(realm, context).throwIfNotConcreteNumber().value;
-
-    // 2. If t is NaN, return NaN.
-    if (isNaN(t)) return realm.intrinsics.NaN;
-
-    // 3. Return YearFromTime(LocalTime(t)) - 1900.
-    return new NumberValue(realm, YearFromTime(realm, LocalTime(realm, t)) - 1900);
-  });
+  defineLocalGetter("getYear", (t, lt) => YearFromTime(realm, lt) - 1900);
 
   // B.2.4.2
   obj.defineNativeMethod("setYear", 1, (context, [year]) => {

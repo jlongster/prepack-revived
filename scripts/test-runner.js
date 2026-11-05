@@ -399,6 +399,14 @@ function runTest(name, code, options: PrepackOptions, args) {
   if (code.includes("// removeModuleFactoryFunctions")) {
     options.removeModuleFactoryFunctions = true;
   }
+  let prepackOptionsMarker = "// prepack options:";
+  let prepackOptionsIdx = code.indexOf(prepackOptionsMarker);
+  if (prepackOptionsIdx >= 0) {
+    let parsedExtra = JSON.parse(
+      code.substring(prepackOptionsIdx + prepackOptionsMarker.length, code.indexOf("\n", prepackOptionsIdx)).trim()
+    );
+    options = ((Object.assign({}, options, parsedExtra): any): PrepackOptions);
+  }
   if (code.includes("// throws introspection error")) {
     try {
       let realmOptions = {
