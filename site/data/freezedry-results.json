@@ -1,0 +1,404 @@
+{
+ "source": "hybrid/RESULTS.md (H5, final)",
+ "headline": [
+  [
+   "Smoke OK (22 workloads)",
+   "18",
+   "11",
+   "21"
+  ],
+  [
+   "H4 oracle verified (heap + [[Scopes]] + context sharing + smoke)",
+   "n/a",
+   "11",
+   "19"
+  ],
+  [
+   "Clean bailout (original code kept)",
+   "4 FAIL",
+   "11",
+   "1 (prettier)"
+  ],
+  [
+   "Smoke OK but oracle could not finish (OOM)",
+   "—",
+   "—",
+   "2 (mathjs, typescript)"
+  ],
+  [
+   "WRONG (silent miscompile)",
+   "0",
+   "0",
+   "0"
+  ]
+ ],
+ "workloads": [
+  {
+   "id": "lodash",
+   "tier": "S",
+   "prepack": "OK (browser-opt)",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 24.5,
+    "gzipPrepackKB": 23.9,
+    "gzipKB": 76.4,
+    "coldSpeedup": 0.58,
+    "coldOrigMs": 17.82,
+    "codeCacheSpeedup": 1.33,
+    "execSpeedup": 1.29
+   },
+   "gzipThrowKB": 52.7
+  },
+  {
+   "id": "underscore",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 7.2,
+    "gzipPrepackKB": 8.1,
+    "gzipKB": 14,
+    "coldSpeedup": 0.56,
+    "coldOrigMs": 2.76,
+    "codeCacheSpeedup": 0.97,
+    "execSpeedup": 0.96
+   },
+   "gzipThrowKB": 9.5
+  },
+  {
+   "id": "ramda",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 14.1,
+    "gzipPrepackKB": 15.6,
+    "gzipKB": 32,
+    "coldSpeedup": 0.63,
+    "coldOrigMs": 5.08,
+    "codeCacheSpeedup": 1.54,
+    "execSpeedup": 1.57
+   },
+   "gzipThrowKB": 18.8
+  },
+  {
+   "id": "immutable",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 18,
+    "gzipPrepackKB": 17.9,
+    "gzipKB": 36.9,
+    "coldSpeedup": 0.5,
+    "coldOrigMs": 5.7,
+    "codeCacheSpeedup": 0.93,
+    "execSpeedup": 0.94
+   },
+   "gzipThrowKB": 20
+  },
+  {
+   "id": "moment",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 74.3,
+    "gzipPrepackKB": 98.4,
+    "gzipKB": 167.4,
+    "coldSpeedup": 0.68,
+    "coldOrigMs": 26.71,
+    "codeCacheSpeedup": 2.91,
+    "execSpeedup": 2.97
+   },
+   "gzipThrowKB": 93.7
+  },
+  {
+   "id": "chroma-js",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 15.4,
+    "gzipPrepackKB": 14.5,
+    "gzipKB": 30.1,
+    "coldSpeedup": 0.64,
+    "coldOrigMs": 4.87,
+    "codeCacheSpeedup": 1.06,
+    "execSpeedup": 1.11
+   },
+   "gzipThrowKB": 16.4
+  },
+  {
+   "id": "acorn",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 33.9,
+    "gzipPrepackKB": 36.5,
+    "gzipKB": 72.6,
+    "coldSpeedup": 0.58,
+    "coldOrigMs": 10.01,
+    "codeCacheSpeedup": 1.05,
+    "execSpeedup": 1.02
+   },
+   "gzipThrowKB": 38.7
+  },
+  {
+   "id": "crc-32",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 0.8,
+    "gzipPrepackKB": 44,
+    "gzipKB": 1.2,
+    "coldSpeedup": 1.3,
+    "coldOrigMs": 3.43,
+    "codeCacheSpeedup": 1,
+    "execSpeedup": 1.55
+   },
+   "gzipThrowKB": 1
+  },
+  {
+   "id": "marked",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 14.5,
+    "gzipPrepackKB": 14.4,
+    "gzipKB": 27.8,
+    "coldSpeedup": 0.87,
+    "coldOrigMs": 35.22,
+    "codeCacheSpeedup": 1.12,
+    "execSpeedup": 1.12
+   },
+   "gzipThrowKB": 15.3
+  },
+  {
+   "id": "d3-scale",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 23,
+    "gzipPrepackKB": 28.8,
+    "gzipKB": 53.3,
+    "coldSpeedup": 0.44,
+    "coldOrigMs": 6.07,
+    "codeCacheSpeedup": 1.3,
+    "execSpeedup": 1.28
+   },
+   "gzipThrowKB": 30.7
+  },
+  {
+   "id": "redux",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 3.3,
+    "gzipPrepackKB": 2.9,
+    "gzipKB": 4.2,
+    "coldSpeedup": null,
+    "coldOrigMs": 0.88,
+    "codeCacheSpeedup": 1.24,
+    "execSpeedup": 1.28
+   },
+   "gzipThrowKB": 3.1
+  },
+  {
+   "id": "handlebars-app",
+   "tier": "S",
+   "prepack": "OK (browser-opt)",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 26.3,
+    "gzipPrepackKB": 26.7,
+    "gzipKB": 52.7,
+    "coldSpeedup": 1.71,
+    "coldOrigMs": 18.49,
+    "codeCacheSpeedup": 3.25,
+    "execSpeedup": 3.01
+   },
+   "gzipThrowKB": 27.4
+  },
+  {
+   "id": "preact-ssr-app",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 8.6,
+    "gzipPrepackKB": 8.8,
+    "gzipKB": 12.8,
+    "coldSpeedup": 1.4,
+    "coldOrigMs": 1.83,
+    "codeCacheSpeedup": 0.99,
+    "execSpeedup": 0.87
+   },
+   "gzipThrowKB": 9.1
+  },
+  {
+   "id": "react-ssr-app",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 15.2,
+    "gzipPrepackKB": 17.8,
+    "gzipKB": 31.6,
+    "coldSpeedup": 0.67,
+    "coldOrigMs": 6.17,
+    "codeCacheSpeedup": 1.18,
+    "execSpeedup": 1.17
+   },
+   "gzipThrowKB": null
+  },
+  {
+   "id": "yaml-router-app",
+   "tier": "S",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 17.2,
+    "gzipPrepackKB": 17.6,
+    "gzipKB": 33.4,
+    "coldSpeedup": 1.55,
+    "coldOrigMs": 10.67,
+    "codeCacheSpeedup": 3.31,
+    "execSpeedup": 3.05
+   },
+   "gzipThrowKB": 18.1
+  },
+  {
+   "id": "moment-timezone",
+   "tier": "L",
+   "prepack": "OK (browser-opt)",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 55,
+    "gzipPrepackKB": 73.8,
+    "gzipKB": 127.9,
+    "coldSpeedup": 0.91,
+    "coldOrigMs": 38.05,
+    "codeCacheSpeedup": 1.21,
+    "execSpeedup": 1.24
+   }
+  },
+  {
+   "id": "prettier",
+   "tier": "L",
+   "prepack": "FAIL",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "FAIL (BAIL)",
+   "perf": {
+    "gzipOrigKB": null,
+    "gzipPrepackKB": null,
+    "gzipKB": null,
+    "coldSpeedup": null,
+    "coldOrigMs": null,
+    "codeCacheSpeedup": null,
+    "execSpeedup": null
+   }
+  },
+  {
+   "id": "highlight-js",
+   "tier": "L",
+   "prepack": "OK",
+   "zeroConfig": "OK (ISO-OK)",
+   "optIns": "OK (ISO-OK)",
+   "perf": {
+    "gzipOrigKB": 299.3,
+    "gzipPrepackKB": 595.5,
+    "gzipKB": 757.8,
+    "coldSpeedup": 0.84,
+    "coldOrigMs": 94.17,
+    "codeCacheSpeedup": 1.01,
+    "execSpeedup": 1.23
+   }
+  },
+  {
+   "id": "three",
+   "tier": "L",
+   "prepack": "OK",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 183.2,
+    "gzipPrepackKB": 206.4,
+    "gzipKB": 399.8,
+    "coldSpeedup": 0.63,
+    "coldOrigMs": 38.24,
+    "codeCacheSpeedup": 0.79,
+    "execSpeedup": 0.8
+   }
+  },
+  {
+   "id": "mathjs",
+   "tier": "L",
+   "prepack": "FAIL",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (UNVERIFIED)",
+   "perf": {
+    "gzipOrigKB": 212.5,
+    "gzipPrepackKB": null,
+    "gzipKB": 1239.04,
+    "coldSpeedup": 0.32,
+    "coldOrigMs": 291.59,
+    "codeCacheSpeedup": 1.83,
+    "execSpeedup": 1.73
+   }
+  },
+  {
+   "id": "babel-standalone",
+   "tier": "L",
+   "prepack": "FAIL",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (ISO-OK†)",
+   "perf": {
+    "gzipOrigKB": 644.3,
+    "gzipPrepackKB": null,
+    "gzipKB": 1402.88,
+    "coldSpeedup": 0.61,
+    "coldOrigMs": 199.28,
+    "codeCacheSpeedup": 1.3,
+    "execSpeedup": 1.27
+   }
+  },
+  {
+   "id": "typescript",
+   "tier": "L",
+   "prepack": "FAIL",
+   "zeroConfig": "FAIL (BAIL)",
+   "optIns": "OK (UNVERIFIED)",
+   "perf": {
+    "gzipOrigKB": 944.8,
+    "gzipPrepackKB": null,
+    "gzipKB": 2119.68,
+    "coldSpeedup": 0.49,
+    "coldOrigMs": 197.2,
+    "codeCacheSpeedup": 0.65,
+    "execSpeedup": 0.66
+   }
+  }
+ ]
+}

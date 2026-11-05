@@ -34,23 +34,18 @@ size problem is only solved in the sense Markbåge meant if output never grows: 
 that evaluates code will always be able to produce more code than it was given. The cost model only decides when that
 is worth it.</p>
 
-<p>The hybrid has the opposite profile. Its output is larger and it starts slower without a code cache, it knows
-nothing about unknown inputs beyond what traces and guards give it, and some state (pending Promises, non-empty
-<code>WeakMap</code>s, suspended generators, <code>Proxy</code>) can’t be captured exactly, so it bails out.</p>
-
-<h3 id="when">When to use which</h3>
+<h3 id="when">When it is the right tool</h3>
 
 <div class="when w">
-  <div><h4>Revived Prepack</h4><p>When you need to specialize code on data you don’t have yet: a renderer for a known
-  app, an optimized function for unknown arguments, an init path that depends on an environment you can describe. It
-  is the only one of the two that reasons symbolically, and the only one whose output tends to be smaller than its
-  input.</p></div>
-  <div><h4>Hybrid</h4><p>When you want a startup snapshot of a large, modern library, exactly, on a runtime without
-  native heap snapshots (browsers, edge runtimes, JavaScriptCore), and you can afford the bytes or have a code cache.
-  For React-style templates, when you have representative traffic to train on.</p></div>
-  <div><h4>Neither</h4><p>When the engine can do it for you. Node’s and V8’s own startup snapshots remain the cheapest
-  way to skip initialization where they’re available, and they were the first thing our initial research found still
-  alive from Prepack’s idea.</p></div>
+  <div><h4>Specializing on unknown data</h4><p>A renderer for a known app, an optimized function for unknown
+  arguments, an init path that depends on an environment you can describe. This is where symbolic evaluation earns its
+  keep, and where the revived Prepack is strongest.</p></div>
+  <div><h4>Init-heavy bundles with a code cache</h4><p>Libraries that compute tables, parse locale data or register
+  plugins at load start several times faster from V8’s code cache (moment 4.3×, handlebars 3.1×), usually at about
+  the original size.</p></div>
+  <div><h4>Not when the engine can do it</h4><p>Node’s and V8’s own startup snapshots remain the cheapest way to skip
+  initialization where they’re available, and they were the first thing our initial research found still alive from
+  Prepack’s idea.</p></div>
 </div>
 
 <p>Herman Venter <a href="https://github.com/facebookarchive/prepack/issues/24#issuecomment-408696869">wrote in 2018</a> that getting Prepack to run on real browser applications would take “a lot of very

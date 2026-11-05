@@ -1,6 +1,6 @@
 "use strict";
 
-// The real-world benchmark section of Part 3, rendered from data/bench.json.
+// The real-world benchmark section of Part 2, rendered from data/bench.json.
 module.exports = (c, bench) => {
   if (!bench) return `<p><em>Benchmark data not collected yet (run site/scripts/summarize-bench.js).</em></p>`;
   const { esc } = c;

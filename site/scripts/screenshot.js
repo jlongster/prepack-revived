@@ -7,7 +7,7 @@ const http = require("http");
 const path = require("path");
 const { chromium } = require("playwright-core");
 
-const DIST = path.join(__dirname, "..", "dist");
+const DIST = process.env.DIST ? path.resolve(process.env.DIST) : path.join(__dirname, "..", "dist");
 const out = path.resolve(process.argv[2] || "shots");
 const selectors = process.argv.slice(3);
 fs.mkdirSync(out, { recursive: true });

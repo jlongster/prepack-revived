@@ -14,7 +14,7 @@ const LABELS = {
   input: "Input",
   orig: "Prepack 0.2.54",
   revived: "Revived Prepack",
-  hybrid: "Hybrid",
+  hybrid: "freezedry",
 };
 const SUBLABELS = {
   orig: "the last release, 2018",
@@ -126,7 +126,7 @@ function example(id, opts = {}) {
       t.exitCode === null ? "killed" : t.exitCode
     } · ${(t.ms / 1000).toFixed(1)} s`;
     panes.push(
-      `<div class="pane pane-${tool}" data-status="${st.kind}"><div class="pane-head"><span class="pane-label">${LABELS[tool]}</span><span class="pane-sub">${
+      `<div class="pane pane-${tool === "hybrid" ? "freezedry" : tool}" data-status="${st.kind}"><div class="pane-head"><span class="pane-label">${LABELS[tool]}</span><span class="pane-sub">${
         SUBLABELS[tool]
       }</span></div><div class="pane-status"><span class="st-icon" aria-hidden="true">${ICON[st.kind]}</span> ${esc(st.text)}</div>${body}${
         opts.stderr === false ? "" : diagBlock(t.stderr, (opts.stderrLines || {})[tool])

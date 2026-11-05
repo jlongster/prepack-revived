@@ -134,20 +134,20 @@ module.exports = [
     ],
   },
   {
-    id: "hyb-closures",
-    input: "hyb-closures.js",
+    id: "closures",
+    input: "closures.js",
     tools: ["orig", "revived", "hybrid"],
     probes: [P("counter.inc(), counter.history()", "", "[counter.inc(), counter.history()].join(' / ')")],
   },
   {
-    id: "hyb-class",
-    input: "hyb-class.js",
+    id: "private-class",
+    input: "private-class.js",
     tools: ["orig", "revived", "hybrid"],
     probes: [P('lex("let x"), lex("abc")', "", '[lex("let x"), lex("abc")].join()')],
   },
   {
-    id: "hyb-tables",
-    input: "hyb-tables.js",
+    id: "crc-tables",
+    input: "crc-tables.js",
     tools: ["orig", "revived", "hybrid"],
     probes: [
       P(
@@ -158,20 +158,32 @@ module.exports = [
     ],
   },
   {
-    id: "hyb-handlebars",
-    input: "hyb-handlebars.js",
+    id: "globalthis-polyfill",
+    input: "globalthis-polyfill.js",
     tools: ["orig", "revived", "hybrid"],
     probes: [P("HandlebarsMini", "", 'HandlebarsMini.VERSION + " " + HandlebarsMini.escapeExpression("a&<b>")')],
   },
   {
-    id: "hyb-guard",
-    input: "hyb-guard.js",
+    id: "env-probe",
+    input: "env-probe.js",
     tools: ["hybrid"],
     probes: [
       P("browser-like host (window, no process)", "delete globalThis.process; globalThis.window = globalThis;", "Settings"),
       P("Node (process present)", "", "Settings"),
     ],
   },
+  {
+    id: "fd-mutate",
+    input: "fd-mutate.js",
+    tools: ["hybrid"],
+    probes: [P("Object.keys(registry), [1, 2, 3].last()", "", "[Object.keys(registry), [1, 2, 3].last(), registry.double(21)]")],
+  },
+  { id: "fd-fetch", input: "fd-fetch.js", tools: ["hybrid"], args: { hybrid: ["--profile", "browser"] } },
+  { id: "fd-dom", input: "fd-dom.js", tools: ["hybrid"], args: { hybrid: ["--profile", "browser"] } },
+  { id: "fd-timer", input: "fd-timer.js", tools: ["hybrid"], args: { hybrid: ["--profile", "browser"] } },
+  { id: "fd-now", input: "fd-now.js", tools: ["hybrid"], args: { hybrid: ["--profile", "browser"] } },
+  { id: "fd-random", input: "fd-random.js", tools: ["hybrid"], args: { hybrid: ["--profile", "browser"] } },
+  { id: "fd-tz", input: "fd-tz.js", tools: ["hybrid"], args: { hybrid: ["--profile", "browser"] } },
   {
     id: "size-table",
     input: "size-table.js",

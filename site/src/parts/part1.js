@@ -176,5 +176,16 @@ exploring both sides of an unknown branch.</p>
 
 ${quote("venter-712-iterate", { pull: true })}
 ${quote("venter-712-explode")}
+
+<h3 id="plan">The plan</h3>
+
+<p>This article follows one bet: that the eight problems could be attacked inside Prepack itself, by AI agents
+working in parallel, each checked by a scoreboard it couldn’t edit, a fuzzer and an SMT solver. Part 2 goes through
+how that was organized and what happened to each problem, with the original and revived outputs side by side. Part 3
+is the verdict.</p>
+
+<p>In parallel we also explored a different architecture that sidesteps the interpreter entirely: run the
+initialization code in the real engine and emit the heap it builds, with runtime guards for anything the build
+machine can’t know. That work is written up separately.<!-- link to freezedry post --></p>
 `;
 };

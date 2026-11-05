@@ -292,7 +292,7 @@ its state lives in lowered closures with no equivalent in the source, and emitti
 fidelity for coverage. Venter’s question from ${I(712)}, how to iterate a generator through an <code>if</code> whose
 condition is abstract, is still open: generators run at build time only when everything about them is concrete.</p>
 
-${example("hyb-class", { tools: ["orig", "revived"], caption: "A class with private members. 0.2.54 prints a program that is a SyntaxError. (The hybrid’s output for this input is in Part 4.)" })}
+${example("private-class", { tools: ["orig", "revived"], caption: "A class with private members. 0.2.54 prints a program that is a SyntaxError." })}
 
 <h3 id="a-bench">Real-world results</h3>
 
@@ -302,7 +302,7 @@ ${c.benchSection()}
 
 <p>The React compiler of 2018 tried to fold React itself. The revival took a narrower route: specialize React 18
 server rendering of a <em>known</em> app for <em>unknown</em> request data. The app is a 30-component e-commerce page
-(the same one behind the <a href="https://jamesbox.exe.xyz/northstar/">Northstar demo</a>); the data is a different
+(the same one behind the Northstar demo linked below); the data is a different
 product listing on every request. Instead of evaluating the real <code>react-dom/server</code>, which keeps its state
 in long-lived queues Prepack can’t summarize, the agent ported React’s server renderer into about 1,300 lines written
 in a style Prepack <em>can</em> evaluate: every function restores what it changes. The attribute tables are copied
@@ -319,7 +319,20 @@ is gone: the result is string concatenation with the branches the data needs.</f
 <p>On the benchmark’s fixed 500-input check corpus the output is byte-identical to
 <code>ReactDOMServer.renderToString</code> (re-checked for this article: 500/500). It renders 4–5.5× faster than React
 with the JIT and about 9–10× faster with <code>--jitless</code>, within 1.4–2× of a page specialized by hand. Data
-that doesn’t match the inferred schema falls back to React. The numbers are in the <a href="#b-react">head-to-head
-table</a> in Part 4, next to the hybrid’s.</p>
+that doesn’t match the inferred schema falls back to React.</p>
+
+<p class="table-caption w">Renders per second relative to <code>ReactDOMServer.renderToString</code>, same machine, same run
+(<code>react-bench/perf.js</code>, November 5, 2026). Small pages are about 6 KB of HTML, large ones about 285 KB.</p>
+<div class="table-wrap w"><table class="react-perf">
+<thead><tr><th scope="col"></th><th scope="col">JIT, small</th><th scope="col">JIT, large</th><th scope="col">jitless, small</th><th scope="col">jitless, large</th></tr></thead>
+<tbody>
+<tr><th scope="row">React <code>renderToString</code></th><td>1.00×</td><td>1.00×</td><td>1.00×</td><td>1.00×</td></tr>
+<tr><th scope="row">Revived Prepack</th><td>5.39×</td><td>4.10×</td><td>8.96×</td><td>10.08×</td></tr>
+<tr class="muted-row"><th scope="row">Hand-written specialization</th><td>8.42×</td><td>6.51×</td><td>18.53×</td><td>17.45×</td></tr>
+</tbody></table></div>
+
+<p>The generated program is 83.8 KB (20.6 KB gzipped) and doesn’t load React at all. The
+<a href="https://jamesbox.exe.xyz/northstar/">Northstar Supply demo</a> serves the same page rendered by plain React
+and by the specialized code.</p>
 `;
 };

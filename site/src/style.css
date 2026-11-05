@@ -237,6 +237,9 @@ sup { line-height: 0; }
 }
 .grid > .dek { grid-column: 2 / 10; grid-row: 2; font-size: 1.5rem; line-height: 1.45; color: var(--ink-2); max-width: 40rem; margin: 0 0 3.5rem; }
 .grid > .cover-fig { grid-column: 2 / 10; grid-row: 3; margin: 0; }
+.grid > .cover-main { grid-column: 2 / 10; grid-row: 2; }
+.cover-main .dek { margin-bottom: 3rem; }
+.cover-stats .stat-row { margin: 0; }
 .grid > .contents { grid-column: 10 / 14; grid-row: 2 / span 2; font-family: var(--sans); border-top: 2px solid var(--ink); padding-top: 0.75rem; align-self: start; margin-top: 0.4rem; }
 .contents-title { font-size: 0.8rem; font-weight: 600; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .contents ol { list-style: none; padding: 0; margin: 0; }
@@ -502,7 +505,7 @@ pre.code.wrap { white-space: pre-wrap; word-break: break-all; }
   .wn { display: block; }
   .wn > .b { max-width: 42rem; }
   .wn > .note { max-width: 42rem; margin: 0.25rem 0 1.75rem; }
-  .grid > .dek, .grid > .cover-fig, .grid > .contents { grid-column: 2 / 14; grid-row: auto; }
+  .grid > .dek, .grid > .cover-fig, .grid > .contents, .grid > .cover-main { grid-column: 2 / 14; grid-row: auto; }
   .grid > .contents { margin-top: 3rem; }
   .opener-text { grid-column: 3 / 14; }
 }

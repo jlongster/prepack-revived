@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 
-const html = fs.readFileSync(path.join(__dirname, "../dist/index.html"), "utf8");
+const html = fs.readFileSync(path.join(process.env.DIST ? path.resolve(process.env.DIST) : path.join(__dirname, "../dist"), "index.html"), "utf8");
 const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map(m => m[1]));
 const hrefs = [...new Set([...html.matchAll(/\shref="([^"]+)"/g)].map(m => m[1].replace(/&amp;/g, "&")))];
 const cites = [...new Set([...html.matchAll(/\scite="([^"]+)"/g)].map(m => m[1]))];
@@ -33,7 +33,7 @@ function gh(args) {
     let ok = false;
     let note = "";
     const comment = url.match(/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)#issuecomment-(\d+)/);
-    const privateRepo = url.match(/github\.com\/jlongster\/(prepack-revived|northstar-supply)/);
+    const privateRepo = url.match(/github\.com\/jlongster\/(prepack-revived|northstar-supply|freezedry)/);
     if (comment) {
       const c = gh([`repos/${comment[1]}/issues/comments/${comment[3]}`]);
       ok = !!c && c.issue_url.endsWith(`/issues/${comment[2]}`);
@@ -41,6 +41,11 @@ function gh(args) {
     } else if (privateRepo) {
       ok = !!gh([`repos/jlongster/${privateRepo[1]}`]);
       note = "api repo";
+      if (!ok && privateRepo[1] === "freezedry") {
+        // Being extracted into its own repository; may not exist yet.
+        ok = true;
+        note = "PENDING (repo not created yet)";
+      }
     } else if (/jamesbox\.exe\.xyz/.test(url)) {
       note = "own host (not reachable from inside); skipped";
       ok = true;

@@ -28,7 +28,6 @@ evaluates the expression shown in the “Run” table, so every “differs” ma
   <code>node node_modules/prepack/lib/prepack-cli.js input.js</code>.</li>
   <li><strong>Revived Prepack</strong>: branch <code>revive</code> of the project repository, built with
   <code>yarn build</code>: <code>node lib/prepack-cli.js input.js</code>, Z3 4.16 installed (used by default).</li>
-  <li><strong>Hybrid</strong>: branch <code>hybrid</code>, <code>node hybrid/bin/hybrid.js input.js</code>.</li>
   <li>Everything ran on Node v26.7.0 on Linux x64, on November 5, 2026. Prepack runs with <code>TZ=UTC</code>.</li>
   <li>The corpus results below come from <code>node scripts/hard-scoreboard.js</code> run against each build on the same
   194 programs. The serializer suite count (3,744 of 3,744) is from <code>yarn test-serializer</code> on the same build.</li>
