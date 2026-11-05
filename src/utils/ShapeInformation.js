@@ -57,10 +57,31 @@ export class ShapeInformation implements ShapeInformationInterface {
 
   getAbstractType(): typeof Value {
     // we assume that value is not optional if it root
-    if (this._isOptional() || this._descriptor.jsType === "void" || this._descriptor.jsType === "null") {
+    if (
+      this._descriptor.kind === "union" ||
+      this._isOptional() ||
+      this._descriptor.jsType === "void" ||
+      this._descriptor.jsType === "null"
+    ) {
       return Value;
     }
     return Utils.getTypeFromName(this._descriptor.jsType) || Value;
+  }
+
+  getVariants(): void | Array<ShapeInformationInterface> {
+    let descriptor = this._descriptor;
+    if (descriptor.kind !== "union") return undefined;
+    let result = [];
+    for (let variant of descriptor.variants) {
+      // Variants are wrapped without a parent so that they are never considered optional themselves.
+      let wrapped = ShapeInformation._resolveLinksAndWrap(variant, undefined, undefined, this._universe);
+      if (wrapped !== undefined) result.push(wrapped);
+    }
+    return result;
+  }
+
+  getJSType(): string {
+    return this._descriptor.jsType;
   }
 
   getPropertyShape(key: string): void | ShapeInformation {

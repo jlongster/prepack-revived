@@ -15,6 +15,7 @@ import type { PropertyKeyValue } from "../types.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   ECMAScriptFunctionValue,
   IntegralValue,
@@ -41,6 +42,7 @@ import { AbruptCompletion, SimpleNormalCompletion } from "../completions.js";
 import { FatalError } from "../errors.js";
 import { EvalPropertyName } from "../evaluators/ObjectExpression.js";
 import {
+  Call,
   GetV,
   GetThisValue,
   HasSomeCompatibleType,
@@ -52,6 +54,7 @@ import {
   HasOwnProperty,
   RequireObjectCoercible,
 } from "./index.js";
+import { PropertyDescriptor } from "../descriptors.js";
 import { Create, Functions, Properties, To } from "../singletons.js";
 import { resolveFreeGlobal } from "../intrinsics/env/models.js";
 import type {
@@ -97,7 +100,7 @@ export class EnvironmentImplementation {
     // 6. ReturnIfAbrupt(lhs).
 
     // 7. If environment is undefined, return PutValue(lhs, restObj).
-    if (environment === undefined) {
+    if (!environment) {
       return Properties.PutValue(realm, lhs, restObj);
     }
 
@@ -165,6 +168,27 @@ export class EnvironmentImplementation {
     return V.thisValue !== undefined;
   }
 
+  ResolvePrivateIdentifier(realm: Realm, env: LexicalEnvironment, privateName: string): SymbolValue {
+    let cur: ?LexicalEnvironment = env;
+    while (cur != null) {
+      let rec = cur.environmentRecord;
+      if (
+        rec instanceof DeclarativeEnvironmentRecord &&
+        rec.$PrivateBindings !== undefined &&
+        rec.$PrivateBindings.has(privateName)
+      ) {
+        let sym = rec.$PrivateBindings.get(privateName);
+        invariant(sym !== undefined);
+        return sym;
+      }
+      cur = cur.parent;
+    }
+    throw realm.createErrorThrowCompletion(
+      realm.intrinsics.SyntaxError,
+      `Private field '#${privateName}' must be declared in an enclosing class`
+    );
+  }
+
   // ECMA262 6.2.3
   // HasPrimitiveBase(V). Returns true if Type(base) is Boolean, String, Symbol, or Number.
   HasPrimitiveBase(realm: Realm, V: Reference): boolean {
@@ -176,6 +200,7 @@ export class EnvironmentImplementation {
       type === BooleanValue ||
       type === StringValue ||
       type === SymbolValue ||
+      type === BigIntValue ||
       type === NumberValue ||
       type === IntegralValue
     );
@@ -321,6 +346,33 @@ export class EnvironmentImplementation {
         base = To.ToObject(realm, base);
       }
       invariant(base instanceof ObjectValue || base instanceof AbstractObjectValue);
+
+      if (V.referencedName instanceof SymbolValue && V.referencedName.$IsPrivateName) {
+        if (!(base instanceof ObjectValue)) {
+          AbstractValue.reportIntrospectionError(base, V.referencedName);
+          throw new FatalError();
+        }
+        let pb = base.symbols.get(V.referencedName);
+        if (pb === undefined || pb.descriptor === undefined) {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Cannot read private member from an object whose class did not declare it"
+          );
+        }
+        let desc = pb.descriptor;
+        invariant(desc instanceof PropertyDescriptor);
+        if (desc.value !== undefined) {
+          invariant(desc.value instanceof Value);
+          return desc.value;
+        }
+        if (desc.get === undefined || desc.get instanceof UndefinedValue) {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Private member was defined without a getter"
+          );
+        }
+        return Call(realm, desc.get, GetThisValue(realm, V), []);
+      }
 
       // b. Return ? base.[[Get]](GetReferencedName(V), GetThisValue(V)).
       return base.$GetPartial(this.GetReferencedNamePartial(realm, V), GetThisValue(realm, V));
@@ -1305,7 +1357,7 @@ export class EnvironmentImplementation {
       }
 
       // 3. Return the result of performing BindingInitialization for BindingPattern passing v and environment as arguments.
-      return this.BindingInitialization(realm, node, v, strictCode, env);
+      return this.BindingInitialization(realm, node, v, strictCode, environment || undefined);
     }
   }
 }

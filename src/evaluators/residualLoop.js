@@ -34,6 +34,7 @@ import {
   GlobalEnvironmentRecord,
   ObjectEnvironmentRecord,
   leakBinding,
+  type Binding,
   type LexicalEnvironment,
 } from "../environment.js";
 import { cloneDescriptor, PropertyDescriptor } from "../descriptors.js";
@@ -42,6 +43,7 @@ import {
   AbstractValue,
   ArrayValue,
   ECMAScriptSourceFunctionValue,
+  IntegerIndexedExotic,
   NumberValue,
   ObjectValue,
   StringValue,
@@ -620,24 +622,205 @@ function leakEnclosingFunctionBindings(realm: Realm, env: LexicalEnvironment): v
   }
 }
 
+type ShadowCandidate = {
+  name: string,
+  record: DeclarativeEnvironmentRecord,
+  value: Value,
+  numericKind: "top" | "number" | "nonneg-int",
+};
+
+function isGuaranteedNumericExpr(node: any): boolean {
+  if (node == null) return false;
+  if (t.isNumericLiteral(node)) return true;
+  if (t.isUnaryExpression(node)) {
+    return node.operator === "+" || node.operator === "-" || node.operator === "~";
+  }
+  if (t.isUpdateExpression(node)) return true;
+  if (t.isBinaryExpression(node)) {
+    switch (node.operator) {
+      case "-":
+      case "*":
+      case "/":
+      case "%":
+      case "&":
+      case "|":
+      case "^":
+      case "<<":
+      case ">>":
+      case ">>>":
+        return true;
+      case "+":
+        return isGuaranteedNumericExpr(node.left) && isGuaranteedNumericExpr(node.right);
+      default:
+        return false;
+    }
+  }
+  if (t.isAssignmentExpression(node)) {
+    if (node.operator === "=") return isGuaranteedNumericExpr(node.right);
+    if (node.operator === "+=") return false;
+    return true;
+  }
+  return false;
+}
+
+function inferNumericLoopBindingKind(
+  loop: BabelNodeStatement,
+  name: string,
+  initVal: Value
+): "top" | "number" | "nonneg-int" {
+  let isInitNumber =
+    initVal instanceof NumberValue ||
+    (initVal instanceof AbstractValue && Value.isTypeCompatibleWith(initVal.getType(), NumberValue));
+  if (!isInitNumber) return "top";
+  let isNonNegInt =
+    initVal instanceof NumberValue &&
+    isFinite(initVal.value) &&
+    initVal.value >= 0 &&
+    Math.floor(initVal.value) === initVal.value;
+  let kind: "top" | "number" | "nonneg-int" = isNonNegInt ? "nonneg-int" : "number";
+
+  let root = t.functionExpression(null, [], t.blockStatement([(t.cloneDeep(loop): any)]));
+  traverse(t.file(t.program([t.expressionStatement(root)])), {
+    "ForInStatement|ForOfStatement"(path: BabelTraversePath) {
+      if (kind === "top") return;
+      let left = path.node.left;
+      if (t.isVariableDeclaration(left)) return;
+      if (name in t.getBindingIdentifiers(left)) kind = "top";
+    },
+    UpdateExpression(path: BabelTraversePath) {
+      if (kind === "top") return;
+      let arg = path.node.argument;
+      if (!t.isIdentifier(arg, { name }) || path.scope.hasBinding(name)) return;
+      if (path.node.operator !== "++") kind = "number";
+    },
+    AssignmentExpression(path: BabelTraversePath) {
+      if (kind === "top") return;
+      let left = path.node.left;
+      if (!(name in t.getBindingIdentifiers(left)) || path.scope.hasBinding(name)) return;
+      if (!t.isIdentifier(left, { name })) {
+        kind = "top";
+        return;
+      }
+      let op = path.node.operator;
+      let right = path.node.right;
+      if (
+        op === "+=" &&
+        t.isNumericLiteral(right) &&
+        isFinite(right.value) &&
+        right.value >= 0 &&
+        Math.floor(right.value) === right.value
+      ) {
+        return;
+      }
+      if (
+        op === "-=" ||
+        op === "*=" ||
+        op === "/=" ||
+        op === "%=" ||
+        op === "|=" ||
+        op === "&=" ||
+        op === "^=" ||
+        op === "<<=" ||
+        op === ">>=" ||
+        op === ">>>="
+      ) {
+        kind = "number";
+        return;
+      }
+      if ((op === "=" || op === "+=") && isGuaranteedNumericExpr(right)) {
+        kind = "number";
+        return;
+      }
+      kind = "top";
+    },
+  });
+  traverse.cache.clear();
+  return kind;
+}
+
 function collectReadOnlyParams(
   realm: Realm,
   env: LexicalEnvironment,
   state: TransformState
-): Array<{ name: string, value: Value }> {
+): Array<{ name: string, value: Value, binding: Binding }> {
   let params = [];
   for (let name of state.freeNames) {
     if (state.assignedNames.has(name) || state.capturedByInnerFunction.has(name) || isReservedName(name)) continue;
     let record = resolveName(env, name);
-    if (!(record instanceof DeclarativeEnvironmentRecord)) continue;
-    if (record.creatingOptimizedFunction !== realm.currentOptimizedFunction) continue;
-    let binding = record.bindings[name];
+    let declRecord: void | DeclarativeEnvironmentRecord;
+    if (record instanceof DeclarativeEnvironmentRecord) {
+      if (record.creatingOptimizedFunction !== realm.currentOptimizedFunction) continue;
+      declRecord = record;
+    } else if (record instanceof GlobalEnvironmentRecord) {
+      let dr = record.$DeclarativeRecord;
+      invariant(dr instanceof DeclarativeEnvironmentRecord);
+      if (dr.bindings[name] !== undefined) declRecord = dr;
+    }
+    if (declRecord === undefined) continue;
+    let binding = declRecord.bindings[name];
     if (binding === undefined || !binding.initialized || binding.hasLeaked) continue;
     let val = binding.value;
     if (val === undefined) continue;
-    params.push({ name, value: val });
+    params.push({ name, value: val, binding });
   }
   return params;
+}
+
+function collectShadowBindings(
+  realm: Realm,
+  env: LexicalEnvironment,
+  state: TransformState,
+  loop: BabelNodeStatement
+): Array<ShadowCandidate> {
+  if (realm.getRunningContext().function === undefined) return [];
+  let shadows = [];
+  for (let name of state.assignedNames) {
+    if (state.capturedByInnerFunction.has(name) || isReservedName(name)) continue;
+    let record = resolveName(env, name);
+    if (!(record instanceof DeclarativeEnvironmentRecord)) continue;
+    if (record.creatingOptimizedFunction !== realm.currentOptimizedFunction) continue;
+    let binding = record.bindings[name];
+    if (
+      binding === undefined ||
+      !binding.initialized ||
+      !binding.mutable ||
+      binding.hasLeaked ||
+      binding.mightHaveBeenCaptured
+    ) {
+      continue;
+    }
+    let val = binding.value;
+    if (val === undefined) continue;
+    shadows.push({
+      name,
+      record,
+      value: val,
+      numericKind: inferNumericLoopBindingKind(loop, name, val),
+    });
+  }
+  return shadows;
+}
+
+function leakReadOnlyParamValue(realm: Realm, v: Value, keepContainerTypes: boolean): void {
+  if (keepContainerTypes) {
+    if (v instanceof IntegerIndexedExotic) {
+      if (v.$ViewedArrayBuffer !== undefined) Leak.value(realm, v.$ViewedArrayBuffer);
+      for (let [, pb] of v.properties) {
+        if (pb.descriptor instanceof PropertyDescriptor && pb.descriptor.value instanceof Value) {
+          Leak.value(realm, pb.descriptor.value);
+        }
+      }
+      return;
+    }
+    if (
+      v instanceof ArrayValue &&
+      ArrayValue.isIntrinsicAndHasWidenedNumericProperty(v) &&
+      !Value.isTypeCompatibleWith(ObjectValue, ArrayValue.getWidenedElementType(v))
+    ) {
+      return;
+    }
+  }
+  Leak.value(realm, v);
 }
 
 // In global code Prepack does not know which objects were created by the program (everything was), so all objects
@@ -647,14 +830,19 @@ function leakForGlobalCode(
   realm: Realm,
   wrapper: ECMAScriptSourceFunctionValue,
   state: TransformState,
-  loopEnv: LexicalEnvironment
+  loopEnv: LexicalEnvironment,
+  paramNames: Set<string>,
+  paramValues: Array<Value>,
+  keepContainerTypes: boolean
 ): Array<string> {
   let saved = realm.createdObjectsTrackedForLeaks;
   realm.createdObjectsTrackedForLeaks = (({ has: () => true }: any): Set<ObjectValue>);
   let globalProperties = [];
   try {
+    for (let v of paramValues) leakReadOnlyParamValue(realm, v, keepContainerTypes);
     Leak.value(realm, wrapper);
     for (let name of state.freeNames) {
+      if (paramNames.has(name)) continue;
       let record = resolveName(loopEnv, name);
       if (record instanceof ObjectEnvironmentRecord) throw new FatalError("the loop is inside a with statement");
       if (!(record instanceof GlobalEnvironmentRecord)) continue;
@@ -731,11 +919,30 @@ export function residualizeLoop(
   if (state.unsupported !== undefined) fail(realm, `${state.unsupported} (${reason})`, ast.loc);
 
   let inGlobalCode = !realm.isInPureScope();
-  let readOnlyCandidates = inGlobalCode ? [] : collectReadOnlyParams(realm, env, state);
-  let attempt = (params: Array<{ name: string, value: Value }>) => {
+  let readOnlyCandidates = collectReadOnlyParams(realm, env, state);
+  let shadowCandidates = collectShadowBindings(realm, env, state, transformed.loop);
+  let leakedCandidates: Set<string> = new Set();
+  let attempt = (
+    params: Array<{ name: string, value: Value, binding: Binding }>,
+    shadows: Array<ShadowCandidate>,
+    keepContainerTypes: boolean
+  ) => {
     let loopEnv = Environment.NewDeclarativeEnvironment(realm, env);
     try {
-      let out = tryResidualLoop(realm, ast, transformed, strictCode, env, loopEnv, labelSet, reason, params);
+      let out = tryResidualLoop(
+        realm,
+        ast,
+        transformed,
+        strictCode,
+        env,
+        loopEnv,
+        labelSet,
+        reason,
+        params,
+        shadows,
+        keepContainerTypes,
+        leakedCandidates
+      );
       if (out.effects === undefined) realm.onDestroyScope(loopEnv);
       return out;
     } catch (e) {
@@ -744,10 +951,21 @@ export function residualizeLoop(
     }
   };
 
-  let res = attempt(readOnlyCandidates);
-  if (res.effects === undefined && readOnlyCandidates.length > 0) {
-    // A helper called inside the loop may have mutated an outer local binding that was not syntactically assigned.
-    res = attempt([]);
+  let currentCandidates = readOnlyCandidates;
+  let res = attempt(currentCandidates, shadowCandidates, true);
+  while (res.effects === undefined && leakedCandidates.size > 0) {
+    let remaining = currentCandidates.filter(p => !leakedCandidates.has(p.name));
+    if (remaining.length === currentCandidates.length) break;
+    currentCandidates = remaining;
+    res = attempt(currentCandidates, shadowCandidates, true);
+  }
+  if (res.effects === undefined && (currentCandidates.length > 0 || shadowCandidates.length > 0)) {
+    // A helper or non-index mutation inside the loop may require full leaking of read-only containers or outer
+    // bindings, or may have mutated an outer local binding that was not syntactically assigned.
+    res = attempt(currentCandidates, shadowCandidates, false);
+    if (res.effects === undefined) {
+      res = attempt([], [], false);
+    }
   }
   let effects = res.effects;
   if (effects === undefined) {
@@ -807,7 +1025,10 @@ function tryResidualLoop(
   loopEnv: LexicalEnvironment,
   labelSet: ?Array<string>,
   reason: string,
-  params: Array<{ name: string, value: Value }>
+  params: Array<{ name: string, value: Value, binding: Binding }>,
+  shadows: Array<ShadowCandidate>,
+  keepContainerTypes: boolean,
+  leakedCandidates: Set<string>
 ): { effects?: Effects, loopEnv: LexicalEnvironment, failure?: string } {
   let state = transformed.state;
   let needsExitCode = state.usesReturn || state.exits.length > 0;
@@ -825,8 +1046,14 @@ function tryResidualLoop(
           loopEnvRec.InitializeBinding(VALUE_NAME, realm.intrinsics.undefined);
           (loopEnvRec: any).bindings[VALUE_NAME].mightHaveBeenCaptured = true;
         }
+        for (let s of shadows) {
+          loopEnvRec.CreateMutableBinding(s.name, false);
+          loopEnvRec.InitializeBinding(s.name, s.value);
+          (loopEnvRec: any).bindings[s.name].mightHaveBeenCaptured = true;
+        }
         let paramIds = params.map(p => t.identifier(p.name));
         let paramValues = params.map(p => p.value);
+        let paramNames = new Set(params.map(p => p.name));
         let wrapperParamIds = state.usesArguments ? [t.identifier(ARGUMENTS_NAME), ...paramIds] : paramIds;
         let wrapperStatements = [transformed.labeled];
         if (needsExitCode) wrapperStatements.push(t.returnStatement(t.numericLiteral(0)));
@@ -841,12 +1068,30 @@ function tryResidualLoop(
         // Havoc everything the loop can reach.
         let globalProperties = [];
         if (inGlobalCode) {
-          globalProperties = leakForGlobalCode(realm, wrapper, state, loopEnv);
+          globalProperties = leakForGlobalCode(
+            realm,
+            wrapper,
+            state,
+            loopEnv,
+            paramNames,
+            paramValues,
+            keepContainerTypes
+          );
         } else {
-          for (let v of paramValues) Leak.value(realm, v);
+          for (let v of paramValues) leakReadOnlyParamValue(realm, v, keepContainerTypes);
           if (state.usesArguments) leakEnclosingFunctionBindings(realm, env);
           Leak.value(realm, wrapper);
           if (thisVal !== undefined) Leak.value(realm, thisVal);
+          let newlyLeaked = false;
+          for (let p of params) {
+            if (p.binding.hasLeaked && !leakedCandidates.has(p.name)) {
+              leakedCandidates.add(p.name);
+              newlyLeaked = true;
+            }
+          }
+          if (newlyLeaked) {
+            throw new FatalError("read-only loop parameter binding was leaked");
+          }
         }
 
         // Evaluate one abstract iteration to find out what the loop might modify.
@@ -861,6 +1106,22 @@ function tryResidualLoop(
               let trialEnv = Environment.NewDeclarativeEnvironment(realm, loopEnv);
               try {
                 havocGlobalProperties(realm, globalProperties);
+                for (let s of shadows) {
+                  if (s.numericKind === "top") continue;
+                  let noopNum = AbstractValue.createTemporalFromBuildFunction(
+                    realm,
+                    NumberValue,
+                    [],
+                    createOperationDescriptor("NOOP"),
+                    { skipInvariant: true }
+                  );
+                  let typedInit =
+                    s.numericKind === "nonneg-int"
+                      ? AbstractValue.createFromBinaryOp(realm, ">>>", noopNum, realm.intrinsics.zero)
+                      : noopNum;
+                  trialEnv.environmentRecord.CreateMutableBinding(s.name, false);
+                  trialEnv.environmentRecord.InitializeBinding(s.name, typedInit);
+                }
                 if (t.isForInStatement(ast) || t.isForOfStatement(ast)) {
                   // The key/value of an arbitrary iteration (this entry is discarded with the trial)
                   let key = AbstractValue.createTemporalFromBuildFunction(
@@ -916,6 +1177,10 @@ function tryResidualLoop(
             usesArguments: state.usesArguments,
           })
         );
+        for (let s of shadows) {
+          let postVal = loopEnvRec.GetBindingValue(s.name, strictCode);
+          s.record.SetMutableBinding(s.name, postVal, strictCode);
+        }
         // Global variables assigned by the loop are read back after it.
         havocGlobalProperties(realm, globalProperties);
         return exitValue;

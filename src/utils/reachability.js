@@ -36,6 +36,7 @@ import traverse from "@babel/traverse";
 import type { BabelTraversePath } from "@babel/traverse";
 import type { Binding } from "../environment.js";
 import invariant from "../invariant.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js";
 
 type FunctionBindingVisitorInfo = {
@@ -61,7 +62,12 @@ function visitName(
 // Why are these paths ignored?
 function ignorePath(path: BabelTraversePath): boolean {
   let parent = path.parent;
-  return t.isLabeledStatement(parent) || t.isBreakStatement(parent) || t.isContinueStatement(parent);
+  return (
+    t.isLabeledStatement(parent) ||
+    t.isBreakStatement(parent) ||
+    t.isContinueStatement(parent) ||
+    (parent && (parent.type: string) === "PrivateName")
+  );
 }
 
 let FunctionBindingVisitor = {
@@ -234,6 +240,21 @@ export class ReachabilityImplementation {
         case "WeakSet":
           ifNotVisited(value, computeFromSet);
           break;
+        case "Promise":
+          if (value.$PromiseResult instanceof Value) {
+            computeFromValue(value.$PromiseResult);
+          }
+          break;
+        case "Generator": {
+          let diag = new CompilerDiagnostic(
+            "Generator objects are not supported in calls to abstract functions",
+            realm.currentLocation,
+            "PP0001",
+            "FatalError"
+          );
+          realm.handleError(diag);
+          throw new FatalError();
+        }
         default:
           invariant(kind === "Object", `Object of kind ${kind} is not supported in calls to abstract functions.`);
           invariant(
@@ -305,6 +326,16 @@ export class ReachabilityImplementation {
 
       let [nonLocalReadBindings, nonLocalWriteBindings] = parsedBindingsOfFunction(fn);
       computeFromBindings(fn, nonLocalReadBindings, nonLocalWriteBindings);
+      if (fn instanceof ECMAScriptSourceFunctionValue && fn.$ClassInstanceElements !== undefined) {
+        for (let elem of fn.$ClassInstanceElements) {
+          if (elem.kind === "privateMethod") {
+            computeFromValue(elem.func);
+          } else {
+            computeFromValue(elem.initializer);
+            if (!elem.isPrivate && elem.key instanceof Value) computeFromValue(elem.key);
+          }
+        }
+      }
     }
 
     function computeFromMap(val: ObjectValue): void {
@@ -367,8 +398,12 @@ export class ReachabilityImplementation {
 
       FunctionBindingVisitor._readOnly = !!readOnly;
 
+      let fKind = func.$FunctionKind;
+      let isGen = fKind === "generator" || fKind === "asyncGenerator";
+      let isAsync = fKind === "async" || fKind === "asyncGenerator";
+
       traverse(
-        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code))])),
+        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code, isGen, isAsync))])),
         FunctionBindingVisitor,
         null,
         functionInfo

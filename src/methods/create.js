@@ -173,7 +173,7 @@ export class CreateImplementation {
     iterator.$IteratedString = string;
 
     // 4. Set iterator's [[StringIteratorNextIndex]] internal slot to 0.
-    iterator.$StringIteratorNextIndex = 0;
+    iterator.$StringIteratorNextIndex = new NumberValue(realm, 0);
 
     // 5. Return iterator.
     return iterator;
@@ -791,7 +791,7 @@ export class CreateImplementation {
     realm: Realm,
     constructor: ObjectValue,
     newTarget: void | ObjectValue,
-    kind: "normal" | "generator",
+    kind: "normal" | "generator" | "async" | "asyncGenerator",
     args: Array<Value>
   ): Value {
     // 1. If newTarget is undefined, let newTarget be constructor.
@@ -800,20 +800,13 @@ export class CreateImplementation {
     let fallbackProto;
     // 2. If kind is "normal", then
     if (kind === "normal") {
-      // a. Let goal be the grammar symbol FunctionBody.
-
-      // b. Let parameterGoal be the grammar symbol FormalParameters.
-
-      // c. Let fallbackProto be "%FunctionPrototype%".
       fallbackProto = "FunctionPrototype";
-    } else {
-      // 3. Else,
-      // a. Let goal be the grammar symbol GeneratorBody.
-
-      // b. Let parameterGoal be the grammar symbol FormalParameters[Yield].
-
-      // c. Let fallbackProto be "%Generator%".
+    } else if (kind === "generator") {
       fallbackProto = "Generator";
+    } else if (kind === "async") {
+      fallbackProto = "AsyncFunctionPrototype";
+    } else {
+      fallbackProto = "AsyncGenerator";
     }
 
     // 4. Let argCount be the number of elements in args.
@@ -866,7 +859,9 @@ export class CreateImplementation {
     // 11. Let body be the result of parsing bodyText, interpreted as UTF-16 encoded Unicode text as described in 6.1.4, using goal as the goal symbol. Throw a SyntaxError exception if the parse fails.
     let ast;
     try {
-      ast = parse(realm, "function" + (kind === "generator" ? "*" : "") + " _(" + P + "){" + bodyText + "}", "eval");
+      let asyncPrefix = kind === "async" || kind === "asyncGenerator" ? "async " : "";
+      let star = kind === "generator" || kind === "asyncGenerator" ? "*" : "";
+      ast = parse(realm, asyncPrefix + "function" + star + " _(" + P + "){" + bodyText + "}", "eval");
     } catch (e) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, "parse failed");
     }
@@ -940,10 +935,12 @@ export class CreateImplementation {
     // 26. Perform FunctionInitialize(F, Normal, parameters, body, scope).
     Functions.FunctionInitialize(realm, F, "normal", params, body, scope);
 
-    // 27. If kind is "generator", then
-    if (kind === "generator") {
+    // 27. If kind is "generator" or "asyncGenerator", then
+    if (kind === "generator" || kind === "asyncGenerator") {
       // a. Let prototype be ObjectCreate(%GeneratorPrototype%).
-      let prototype = this.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
+      let protoIntrinsic =
+        kind === "asyncGenerator" ? realm.intrinsics.AsyncGeneratorPrototype : realm.intrinsics.GeneratorPrototype;
+      let prototype = this.ObjectCreate(realm, protoIntrinsic);
       prototype.originalConstructor = F;
 
       // b. Perform DefinePropertyOrThrow(F, "prototype", PropertyDescriptor{[[Value]]: prototype, [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: false}).

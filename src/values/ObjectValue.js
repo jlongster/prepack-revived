@@ -24,8 +24,10 @@ import type {
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
+  FunctionValue,
   NativeFunctionValue,
   NullValue,
   NumberValue,
@@ -151,6 +153,15 @@ export default class ObjectValue extends ConcreteValue {
           );
           let binding = this[propBindingName];
           if (binding === undefined) {
+            if (this.$IsClassPrototype === undefined) {
+              this[propBindingName] = {
+                descriptor: new InternalSlotDescriptor(v),
+                object: this,
+                key: propName,
+                internalSlot: true,
+              };
+              return;
+            }
             let desc = new InternalSlotDescriptor(undefined);
             this[propBindingName] = binding = {
               descriptor: desc,
@@ -171,6 +182,7 @@ export default class ObjectValue extends ConcreteValue {
 
   $ParameterMap: void | ObjectValue; // undefined when the property is "missing"
   $SymbolData: void | SymbolValue | AbstractValue;
+  $BigIntData: void | BigIntValue | AbstractValue;
   $StringData: void | StringValue | AbstractValue;
   $NumberData: void | NumberValue | AbstractValue;
   $BooleanData: void | BooleanValue | AbstractValue;
@@ -207,8 +219,8 @@ export default class ObjectValue extends ConcreteValue {
 
   // set
   $SetIterationKind: void | IterationKind;
-  $SetNextIndex: void | number;
-  $IteratedSet: void | ObjectValue | UndefinedValue;
+  $SetNextIndex: void | NumberValue | AbstractValue;
+  $IteratedSet: void | ObjectValue | UndefinedValue | AbstractValue;
   $SetData: void | Array<void | Value>;
 
   // react
@@ -216,9 +228,9 @@ export default class ObjectValue extends ConcreteValue {
 
   // map
   $MapIterationKind: void | IterationKind;
-  $MapNextIndex: void | NumberValue;
+  $MapNextIndex: void | NumberValue | AbstractValue;
   $MapData: void | Array<{ $Key: void | Value, $Value: void | Value }>;
-  $Map: void | ObjectValue | UndefinedValue;
+  $Map: void | ObjectValue | UndefinedValue | AbstractValue;
 
   // weak map
   $WeakMapData: void | Array<{ $Key: void | Value, $Value: void | Value }>;
@@ -231,8 +243,8 @@ export default class ObjectValue extends ConcreteValue {
 
   // array
   $ArrayIterationKind: void | IterationKind;
-  $ArrayIteratorNextIndex: void | NumberValue;
-  $IteratedObject: void | UndefinedValue | ObjectValue;
+  $ArrayIteratorNextIndex: void | NumberValue | AbstractValue;
+  $IteratedObject: void | UndefinedValue | ObjectValue | AbstractValue;
 
   // regex
   $OriginalSource: void | string;
@@ -240,8 +252,8 @@ export default class ObjectValue extends ConcreteValue {
   $RegExpMatcher: void | ((S: string, lastIndex: number) => ?{ endIndex: number, captures: Array<any> });
 
   // string
-  $StringIteratorNextIndex: void | number;
-  $IteratedString: void | StringValue;
+  $StringIteratorNextIndex: void | NumberValue | AbstractValue;
+  $IteratedString: void | StringValue | UndefinedValue | AbstractValue;
 
   // data view
   $DataView: void | true;
@@ -252,10 +264,13 @@ export default class ObjectValue extends ConcreteValue {
   // array buffer
   $ArrayBufferData: void | null | DataBlock;
   $ArrayBufferByteLength: void | number;
+  $ArrayBufferData_binding: void | PropertyBinding;
+  $ArrayBufferByteLength_binding: void | PropertyBinding;
 
   // generator
   $GeneratorState: void | "suspendedStart" | "executing";
   $GeneratorContext: void | ExecutionContext;
+  $RegeneratorInvoke: void | FunctionValue;
 
   // typed array
   $TypedArrayName: void | TypedArrayKind;
@@ -441,6 +456,7 @@ export default class ObjectValue extends ConcreteValue {
   getKind(): ObjectKind {
     // we can deduce the natural prototype by checking whether the following internal slots are present
     if (this.$SymbolData !== undefined) return "Symbol";
+    if (this.$BigIntData !== undefined) return "BigInt";
     if (this.$StringData !== undefined) return "String";
     if (this.$NumberData !== undefined) return "Number";
     if (this.$BooleanData !== undefined) return "Boolean";
@@ -454,7 +470,9 @@ export default class ObjectValue extends ConcreteValue {
     if (this.$WeakSetData !== undefined) return "WeakSet";
     if (isReactElement(this) && this.$Realm.react.enabled) return "ReactElement";
     if (this.$TypedArrayName !== undefined) return this.$TypedArrayName;
-    // TODO #26 #712: Promises. All kinds of iterators. Generators.
+    if (this.$PromiseState !== undefined) return "Promise";
+    if (this.$GeneratorState !== undefined) return "Generator";
+    // TODO #26 #712: All kinds of iterators.
     return "Object";
   }
 
@@ -655,11 +673,6 @@ export default class ObjectValue extends ConcreteValue {
 
   // ECMA262 9.1.7
   $HasProperty(P: PropertyKeyValue): boolean {
-    if (this.unknownProperty !== undefined && this.$GetOwnProperty(P) === undefined) {
-      AbstractValue.reportIntrospectionError(this, P);
-      throw new FatalError();
-    }
-
     return OrdinaryHasProperty(this.$Realm, this, P);
   }
 

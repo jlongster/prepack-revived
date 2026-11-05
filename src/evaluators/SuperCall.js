@@ -15,7 +15,7 @@ import type { LexicalEnvironment } from "../environment.js";
 import { FunctionEnvironmentRecord } from "../environment.js";
 import { Value, UndefinedValue, ObjectValue } from "../values/index.js";
 import { GetNewTarget, ArgumentListEvaluation, Construct, IsConstructor } from "../methods/index.js";
-import { Environment } from "../singletons.js";
+import { Environment, Functions } from "../singletons.js";
 import invariant from "../invariant.js";
 
 function GetSuperConstructor(realm: Realm) {
@@ -76,6 +76,11 @@ export default function SuperCall(
   // 9. Let thisER be GetThisEnvironment( ).
   let thisER = Environment.GetThisEnvironment(realm);
 
-  // 10. Return thisER.BindThisValue(result).
-  return thisER.BindThisValue(result);
+  // 10. Perform ? thisER.BindThisValue(result) and InitializeInstanceElements(result, activeFunction).
+  let bound = thisER.BindThisValue(result);
+  invariant(thisER instanceof FunctionEnvironmentRecord);
+  if (result instanceof ObjectValue) {
+    Functions.InitializeInstanceElements(realm, result, thisER.$FunctionObject);
+  }
+  return bound;
 }

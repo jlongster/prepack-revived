@@ -30,7 +30,7 @@ import { SameValue, SameValueZeroPartial, StrictEqualityComparisonPartial } from
 import { Create, Properties, To } from "../../singletons.js";
 import invariant from "../../invariant.js";
 
-export default function(realm: Realm, obj: ObjectValue): void {
+export default function initialize(realm: Realm, obj: ObjectValue): void {
   // ECMA262 22.2.3.1
   obj.defineNativeGetter("buffer", context => {
     // 1. Let O be the this value.
@@ -1817,7 +1817,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
 export function build(realm: Realm, obj: ObjectValue, type: ElementType): void {
   // ECMA262 22.2.6
-  obj.$Prototype = realm.intrinsics.TypedArrayPrototype;
+  if (realm.intrinsics.TypedArrayPrototype) {
+    obj.$Prototype = realm.intrinsics.TypedArrayPrototype;
+  } else {
+    initialize(realm, obj);
+  }
 
   // ECMA262 22.2.6.1
   obj.defineNativeConstant("BYTES_PER_ELEMENT", new NumberValue(realm, ElementSize[type]));

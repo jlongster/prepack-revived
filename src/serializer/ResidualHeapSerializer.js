@@ -12,14 +12,17 @@
 import { Realm } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
 import { IsArray, Get } from "../methods/index.js";
+import { ArrayElementSize } from "../methods/typedarray.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   BoundFunctionValue,
   ECMAScriptSourceFunctionValue,
   EmptyValue,
   FunctionValue,
+  IntegerIndexedExotic,
   NativeFunctionValue,
   NullValue,
   NumberValue,
@@ -64,16 +67,23 @@ import { Logger } from "../utils/logger.js";
 import { Modules } from "../utils/modules.js";
 import { HeapInspector, getNativeErrorConstructorName } from "../utils/HeapInspector.js";
 import { ResidualFunctions } from "./ResidualFunctions.js";
-import { factorifyObjects } from "./factorify.js";
-import { voidExpression, emptyExpression, constructorExpression, protoExpression } from "../utils/babelhelpers.js";
+import { constructorSafeObjectExpressions, factorifyObjects } from "./factorify.js";
+import {
+  nullExpression,
+  voidExpression,
+  emptyExpression,
+  constructorExpression,
+  protoExpression,
+} from "../utils/babelhelpers.js";
 import { Emitter } from "./Emitter.js";
 import { ResidualHeapValueIdentifiers } from "./ResidualHeapValueIdentifiers.js";
 import {
   commonAncestorOf,
   getSuggestedArrayLiteralLength,
-  withDescriptorValue,
   ClassPropertiesToIgnore,
   canIgnoreClassLengthProperty,
+  canSerializeSettledPromise,
+  getNaturalFunctionPrototype,
   getObjectPrototypeMetadata,
 } from "./utils.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
@@ -114,6 +124,14 @@ class CountingSemaphore {
     invariant(this.count > 0);
     if (--this.count === 0) this.action();
   }
+}
+
+function isNullableAtemporalPropertyAccess(val: Value): boolean {
+  if (!(val instanceof AbstractValue) || val.hasIdentifier()) return false;
+  if (val.kind === "abstractConcreteUnion" && val.args.length >= 1) {
+    return isNullableAtemporalPropertyAccess(val.args[0]);
+  }
+  return typeof val.kind === "string" && val.kind.startsWith("property:?");
 }
 
 export class ResidualHeapSerializer {
@@ -160,6 +178,7 @@ export class ResidualHeapSerializer {
     this._ignoredSerializedValues = new Set();
     this.embeddedFunctionNames = new Map();
     this._serializedValueWithIdentifiers = new Set();
+    this._serializedClassMethods = new Set();
     this.additionalFunctionValueNestedFunctions = new Set();
     this.residualReactElementSerializer = new ResidualReactElementSerializer(
       this.realm,
@@ -267,10 +286,12 @@ export class ResidualHeapSerializer {
   _ignoredSerializedValues: Set<Value>;
   embeddedFunctionNames: Map<FunctionValue, string>;
   _serializedValueWithIdentifiers: Set<Value>;
+  _serializedClassMethods: Set<FunctionValue>;
   residualFunctions: ResidualFunctions;
   _options: SerializerOptions;
   referencedDeclaredValues: Map<Value, void | FunctionValue>;
   activeGeneratorBodies: Map<Generator, SerializedBody>;
+  _ctorGroupCounts: void | Map<ObjectValue, Map<string, number>>;
   additionalFunctionValuesAndEffects: Map<FunctionValue, AdditionalFunctionEffects>;
   additionalFunctionValueInfos: Map<FunctionValue, AdditionalFunctionInfo>;
   rewrittenAdditionalFunctions: Map<FunctionValue, Array<BabelNodeStatement>>;
@@ -318,10 +339,12 @@ export class ResidualHeapSerializer {
     properties: Map<string, PropertyBinding> = obj.properties,
     objectPrototypeAlreadyEstablished: boolean = false,
     cleanupDummyProperties: ?Set<string>,
-    skipPrototype: boolean = false
+    skipPrototype: boolean = false,
+    symbols: Map<SymbolValue, PropertyBinding> = obj.symbols
   ): void {
     //inject symbols
-    for (let [symbol, propertyBinding] of obj.symbols) {
+    for (let [symbol, propertyBinding] of symbols) {
+      if (symbol.$IsPrivateName) continue;
       invariant(propertyBinding);
       let desc = propertyBinding.descriptor;
       if (desc === undefined) continue; //deleted
@@ -343,9 +366,17 @@ export class ResidualHeapSerializer {
       isCertainlyLeaked &&
       (descriptor instanceof PropertyDescriptor && (descriptor.get === undefined && descriptor.set === undefined));
 
+    // Properties created after a write with an unknown name are emitted after that write.
+    let createdAfterUnknownWrite = new Map();
+
     // inject properties
     for (let [key, propertyBinding] of properties) {
       invariant(propertyBinding);
+      if (this._isCreatedAfterEmittedUnknownWrite(obj, propertyBinding)) {
+        if (propertyBinding.pathNode === undefined && propertyBinding.descriptor !== undefined)
+          createdAfterUnknownWrite.set(key, propertyBinding);
+        continue;
+      }
 
       if (propertyBinding.pathNode !== undefined) continue; // Property is assigned to inside loop
       let desc = propertyBinding.descriptor;
@@ -372,14 +403,20 @@ export class ResidualHeapSerializer {
     }
 
     // inject properties with computed names
-    if (obj.unknownProperty !== undefined) {
+    if (obj.unknownProperty !== undefined && !isCertainlyLeaked) {
       let desc = obj.unknownProperty.descriptor;
       if (desc !== undefined) {
         let semaphore = this._acquireOneObjectSemaphore(obj);
+        let dependencies = this._getNestedValuesFromAbstractDescriptor(desc, [obj]);
+        for (let propertyBinding of createdAfterUnknownWrite.values()) {
+          invariant(propertyBinding.descriptor !== undefined);
+          dependencies = dependencies.concat(this._getDescriptorValues(propertyBinding.descriptor));
+        }
         this.emitter.emitNowOrAfterWaitingForDependencies(
-          this._getNestedValuesFromAbstractDescriptor(desc, [obj]),
+          dependencies,
           () => {
-            this._emitPropertiesWithComputedNamesDescriptor(obj, desc);
+            this._emitPropertiesWithComputedNamesDescriptor(obj, desc, createdAfterUnknownWrite);
+            this._emitPropertiesCreatedAfterUnknownWrite(obj, createdAfterUnknownWrite, undefined);
             if (semaphore !== undefined) semaphore.releaseOne();
           },
           this.emitter.getBody()
@@ -423,14 +460,9 @@ export class ResidualHeapSerializer {
       }
       return;
     }
-    if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
-    if (
-      obj instanceof ECMAScriptSourceFunctionValue &&
-      obj.$FunctionKind === "generator" &&
-      proto === this.realm.intrinsics.Generator
-    ) {
-      return;
-    }
+    let naturalProto =
+      kind === "Function" ? getNaturalFunctionPrototype(this.realm, obj) : this.realm.intrinsics[kind + "Prototype"];
+    if (proto === naturalProto) return;
 
     let semaphore = this._acquireOneObjectSemaphore(obj);
     this.emitter.emitNowOrAfterWaitingForDependencies(
@@ -524,12 +556,16 @@ export class ResidualHeapSerializer {
     return values;
   }
 
-  _emitPropertiesWithComputedNamesDescriptor(obj: ObjectValue, desc: void | Descriptor): void {
+  _emitPropertiesWithComputedNamesDescriptor(
+    obj: ObjectValue,
+    desc: void | Descriptor,
+    createdAfterUnknownWrite?: Map<string, PropertyBinding>
+  ): void {
     if (desc === undefined) return;
     if (desc instanceof PropertyDescriptor) {
       let val = desc.value;
       invariant(val instanceof AbstractValue);
-      this._emitPropertiesWithComputedNames(obj, val);
+      this._emitPropertiesWithComputedNames(obj, val, createdAfterUnknownWrite);
     } else if (desc instanceof AbstractJoinedDescriptor) {
       let serializedCond = this.serializeValue(desc.joinCondition);
 
@@ -578,7 +614,11 @@ export class ResidualHeapSerializer {
     }
   }
 
-  _emitPropertiesWithComputedNames(obj: ObjectValue, absVal: AbstractValue): void {
+  _emitPropertiesWithComputedNames(
+    obj: ObjectValue,
+    absVal: AbstractValue,
+    createdAfterUnknownWrite?: Map<string, PropertyBinding>
+  ): void {
     if (absVal.kind === "widened property") return;
     if (absVal.kind === "template for prototype member expression") return;
     invariant(absVal.args.length === 3);
@@ -589,13 +629,16 @@ export class ResidualHeapSerializer {
       invariant(P instanceof AbstractValue);
       let V = absVal.args[1];
       let earlier_props = absVal.args[2];
-      if (earlier_props instanceof AbstractValue) this._emitPropertiesWithComputedNames(obj, earlier_props);
+      if (earlier_props instanceof AbstractValue)
+        this._emitPropertiesWithComputedNames(obj, earlier_props, createdAfterUnknownWrite);
       let uid = this.getSerializeObjectIdentifier(obj);
       let serializedP = this.serializeValue(P);
       let serializedV = this.serializeValue(V);
       this.emitter.emit(
         t.expressionStatement(t.assignmentExpression("=", t.memberExpression(uid, serializedP, true), serializedV))
       );
+      if (createdAfterUnknownWrite !== undefined)
+        this._emitPropertiesCreatedAfterUnknownWrite(obj, createdAfterUnknownWrite, absVal);
     } else {
       // conditional assignment
       let serializedCond = this.serializeValue(cond);
@@ -641,12 +684,47 @@ export class ResidualHeapSerializer {
         this.emitter.emit(t.ifStatement(t.unaryExpression("!", serializedCond), alternateStatement));
       }
       this.emitter.processValues(valuesToProcess);
+      if (createdAfterUnknownWrite !== undefined)
+        this._emitPropertiesCreatedAfterUnknownWrite(obj, createdAfterUnknownWrite, absVal);
+    }
+  }
+
+  _isCreatedAfterEmittedUnknownWrite(obj: ObjectValue, propertyBinding: PropertyBinding): boolean {
+    return (
+      propertyBinding.createdAfterUnknownWrite !== undefined &&
+      obj.unknownProperty !== undefined &&
+      obj.unknownProperty.descriptor !== undefined &&
+      obj.mightNotBeLeakedObject()
+    );
+  }
+
+  // Emits the properties that were created right after the unknown property had value `unknownValue`,
+  // or all remaining ones if `unknownValue` is undefined.
+  _emitPropertiesCreatedAfterUnknownWrite(
+    obj: ObjectValue,
+    createdAfterUnknownWrite: Map<string, PropertyBinding>,
+    unknownValue: void | AbstractValue
+  ): void {
+    for (let [key, propertyBinding] of createdAfterUnknownWrite) {
+      if (unknownValue !== undefined && propertyBinding.createdAfterUnknownWrite !== unknownValue) continue;
+      createdAfterUnknownWrite.delete(key);
+      this._emitProperty(obj, key, propertyBinding.descriptor);
     }
   }
 
   // Overridable.
   getSerializeObjectIdentifier(val: Value): BabelNodeIdentifier {
     return this.residualHeapValueIdentifiers.getIdentifierAndIncrementReferenceCount(val);
+  }
+
+  _getSerializeObjectRef(val: Value): BabelNodeExpression {
+    if (val instanceof ECMAScriptSourceFunctionValue && this.residualClassMethodInstances.has(val)) {
+      let cmi = this.residualClassMethodInstances.get(val);
+      if (cmi !== undefined && cmi.methodType !== "constructor") {
+        return this.serializeValue(val);
+      }
+    }
+    return this.getSerializeObjectIdentifier(val);
   }
 
   _emitProperty(
@@ -662,7 +740,7 @@ export class ResidualHeapSerializer {
           ? this.serializeValue(key)
           : getAsPropertyNameExpression(key);
       let computed = key instanceof SymbolValue || key instanceof AbstractValue || !t.isIdentifier(serializedKey);
-      return t.memberExpression(this.getSerializeObjectIdentifier(val), serializedKey, computed);
+      return t.memberExpression(this._getSerializeObjectRef(val), serializedKey, computed);
     };
     if (desc === undefined) {
       this._deleteProperty(locationFunction());
@@ -776,7 +854,7 @@ export class ResidualHeapSerializer {
     invariant(!this.emitter.getReasonToWaitForDependencies([val]), "precondition of _emitProperty");
     body.push(
       t.callExpression(this.preludeGenerator.memoizeReference("Object.defineProperty"), [
-        this.getSerializeObjectIdentifier(val),
+        this._getSerializeObjectRef(val),
         serializedKey,
         descriptorId,
       ])
@@ -1101,21 +1179,33 @@ export class ResidualHeapSerializer {
       }
     }
 
-    // make sure we're not serializing a class method here
+    // If a class method/getter/setter is referenced as a value (e.g. `Marked.parse` aliased onto exports),
+    // reference it via the serialized class or its prototype rather than aborting with PP0022.
     if (val instanceof ECMAScriptSourceFunctionValue && this.residualClassMethodInstances.has(val)) {
       let classMethodInstance = this.residualClassMethodInstances.get(val);
       invariant(classMethodInstance);
-      // anything other than a class constructor should never go through serializeValue()
-      // so we need to log a nice error message to the user
       if (classMethodInstance.methodType !== "constructor") {
-        let error = new CompilerDiagnostic(
-          "a class method incorrectly went through the serializeValue() code path",
-          val.$ECMAScriptCode.loc,
-          "PP0022",
-          "FatalError"
+        let classFunc = classMethodInstance.classConstructor;
+        let key = classMethodInstance.classMethodKey;
+        invariant(key !== undefined);
+        this.serializedValues.add(val);
+        let classId = this.serializeValue(classFunc);
+        this._serializeClassMethod(key, val);
+        let targetExpr = classMethodInstance.classMethodIsStatic
+          ? classId
+          : t.memberExpression(classId, t.identifier("prototype"));
+        let keyNode = typeof key === "string" ? getAsPropertyNameExpression(key) : this.serializeValue(key);
+        let computed = typeof key !== "string" || !t.isIdentifier(keyNode);
+        if (classMethodInstance.methodType === "method") {
+          return t.memberExpression(targetExpr, keyNode, computed);
+        }
+        return t.memberExpression(
+          t.callExpression(this.preludeGenerator.memoizeReference("Object.getOwnPropertyDescriptor"), [
+            targetExpr,
+            typeof key === "string" ? t.stringLiteral(key) : keyNode,
+          ]),
+          t.identifier(classMethodInstance.methodType)
         );
-        this.realm.handleError(error);
-        throw new FatalError();
       }
     }
 
@@ -1124,7 +1214,7 @@ export class ResidualHeapSerializer {
     }
 
     this.serializedValues.add(val);
-    if (!referenceOnly && HeapInspector.isLeaf(val)) {
+    if (!referenceOnly && (HeapInspector.isLeaf(val) || isNullableAtemporalPropertyAccess(val))) {
       let res = this._serializeValue(val);
       invariant(res !== undefined);
       return res;
@@ -1468,6 +1558,10 @@ export class ResidualHeapSerializer {
 
   _serializeValueArray(val: ObjectValue): BabelNodeExpression {
     let remainingProperties = new Map(val.properties);
+    if (!val.mightNotBeLeakedObject()) {
+      this._emitObjectProperties(val, remainingProperties);
+      return t.arrayExpression([]);
+    }
 
     let [unconditionalLength, assignmentNotNeeded] = getSuggestedArrayLiteralLength(this.realm, val);
     // Use the unconditional serialized index properties as array initialization list.
@@ -1598,17 +1692,88 @@ export class ResidualHeapSerializer {
     return t.newExpression(this.preludeGenerator.memoizeReference(kind), args);
   }
 
+  _serializeValuePromise(val: ObjectValue): BabelNodeExpression {
+    invariant(canSerializeSettledPromise(val));
+    let result = val.$PromiseResult;
+    invariant(result instanceof Value);
+    if (this.emitter.getReasonToWaitForDependencies(result)) {
+      let diag = new CompilerDiagnostic(
+        "Cyclic settled Promise cannot be serialized in residual heap",
+        val.expressionLocation,
+        "PP0001",
+        "FatalError"
+      );
+      this.realm.handleError(diag);
+      throw new FatalError();
+    }
+    let serializedResult = this.serializeValue(result);
+    this._emitObjectProperties(val);
+    if (val.$PromiseState === "rejected") {
+      if (val.$PromiseIsHandled === true) {
+        let semaphore = this._acquireOneObjectSemaphore(val);
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          [val],
+          () => {
+            let uid = this.getSerializeObjectIdentifier(val);
+            this.emitter.emit(
+              t.expressionStatement(
+                t.callExpression(t.memberExpression(uid, t.identifier("catch")), [
+                  t.functionExpression(null, [], t.blockStatement([])),
+                ])
+              )
+            );
+            if (semaphore !== undefined) semaphore.releaseOne();
+          },
+          this.emitter.getBody()
+        );
+      }
+      let rejectArgs = result instanceof UndefinedValue ? [] : [serializedResult];
+      return t.callExpression(
+        t.memberExpression(this.preludeGenerator.memoizeReference("Promise"), t.identifier("reject")),
+        rejectArgs
+      );
+    }
+    let args = result instanceof UndefinedValue ? [] : [serializedResult];
+    return t.callExpression(
+      t.memberExpression(this.preludeGenerator.memoizeReference("Promise"), t.identifier("resolve")),
+      args
+    );
+  }
+
   _serializeValueTypedArrayOrDataView(val: ObjectValue): BabelNodeExpression {
     let buf = val.$ViewedArrayBuffer;
     invariant(buf !== undefined);
     let outlinedArrayBuffer = this.serializeValue(buf, true);
     this._emitObjectProperties(val);
-    return t.newExpression(this.preludeGenerator.memoizeReference(val.getKind()), [outlinedArrayBuffer]);
+    let bufByteLen = buf.$ArrayBufferByteLength;
+    invariant(typeof bufByteLen === "number");
+    let byteOffset = val.$ByteOffset || 0;
+    let ctorArgs: Array<BabelNodeExpression> = [outlinedArrayBuffer];
+    let kind = val.getKind();
+    if (kind === "DataView") {
+      let byteLen = val.$ByteLength;
+      invariant(typeof byteLen === "number");
+      if (byteOffset !== 0 || byteLen !== bufByteLen) {
+        ctorArgs.push(t.numericLiteral(byteOffset));
+        if (byteOffset + byteLen !== bufByteLen) {
+          ctorArgs.push(t.numericLiteral(byteLen));
+        }
+      }
+    } else {
+      let elemSize = ArrayElementSize[(kind: any)];
+      let arrLen = val.$ArrayLength;
+      invariant(typeof elemSize === "number" && typeof arrLen === "number");
+      if (byteOffset !== 0 || arrLen * elemSize !== bufByteLen) {
+        ctorArgs.push(t.numericLiteral(byteOffset));
+        if (byteOffset + arrLen * elemSize !== bufByteLen) {
+          ctorArgs.push(t.numericLiteral(arrLen));
+        }
+      }
+    }
+    return t.newExpression(this.preludeGenerator.memoizeReference(kind), ctorArgs);
   }
 
   _serializeValueArrayBuffer(val: ObjectValue): BabelNodeExpression {
-    let elems = [];
-
     let len = val.$ArrayBufferByteLength;
     let db = val.$ArrayBufferData;
     invariant(len !== undefined);
@@ -1617,16 +1782,30 @@ export class ResidualHeapSerializer {
     for (let i = 0; i < len; i++) {
       if (db[i] !== 0) {
         allzero = false;
+        break;
       }
-      let elem = t.numericLiteral(db[i]);
-      elems.push(elem);
     }
 
     this._emitObjectProperties(val);
     if (allzero) {
       // if they're all zero, just emit the array buffer constructor
       return t.newExpression(this.preludeGenerator.memoizeReference(val.getKind()), [t.numericLiteral(len)]);
+    } else if (len >= 64 && len % 4 === 0) {
+      // Pack 4 little-endian bytes per Uint32 literal (matching SetValueInBuffer's little-endian layout)
+      // so large TypedArray lookup tables emit 4x fewer AST nodes.
+      let view = new DataView(db.buffer, db.byteOffset, len);
+      let wordCount = len >> 2;
+      let words = new Array(wordCount);
+      for (let i = 0; i < wordCount; i++) {
+        words[i] = t.numericLiteral(view.getUint32(i << 2, true));
+      }
+      let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint32Array"), [t.arrayExpression(words)]);
+      return t.memberExpression(consExpr, t.identifier("buffer"));
     } else {
+      let elems = new Array(len);
+      for (let i = 0; i < len; i++) {
+        elems[i] = t.numericLiteral(db[i]);
+      }
       // initialize from a byte array otherwise
       let arrayValue = t.arrayExpression(elems);
       let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint8Array"), [arrayValue]);
@@ -1656,6 +1835,7 @@ export class ResidualHeapSerializer {
 
     let inOptimizedFunction = this._residualOptimizedFunctions.tryGetOptimizedFunctionRoot(val);
     if (inOptimizedFunction !== undefined) instance.containingAdditionalFunction = inOptimizedFunction;
+    let afterInsertionPoint: Array<() => void> = [];
     let bindingsEmittedSemaphore = new CountingSemaphore(() => {
       invariant(instance);
       // hoist if we are in an additionalFunction
@@ -1665,7 +1845,13 @@ export class ResidualHeapSerializer {
       } else {
         instance.insertionPoint = this.emitter.getBodyReference();
       }
+      for (let cb of afterInsertionPoint) cb();
     });
+
+    let isClassCtor =
+      val.$FunctionKind === "classConstructor" &&
+      val.$HomeObject instanceof ObjectValue &&
+      val.$HomeObject.$IsClassPrototype;
 
     for (let [boundName, residualBinding] of residualBindings) {
       let referencedValues = [];
@@ -1676,25 +1862,58 @@ export class ResidualHeapSerializer {
         serializeBindingFunc = () => this._serializeDeclarativeEnvironmentRecordBinding(residualBinding);
         if (residualBinding.value !== undefined) referencedValues.push(residualBinding.value);
       }
-      bindingsEmittedSemaphore.acquireOne();
-      this.emitter.emitNowOrAfterWaitingForDependencies(
-        referencedValues,
-        () => {
-          serializeBindingFunc();
-          bindingsEmittedSemaphore.releaseOne();
-        },
-        this.emitter.getBody()
-      );
+      if (isClassCtor) {
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          referencedValues,
+          () => {
+            serializeBindingFunc();
+          },
+          this.emitter.getBody()
+        );
+      } else {
+        bindingsEmittedSemaphore.acquireOne();
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          referencedValues,
+          () => {
+            serializeBindingFunc();
+            bindingsEmittedSemaphore.releaseOne();
+          },
+          this.emitter.getBody()
+        );
+      }
     }
     if (val.$FunctionKind === "classConstructor") {
       let homeObject = val.$HomeObject;
       if (homeObject instanceof ObjectValue && homeObject.$IsClassPrototype) {
-        this._serializeClass(val, homeObject, bindingsEmittedSemaphore);
+        this._serializeClass(val, homeObject, bindingsEmittedSemaphore, afterInsertionPoint);
         return;
       }
     }
+    if (this.residualClassMethodInstances.has(val)) {
+      let cmi = this.residualClassMethodInstances.get(val);
+      invariant(cmi !== undefined);
+      if (cmi.methodType === "field" || cmi.methodType === "privateField") {
+        bindingsEmittedSemaphore.releaseOne();
+        return;
+      }
+      if (cmi.methodType !== "constructor") {
+        bindingsEmittedSemaphore.releaseOne();
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          [cmi.classConstructor],
+          () => {
+            this._emitObjectProperties(val);
+          },
+          this.emitter.getBody()
+        );
+        let additionalEffects = this.additionalFunctionValuesAndEffects.get(val);
+        if (additionalEffects) this._serializeAdditionalFunction(val, additionalEffects);
+        return;
+      }
+    }
+    afterInsertionPoint.push(() => {
+      this._emitObjectProperties(val);
+    });
     bindingsEmittedSemaphore.releaseOne();
-    this._emitObjectProperties(val);
     let additionalEffects = this.additionalFunctionValuesAndEffects.get(val);
     if (additionalEffects) this._serializeAdditionalFunction(val, additionalEffects);
   }
@@ -1702,128 +1921,282 @@ export class ResidualHeapSerializer {
   _serializeClass(
     classFunc: ECMAScriptSourceFunctionValue,
     classPrototype: ObjectValue,
-    bindingsEmittedSemaphore: CountingSemaphore
+    bindingsEmittedSemaphore: CountingSemaphore,
+    afterInsertionPoint: Array<() => void>
   ): void {
     let classMethodInstance = this.residualClassMethodInstances.get(classFunc);
-
     invariant(classMethodInstance !== undefined);
+    classMethodInstance.staticPrivateFields = undefined;
+    classMethodInstance.minInsertionIndex = 0;
+    classMethodInstance.minInsertionBody = undefined;
+    let recordMinInsertion = () => {
+      let ref = this.emitter.getBodyReference();
+      classMethodInstance.minInsertionBody = ref.body;
+      classMethodInstance.minInsertionIndex = Math.max(classMethodInstance.minInsertionIndex || 0, ref.index);
+    };
 
-    let classProtoId;
-    let hasSerializedClassProtoId = false;
-    let propertiesToSerialize = new Map();
-
-    // handle class inheritance
+    // handle class inheritance (including built-ins such as Map, Set, Array, Error, and extends null)
     if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
-      classMethodInstance.classSuperNode = this.serializeValue(classFunc.$Prototype);
-    }
-
-    let serializeClassPrototypeId = () => {
-      if (!hasSerializedClassProtoId) {
-        let classId = this.getSerializeObjectIdentifier(classFunc);
-        classProtoId = t.identifier(this.intrinsicNameGenerator.generate());
-        hasSerializedClassProtoId = true;
-        this.emitter.emit(
-          t.variableDeclaration("var", [
-            t.variableDeclarator(classProtoId, t.memberExpression(classId, t.identifier("prototype"))),
-          ])
-        );
-      }
-    };
-
-    let serializeClassMethodOrProperty = (propertyNameOrSymbol, methodFuncOrProperty) => {
-      const serializeNameAndId = () => {
-        let methodFuncOrPropertyId = this.serializeValue(methodFuncOrProperty);
-        let name;
-
-        if (typeof propertyNameOrSymbol === "string") {
-          name = t.identifier(propertyNameOrSymbol);
-        } else {
-          name = this.serializeValue(propertyNameOrSymbol);
-        }
-        return { name, methodFuncOrPropertyId };
-      };
-
-      if (methodFuncOrProperty instanceof ECMAScriptSourceFunctionValue) {
-        if (methodFuncOrProperty !== classFunc) {
-          // if the method does not have a $HomeObject, it's not a class method
-          if (methodFuncOrProperty.$HomeObject !== undefined) {
-            this.serializedValues.add(methodFuncOrProperty);
-            this._serializeClassMethod(propertyNameOrSymbol, methodFuncOrProperty);
-          } else {
-            // if the method is not part of the class, we have to assign it to the prototype
-            // we can't serialize via emitting the properties as that will emit all
-            // the prototype and we only want to mutate the prototype here
-            serializeClassPrototypeId();
-            invariant(classProtoId !== undefined);
-            let { name, methodFuncOrPropertyId } = serializeNameAndId();
-            this.emitter.emit(
-              t.expressionStatement(
-                t.assignmentExpression("=", t.memberExpression(classProtoId, name), methodFuncOrPropertyId)
-              )
-            );
+      let superProto = classFunc.$Prototype;
+      bindingsEmittedSemaphore.acquireOne();
+      this.emitter.emitNowOrAfterWaitingForDependencies(
+        [superProto],
+        () => {
+          classMethodInstance.classSuperNode = this.serializeValue(superProto);
+          if (!(superProto instanceof FunctionValue && this.residualClassMethodInstances.has(superProto))) {
+            recordMinInsertion();
           }
-        }
-      } else {
-        let prototypeId = t.memberExpression(this.getSerializeObjectIdentifier(classFunc), t.identifier("prototype"));
-        let { name, methodFuncOrPropertyId } = serializeNameAndId();
-        this.emitter.emit(
-          t.expressionStatement(
-            t.assignmentExpression("=", t.memberExpression(prototypeId, name), methodFuncOrPropertyId)
-          )
+          bindingsEmittedSemaphore.releaseOne();
+        },
+        this.emitter.getBody()
+      );
+    } else if (classPrototype.$Prototype === this.realm.intrinsics.null) {
+      classMethodInstance.classSuperNode = nullExpression;
+    }
+    classMethodInstance.classMethodKeyNode = t.identifier("constructor");
+
+    let isRegisteredClassMethodBinding = (pb: PropertyBinding, key: string | SymbolValue, isStatic: boolean) => {
+      let desc = pb.descriptor;
+      if (!(desc instanceof PropertyDescriptor)) return false;
+      if (desc.value !== undefined) {
+        if (!(desc.value instanceof ECMAScriptSourceFunctionValue)) return false;
+        let cmi = this.residualClassMethodInstances.get(desc.value);
+        return (
+          cmi !== undefined &&
+          cmi.methodType === "method" &&
+          cmi.classConstructor === classFunc &&
+          cmi.classMethodIsStatic === isStatic &&
+          cmi.classMethodKey === key
         );
       }
+      let hasGet = desc.get !== undefined && !(desc.get instanceof UndefinedValue);
+      let hasSet = desc.set !== undefined && !(desc.set instanceof UndefinedValue);
+      if (!hasGet && !hasSet) return false;
+      if (hasGet) {
+        if (!(desc.get instanceof ECMAScriptSourceFunctionValue)) return false;
+        let cmi = this.residualClassMethodInstances.get(desc.get);
+        if (
+          !(
+            cmi !== undefined &&
+            cmi.methodType === "get" &&
+            cmi.classConstructor === classFunc &&
+            cmi.classMethodIsStatic === isStatic &&
+            cmi.classMethodKey === key
+          )
+        ) {
+          return false;
+        }
+      }
+      if (hasSet) {
+        if (!(desc.set instanceof ECMAScriptSourceFunctionValue)) return false;
+        let cmi = this.residualClassMethodInstances.get(desc.set);
+        if (
+          !(
+            cmi !== undefined &&
+            cmi.methodType === "set" &&
+            cmi.classConstructor === classFunc &&
+            cmi.classMethodIsStatic === isStatic &&
+            cmi.classMethodKey === key
+          )
+        ) {
+          return false;
+        }
+      }
+      return true;
     };
 
-    let serializeClassProperty = (propertyNameOrSymbol, propertyValue) => {
-      // we handle the prototype via class syntax
-      if (propertyNameOrSymbol === "prototype") {
-        this.serializedValues.add(propertyValue);
-      } else if (propertyValue instanceof ECMAScriptSourceFunctionValue && propertyValue.$HomeObject === classFunc) {
-        serializeClassMethodOrProperty(propertyNameOrSymbol, propertyValue);
+    let emitRegisteredClassMethodBinding = (pb: PropertyBinding, key: string | SymbolValue) => {
+      let desc = pb.descriptor;
+      invariant(desc instanceof PropertyDescriptor);
+      if (desc.value !== undefined) {
+        let fnVal = desc.value;
+        invariant(fnVal instanceof ECMAScriptSourceFunctionValue);
+        this.serializedValues.add(fnVal);
+        this._serializeClassMethod(key, fnVal);
       } else {
-        let prop = classFunc.properties.get(propertyNameOrSymbol);
-        invariant(prop);
-        propertiesToSerialize.set(propertyNameOrSymbol, prop);
+        let getter = desc.get;
+        if (getter instanceof UndefinedValue) {
+          this.serializedValues.add(getter);
+        } else if (getter instanceof ECMAScriptSourceFunctionValue) {
+          this.serializedValues.add(getter);
+          this._serializeClassMethod(key, getter);
+        }
+        let setter = desc.set;
+        if (setter instanceof UndefinedValue) {
+          this.serializedValues.add(setter);
+        } else if (setter instanceof ECMAScriptSourceFunctionValue) {
+          this.serializedValues.add(setter);
+          this._serializeClassMethod(key, setter);
+        }
       }
     };
 
-    // find the all the properties on the class that we need to serialize
+    let propertiesToSerialize = new Map();
+    let symbolsToSerialize = new Map();
+
     for (let [propertyName, method] of classFunc.properties) {
+      if (
+        propertyName === "prototype" &&
+        method.descriptor instanceof PropertyDescriptor &&
+        method.descriptor.value === classPrototype &&
+        !method.descriptor.configurable &&
+        !method.descriptor.enumerable &&
+        !method.descriptor.writable
+      ) {
+        this.serializedValues.add(classPrototype);
+        continue;
+      }
       if (
         !this.residualHeapInspector.canIgnoreProperty(classFunc, propertyName) &&
         !ClassPropertiesToIgnore.has(propertyName) &&
         method.descriptor !== undefined &&
         !(propertyName === "length" && canIgnoreClassLengthProperty(classFunc, method.descriptor, this.logger))
       ) {
-        withDescriptorValue(propertyName, method.descriptor, serializeClassProperty);
+        if (isRegisteredClassMethodBinding(method, propertyName, true)) {
+          emitRegisteredClassMethodBinding(method, propertyName);
+        } else {
+          propertiesToSerialize.set(propertyName, method);
+        }
       }
     }
-    // pass in the properties and set it so we don't serialize the prototype
-    bindingsEmittedSemaphore.releaseOne();
-    this._emitObjectProperties(classFunc, propertiesToSerialize, undefined, undefined, true);
+    for (let [symbol, method] of classFunc.symbols) {
+      if (method.descriptor === undefined) continue;
+      if (symbol.$IsPrivateName) {
+        if (isRegisteredClassMethodBinding(method, symbol, true)) {
+          emitRegisteredClassMethodBinding(method, symbol);
+        } else if (method.descriptor instanceof PropertyDescriptor && method.descriptor.value !== undefined) {
+          let pName = symbol.$PrivateName;
+          invariant(typeof pName === "string");
+          invariant(method.descriptor.value instanceof Value);
+          let valNode = this.serializeValue(method.descriptor.value);
+          recordMinInsertion();
+          if (classMethodInstance.staticPrivateFields === undefined) {
+            classMethodInstance.staticPrivateFields = [];
+          }
+          classMethodInstance.staticPrivateFields.push({ privateName: pName, valueNode: valNode });
+        }
+        continue;
+      }
+      if (isRegisteredClassMethodBinding(method, symbol, true)) {
+        emitRegisteredClassMethodBinding(method, symbol);
+      } else {
+        symbolsToSerialize.set(symbol, method);
+      }
+    }
 
-    // handle non-symbol properties
+    if (classFunc.$ClassInstanceElements !== undefined) {
+      for (let elem of classFunc.$ClassInstanceElements) {
+        if (elem.kind === "privateMethod") {
+          this.serializedValues.add(elem.func);
+          this._serializeClassMethod(elem.privateSymbol, elem.func);
+        } else {
+          this.serializedValues.add(elem.initializer);
+          let elemKey = elem.key instanceof StringValue ? elem.key.value : elem.key;
+          this._serializeClassMethod(elemKey, elem.initializer);
+        }
+      }
+    }
+
+    let protoPropertiesToSerialize = new Map();
+    let protoSymbolsToSerialize = new Map();
+    let deletedProtoConstructor = false;
+
     for (let [propertyName, method] of classPrototype.properties) {
-      withDescriptorValue(propertyName, method.descriptor, serializeClassMethodOrProperty);
+      if (propertyName === "constructor") {
+        if (method.descriptor === undefined) {
+          deletedProtoConstructor = true;
+        } else if (
+          method.descriptor instanceof PropertyDescriptor &&
+          method.descriptor.value === classFunc &&
+          !!method.descriptor.writable &&
+          !method.descriptor.enumerable &&
+          !!method.descriptor.configurable
+        ) {
+          // Default constructor property created by class syntax.
+        } else {
+          protoPropertiesToSerialize.set(propertyName, method);
+        }
+        continue;
+      }
+      if (method.descriptor === undefined) continue;
+      if (isRegisteredClassMethodBinding(method, propertyName, false)) {
+        emitRegisteredClassMethodBinding(method, propertyName);
+      } else {
+        protoPropertiesToSerialize.set(propertyName, method);
+      }
     }
-    // handle symbol properties
     for (let [symbol, method] of classPrototype.symbols) {
-      withDescriptorValue(symbol, method.descriptor, serializeClassMethodOrProperty);
+      if (method.descriptor === undefined) continue;
+      if (isRegisteredClassMethodBinding(method, symbol, false)) {
+        emitRegisteredClassMethodBinding(method, symbol);
+      } else {
+        protoSymbolsToSerialize.set(symbol, method);
+      }
     }
-    // assign the AST method key node for the "constructor"
-    classMethodInstance.classMethodKeyNode = t.identifier("constructor");
+
+    if (
+      protoPropertiesToSerialize.size > 0 ||
+      protoSymbolsToSerialize.size > 0 ||
+      classPrototype.unknownProperty !== undefined ||
+      deletedProtoConstructor
+    ) {
+      let prototypeId = this.residualHeapValueIdentifiers.getIdentifier(classPrototype);
+      invariant(prototypeId !== undefined && prototypeId.type === "Identifier");
+      this.residualFunctions.setFunctionPrototype(classFunc, prototypeId);
+      this._serializedValueWithIdentifiers.add(classPrototype);
+    }
+
+    afterInsertionPoint.push(() => {
+      this._emitObjectProperties(classFunc, propertiesToSerialize, undefined, undefined, true, symbolsToSerialize);
+
+      if (
+        protoPropertiesToSerialize.size > 0 ||
+        protoSymbolsToSerialize.size > 0 ||
+        classPrototype.unknownProperty !== undefined ||
+        deletedProtoConstructor
+      ) {
+        if (deletedProtoConstructor) {
+          this._deleteProperty(
+            t.memberExpression(this.getSerializeObjectIdentifier(classPrototype), t.identifier("constructor"))
+          );
+        }
+        this._emitObjectProperties(
+          classPrototype,
+          protoPropertiesToSerialize,
+          true,
+          undefined,
+          true,
+          protoSymbolsToSerialize
+        );
+      }
+    });
+
+    // Release semaphore so class insertion point precedes any extra static or prototype property mutations.
+    bindingsEmittedSemaphore.releaseOne();
   }
 
   _serializeClassMethod(key: string | SymbolValue, methodFunc: ECMAScriptSourceFunctionValue): void {
     let classMethodInstance = this.residualClassMethodInstances.get(methodFunc);
-
     invariant(classMethodInstance !== undefined);
-    if (typeof key === "string") {
-      classMethodInstance.classMethodKeyNode = t.identifier(key);
-      // as we know the method name is a string again, we can remove the computed status
+    if (this._serializedClassMethods.has(methodFunc)) return;
+    this._serializedClassMethods.add(methodFunc);
+
+    if (classMethodInstance.privateName !== undefined) {
+      classMethodInstance.classMethodKeyNode = t.identifier(classMethodInstance.privateName);
       classMethodInstance.classMethodComputed = false;
+    } else if (typeof key === "string") {
+      let keyNode = getAsPropertyNameExpression(key);
+      classMethodInstance.classMethodKeyNode = keyNode;
+      classMethodInstance.classMethodComputed = !t.isIdentifier(keyNode);
     } else if (key instanceof SymbolValue) {
       classMethodInstance.classMethodKeyNode = this.serializeValue(key);
+      classMethodInstance.classMethodComputed = true;
+      let ownerCmi = this.residualClassMethodInstances.get(classMethodInstance.classConstructor);
+      if (ownerCmi !== undefined && !key.isIntrinsic()) {
+        let ref = this.emitter.getBodyReference();
+        ownerCmi.minInsertionBody = ref.body;
+        ownerCmi.minInsertionIndex = Math.max(ownerCmi.minInsertionIndex || 0, ref.index);
+      }
     } else {
       invariant(false, "Unknown method key type");
     }
@@ -1832,6 +2205,7 @@ export class ResidualHeapSerializer {
 
   // Checks whether a property can be defined via simple assignment, or using object literal syntax.
   _canEmbedProperty(obj: ObjectValue, key: string | SymbolValue | AbstractValue, prop: Descriptor): boolean {
+    if (key === "__proto__") return false;
     if (!(prop instanceof PropertyDescriptor)) return false;
 
     let targetDescriptor = this.residualHeapInspector.getTargetIntegrityDescriptor(obj);
@@ -1868,16 +2242,136 @@ export class ResidualHeapSerializer {
     return t.regExpLiteral(source, flags);
   }
 
+  _getEmbeddableKeysSignature(val: ObjectValue): void | Array<string> {
+    if (!val.mightNotBeLeakedObject()) return undefined;
+    let keys = [];
+    for (let [key, propertyBinding] of val.properties) {
+      if (propertyBinding.pathNode !== undefined) continue;
+      let descriptor = propertyBinding.descriptor;
+      if (descriptor === undefined || !(descriptor instanceof PropertyDescriptor) || descriptor.value === undefined)
+        continue;
+      if (this._canEmbedProperty(val, key, descriptor)) {
+        if (this.residualHeapInspector.canIgnoreProperty(val, key)) continue;
+        if (key.indexOf("|") >= 0) return undefined;
+        keys.push(key);
+      }
+    }
+    return keys.length > 0 && keys.length <= 64 ? keys : undefined;
+  }
+
+  _shouldUseLiteralProto(val: ObjectValue): boolean {
+    let proto = val.$Prototype;
+    if (proto === this.realm.intrinsics.null) return true;
+    if (!(proto instanceof ObjectValue)) return false;
+    if (this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) || this.realm.isCompatibleWith("mobile")) {
+      return true;
+    }
+    let keys = this._getEmbeddableKeysSignature(val);
+    if (keys === undefined) return false;
+    // If proto's chain has a setter or non-writable property shadowing one of `keys`,
+    // `Object.create(proto)` + `obj.k = v` would invoke `[[Set]]` instead of `[[DefineOwnProperty]]`
+    // and silently drop or throw on the write; `{ __proto__: proto, k: v }` uses `CreateDataPropertyOrThrow`.
+    if (!this._canConstructWithThisAssignments(proto, keys)) return true;
+    return this._isInRepeatingConstructorGroup(val, proto, keys);
+  }
+
+  _isInRepeatingConstructorGroup(val: ObjectValue, proto: ObjectValue, keys: Array<string>): boolean {
+    let countsByProto = this._ctorGroupCounts;
+    if (countsByProto === undefined) {
+      countsByProto = new Map();
+      this._ctorGroupCounts = countsByProto;
+      for (let candidate of this.residualValues.keys()) {
+        if (
+          !(candidate instanceof ObjectValue) ||
+          candidate.originalConstructor !== undefined ||
+          candidate.temporalAlias !== undefined ||
+          candidate.getKind() !== "Object"
+        ) {
+          continue;
+        }
+        let cProto = candidate.$Prototype;
+        if (!(cProto instanceof ObjectValue)) continue;
+        let cKeys = this._getEmbeddableKeysSignature(candidate);
+        if (cKeys === undefined) continue;
+        let sig = cKeys.join("|");
+        let map = countsByProto.get(cProto);
+        if (map === undefined) {
+          map = new Map();
+          countsByProto.set(cProto, map);
+        }
+        map.set(sig, (map.get(sig) || 0) + 1);
+      }
+    }
+
+    let protoMap = countsByProto.get(proto);
+    if (protoMap === undefined) return false;
+    return (protoMap.get(keys.join("|")) || 0) >= 4;
+  }
+
+  _canConstructWithThisAssignments(proto: ObjectValue, keys: Array<string>): boolean {
+    if (keys.length === 0 || keys.length > 64) return false;
+    let cur = proto;
+    while (cur instanceof ObjectValue) {
+      if (
+        cur instanceof ProxyValue ||
+        cur instanceof IntegerIndexedExotic ||
+        cur.isPartialObject() ||
+        !cur.mightNotBeLeakedObject() ||
+        cur.unknownProperty !== undefined
+      ) {
+        return false;
+      }
+      for (let i = 0; i < keys.length; i++) {
+        let pb = cur.properties.get(keys[i]);
+        if (pb !== undefined && pb.descriptor !== undefined) {
+          let d = pb.descriptor;
+          if (!(d instanceof PropertyDescriptor)) return false;
+          if (d.get !== undefined || d.set !== undefined || d.writable !== true) return false;
+        }
+      }
+      cur = cur.$Prototype;
+    }
+    return cur === this.realm.intrinsics.null;
+  }
+
   // Overridable.
   serializeValueRawObject(
     val: ObjectValue,
     skipPrototype: boolean,
-    emitIntegrityCommand: void | (SerializedBody => void)
+    emitIntegrityCommand: void | (SerializedBody => void),
+    classConstructor?: Value
   ): BabelNodeExpression {
     let remainingProperties = new Map(val.properties);
     const dummyProperties = new Set();
     let props = [];
+    let embeddedKeys = [];
     let isCertainlyLeaked = !val.mightNotBeLeakedObject();
+    let prototypeEstablishedInLiteral = false;
+    let protoForConstructorCheck: void | ObjectValue;
+
+    let proto = val.$Prototype;
+    if (val.temporalAlias === undefined && !this.realm.instantRender.enabled) {
+      if (classConstructor !== undefined) {
+        if (!this.emitter.getReasonToWaitForDependencies(classConstructor)) {
+          this._recordPrototypeUsage(classConstructor);
+          let serializedCtor = this.serializeValue(classConstructor);
+          props.push(t.objectProperty(protoExpression, t.memberExpression(serializedCtor, t.identifier("prototype"))));
+          prototypeEstablishedInLiteral = true;
+          if (proto instanceof ObjectValue) protoForConstructorCheck = proto;
+        }
+      } else if (
+        !skipPrototype &&
+        proto !== this.realm.intrinsics.ObjectPrototype &&
+        (proto instanceof ObjectValue || proto === this.realm.intrinsics.null) &&
+        !this.emitter.getReasonToWaitForDependencies(proto)
+      ) {
+        this._recordPrototypeUsage(proto);
+        let serializedProto = this.serializeValue(proto);
+        props.push(t.objectProperty(protoExpression, serializedProto));
+        prototypeEstablishedInLiteral = true;
+        if (proto instanceof ObjectValue) protoForConstructorCheck = proto;
+      }
+    }
 
     // TODO #2259: Make deduplication in the face of leaking work for custom accessors
     let shouldDropAsAssignedProp = (descriptor: Descriptor | void) =>
@@ -1888,7 +2382,9 @@ export class ResidualHeapSerializer {
       return t.objectExpression(props);
     } else {
       let instantRenderMode = this.realm.instantRender.enabled;
-      let propEntries = Array.from(val.properties.entries());
+      let propEntries = Array.from(val.properties.entries()).filter(
+        ([, propertyBinding]) => !this._isCreatedAfterEmittedUnknownWrite(val, propertyBinding)
+      );
       let lastEmbeddedIdx = -1;
       for (let idx = 0; idx < propEntries.length; idx++) {
         let [key, propertyBinding] = propEntries[idx];
@@ -1950,16 +2446,19 @@ export class ResidualHeapSerializer {
             if (idx < lastEmbeddedIdx) {
               let serializedValue = !instantRenderMode ? voidExpression : emptyExpression;
               dummyProperties.add(key);
+              embeddedKeys.push(key);
               props.push(t.objectProperty(serializedKey, serializedValue));
             }
           } else {
             remainingProperties.delete(key);
             let serializedValue = this.serializeValue(propValue);
+            embeddedKeys.push(key);
             props.push(t.objectProperty(serializedKey, serializedValue));
           }
         } else if (descriptor.value instanceof Value && descriptor.value.mightHaveBeenDeleted()) {
           if (idx < lastEmbeddedIdx) {
             dummyProperties.add(key);
+            embeddedKeys.push(key);
             props.push(t.objectProperty(serializedKey, voidExpression));
           }
         }
@@ -1969,12 +2468,20 @@ export class ResidualHeapSerializer {
     this._emitObjectProperties(
       val,
       remainingProperties,
-      /*objectPrototypeAlreadyEstablished*/ false,
+      /*objectPrototypeAlreadyEstablished*/ prototypeEstablishedInLiteral,
       dummyProperties,
       skipPrototype
     );
 
-    return t.objectExpression(props);
+    let objExpr = t.objectExpression(props);
+    if (
+      prototypeEstablishedInLiteral &&
+      protoForConstructorCheck !== undefined &&
+      this._canConstructWithThisAssignments(protoForConstructorCheck, embeddedKeys)
+    ) {
+      constructorSafeObjectExpressions.add(objExpr);
+    }
+    return objExpr;
   }
 
   _serializeValueNativeError(val: ObjectValue, ctorName: string): BabelNodeExpression {
@@ -2061,6 +2568,19 @@ export class ResidualHeapSerializer {
     return expr;
   }
 
+  // Records that a class (or a class prototype's constructor) is needed at the current emission point, so that
+  // class definitions are not placed after objects created from them.
+  _recordPrototypeUsage(v: Value): void {
+    let fn = v;
+    if (v instanceof ObjectValue && !(v instanceof FunctionValue) && v.$IsClassPrototype) {
+      let ctor = v.properties.get("constructor");
+      fn = ctor !== undefined && ctor.descriptor instanceof PropertyDescriptor ? ctor.descriptor.value : undefined;
+    }
+    if (fn instanceof FunctionValue) {
+      this.residualFunctions.addFunctionUsage(fn, this.emitter.getBodyReference());
+    }
+  }
+
   _serializeValueObjectViaConstructor(
     val: ObjectValue,
     skipPrototype: boolean,
@@ -2074,7 +2594,9 @@ export class ResidualHeapSerializer {
       undefined,
       skipPrototype
     );
-    let serializedProto = this.serializeValue(classConstructor ? classConstructor : proto);
+    let targetProto = classConstructor ? classConstructor : proto;
+    this._recordPrototypeUsage(targetProto);
+    let serializedProto = this.serializeValue(targetProto);
     if (val.temporalAlias === undefined) {
       if (
         (!classConstructor && proto instanceof NullValue) ||
@@ -2128,7 +2650,9 @@ export class ResidualHeapSerializer {
           invariant(constructor !== undefined);
           invariant(prototypeId !== undefined);
           this.serializeValue(constructor);
-          this._emitObjectProperties(val);
+          if (!val.$IsClassPrototype) {
+            this._emitObjectProperties(val);
+          }
           invariant(prototypeId.type === "Identifier");
           this.residualFunctions.setFunctionPrototype(constructor, prototypeId);
         },
@@ -2170,6 +2694,13 @@ export class ResidualHeapSerializer {
         let serializedDateValue = this.serializeValue(dateValue);
         this._emitObjectProperties(val);
         return t.newExpression(this.preludeGenerator.memoizeReference("Date"), [serializedDateValue]);
+      case "BigInt": {
+        let bigIntData = val.$BigIntData;
+        invariant(bigIntData !== undefined);
+        let serializedBigInt = this.serializeValue(bigIntData);
+        this._emitObjectProperties(val);
+        return t.callExpression(this.preludeGenerator.memoizeReference("Object"), [serializedBigInt]);
+      }
       case "Float32Array":
       case "Float64Array":
       case "Int8Array":
@@ -2192,6 +2723,8 @@ export class ResidualHeapSerializer {
       case "Set":
       case "WeakSet":
         return this._serializeValueSet(val);
+      case "Promise":
+        return this._serializeValuePromise(val);
       default:
         invariant(kind === "Object", "invariant established by visitor");
 
@@ -2202,6 +2735,24 @@ export class ResidualHeapSerializer {
 
         let proto = val.$Prototype;
         let { skipPrototype, constructor: _constructor } = getObjectPrototypeMetadata(this.realm, val);
+        let canUseLiteralProto =
+          val.temporalAlias === undefined &&
+          !this.realm.instantRender.enabled &&
+          this._shouldUseLiteralProto(val) &&
+          (_constructor !== undefined
+            ? !this.emitter.getReasonToWaitForDependencies(_constructor)
+            : !skipPrototype &&
+              proto !== this.realm.intrinsics.ObjectPrototype &&
+              !this.emitter.getReasonToWaitForDependencies(proto));
+        if (canUseLiteralProto) {
+          return ResidualHeapSerializer.prototype.serializeValueRawObject.call(
+            this,
+            val,
+            skipPrototype,
+            emitIntegrityCommand,
+            _constructor
+          );
+        }
         let createViaAuxiliaryConstructor =
           val.temporalAlias === undefined &&
           proto !== this.realm.intrinsics.ObjectPrototype &&
@@ -2318,6 +2869,13 @@ export class ResidualHeapSerializer {
       return voidExpression;
     } else if (val instanceof StringValue) {
       return this._serializeStringValue(val.value);
+    } else if (val instanceof BigIntValue) {
+      let s = val.value.toString();
+      let neg = s.startsWith("-");
+      let digits = neg ? s.slice(1) : s;
+      let node: any = (t: any).bigIntLiteral(digits);
+      node.extra = { rawValue: digits, raw: digits + "n" };
+      return neg ? t.unaryExpression("-", node, true) : node;
     } else if (HeapInspector.isLeaf(val)) {
       return t.valueToNode(val.serialize());
     } else if (val instanceof ObjectValue) {
@@ -2770,9 +3328,11 @@ export class ResidualHeapSerializer {
     this.emitter.finalize();
 
     this.residualFunctions.residualFunctionInitializers.factorifyInitializers(this.factoryNameGenerator);
-    let { unstrictFunctionBodies, strictFunctionBodies } = this.residualFunctions.spliceFunctions(
-      this.rewrittenAdditionalFunctions
-    );
+    let {
+      unstrictFunctionBodies,
+      strictFunctionBodies,
+      strictFunctionDeclarators,
+    } = this.residualFunctions.spliceFunctions(this.rewrittenAdditionalFunctions);
 
     // add strict modes
     let strictDirective = t.directive(t.directiveLiteral("use strict"));
@@ -2782,9 +3342,49 @@ export class ResidualHeapSerializer {
       globalDirectives.push(strictDirective);
     } else if (unstrictFunctionBodies.length && strictFunctionBodies.length) {
       // strict and unstrict functions
+      let handledNodes = new Set();
+      for (let declarator of strictFunctionDeclarators) {
+        let init = declarator.init;
+        if (!init) continue;
+        handledNodes.add(init);
+        if (t.isFunctionExpression(init)) {
+          let func = ((init: any): BabelNodeFunctionExpression);
+          let hasSimpleParams = func.params.every(p => t.isIdentifier(p));
+          if (hasSimpleParams) {
+            let hasDirective = false;
+            if (func.body.directives) {
+              for (let directive of func.body.directives) {
+                if (directive.value.value === "use strict") {
+                  hasDirective = true;
+                  break;
+                }
+              }
+            } else {
+              func.body.directives = [];
+            }
+            if (!hasDirective) {
+              let dirs = func.body.directives || (func.body.directives = []);
+              dirs.unshift(strictDirective);
+            }
+          } else {
+            // ES2016+ forbids a "use strict" directive inside a function with non-simple parameters.
+            declarator.init = t.callExpression(
+              t.functionExpression(null, [], t.blockStatement([t.returnStatement(func)], [strictDirective])),
+              []
+            );
+          }
+        } else if (t.isArrowFunctionExpression(init)) {
+          declarator.init = t.callExpression(
+            t.arrowFunctionExpression([], t.blockStatement([t.returnStatement(init)], [strictDirective])),
+            []
+          );
+        }
+      }
       funcLoop: for (let node of strictFunctionBodies) {
+        if (handledNodes.has(node)) continue;
         if (t.isFunctionExpression(node)) {
           let func = ((node: any): BabelNodeFunctionExpression);
+          if (!func.params.every(p => t.isIdentifier(p))) continue;
           if (func.body.directives) {
             for (let directive of func.body.directives) {
               if (directive.value.value === "use strict") {

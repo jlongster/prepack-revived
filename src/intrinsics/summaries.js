@@ -1051,11 +1051,19 @@ function arraySlice(realm: Realm, context: Value, args: Array<Value>): void | Va
     }
     let elemParams = Placeholders.slice(0, elements.length);
     let templateSource = `[${elemParams.join(", ")}].slice(${sliceArgs.join(", ")})`;
-    if (realm.isInPureScope() && !realm.instantRender.enabled && classifications.every(c => c === "pure")) {
+    let elemType =
+      elements.length > 0 && elements.every(e => Value.isTypeCompatibleWith(e.getType(), StringValue))
+        ? StringValue
+        : Value;
+    if (!realm.instantRender.enabled && realm.generator !== undefined && classifications.every(c => c === "pure")) {
       return ArrayValue.createTemporalWithWidenedNumericProperty(
         realm,
         inputs,
-        createOperationDescriptor("ABSTRACT_FROM_TEMPLATE", { templateSource })
+        createOperationDescriptor("ABSTRACT_FROM_TEMPLATE", { templateSource }),
+        undefined,
+        elemType,
+        true,
+        true
       );
     }
     return residualize(realm, templateSource, ObjectValue, inputs, classifications, false);
@@ -1349,6 +1357,50 @@ function stringRegExpCall(realm: Realm, context: Value, args: Array<Value>, func
   return residualize(realm, templateSource, NumberValue, inputs, classifications, false);
 }
 
+function residualizeStringSplit(
+  realm: Realm,
+  templateSource: string,
+  inputs: Array<Value>,
+  classifications: Array<Classification>
+): void | Value {
+  invariant(classifications.length === inputs.length);
+  if (!realm.instantRender.enabled && realm.generator !== undefined) {
+    if (classifications.every(c => c === "pure")) {
+      return ArrayValue.createTemporalWithWidenedNumericProperty(
+        realm,
+        inputs,
+        createOperationDescriptor("ABSTRACT_FROM_TEMPLATE", { templateSource }),
+        undefined,
+        StringValue,
+        true,
+        true
+      );
+    }
+    if (realm.isInPureScope()) {
+      return realm.evaluateWithPossibleThrowCompletion(
+        () => {
+          inputs.forEach((input, index) => {
+            if (classifications[index] === "user") Leak.value(realm, input);
+          });
+          return ArrayValue.createTemporalWithWidenedNumericProperty(
+            realm,
+            inputs,
+            createOperationDescriptor("ABSTRACT_FROM_TEMPLATE", { templateSource }),
+            undefined,
+            StringValue,
+            false,
+            true
+          );
+        },
+        TypesDomain.topVal,
+        ValuesDomain.topVal
+      );
+    }
+    return undefined;
+  }
+  return residualize(realm, templateSource, ObjectValue, inputs, classifications, false);
+}
+
 // ECMA262 21.1.3.17 String.prototype.split(separator, limit) with a simple concrete RegExp or
 // primitive separator and an optional numeric limit.
 function stringSplit(realm: Realm, context: Value, args: Array<Value>): void | Value {
@@ -1370,7 +1422,7 @@ function stringSplit(realm: Realm, context: Value, args: Array<Value>): void | V
       isStringReceiver && literal.indexOf("global") < 0
         ? `A.split(${callArgs})`
         : `global.String.prototype.split.call(A, ${callArgs})`;
-    return residualize(realm, templateSource, ObjectValue, inputs, classifications, false);
+    return residualizeStringSplit(realm, templateSource, inputs, classifications);
   }
 
   if (separator.mightBeObject() && !isCoercionPureSimpleObject(realm, separator)) return undefined;
@@ -1393,7 +1445,7 @@ function stringSplit(realm: Realm, context: Value, args: Array<Value>): void | V
   let templateSource = isStringReceiver
     ? `A.split(${splitParams.join(", ")})`
     : `global.String.prototype.split.call(A${splitParams.length > 0 ? ", " + splitParams.join(", ") : ""})`;
-  let splitResult = residualize(realm, templateSource, ArrayValue, inputs, classifications, false);
+  let splitResult = residualizeStringSplit(realm, templateSource, inputs, classifications);
   if (splitResult instanceof AbstractObjectValue) {
     splitResult.envElementType = StringValue;
     if (context instanceof AbstractValue && context.isEnvironmentValue === true) {

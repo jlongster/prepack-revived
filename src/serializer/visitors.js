@@ -38,7 +38,12 @@ function visitName(path, state, node, modified) {
 
 function ignorePath(path: BabelTraversePath) {
   let parent = path.parent;
-  return t.isLabeledStatement(parent) || t.isBreakStatement(parent) || t.isContinueStatement(parent);
+  return (
+    t.isLabeledStatement(parent) ||
+    t.isBreakStatement(parent) ||
+    t.isContinueStatement(parent) ||
+    (parent && (parent.type: string) === "PrivateName")
+  );
 }
 
 export let ClosureRefVisitor = {

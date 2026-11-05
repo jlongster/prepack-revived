@@ -873,6 +873,33 @@ export default function(realm: Realm, obj: ObjectValue): ObjectValue {
     return new StringValue(realm, T);
   });
 
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    let trimStartFn = obj.defineNativeMethod("trimStart", 0, context => {
+      let O = RequireObjectCoercible(realm, context);
+      let S = To.ToString(realm, O.throwIfNotConcrete());
+      return new StringValue(realm, (S: any).trimStart());
+    });
+    obj.defineNativeProperty("trimLeft", trimStartFn);
+
+    let trimEndFn = obj.defineNativeMethod("trimEnd", 0, context => {
+      let O = RequireObjectCoercible(realm, context);
+      let S = To.ToString(realm, O.throwIfNotConcrete());
+      return new StringValue(realm, (S: any).trimEnd());
+    });
+    obj.defineNativeProperty("trimRight", trimEndFn);
+
+    // ES2022 String.prototype.at ( index )
+    obj.defineNativeMethod("at", 1, (context, [index]) => {
+      let O = RequireObjectCoercible(realm, context);
+      let S = To.ToString(realm, O.throwIfNotConcrete());
+      let len = S.length;
+      let relativeIndex = To.ToInteger(realm, index.throwIfNotConcrete());
+      let k = relativeIndex >= 0 ? relativeIndex : len + relativeIndex;
+      if (k < 0 || k >= len) return realm.intrinsics.undefined;
+      return new StringValue(realm, S.slice(k, k + 1));
+    });
+  }
+
   // ECMA262 21.1.3.26
   obj.defineNativeMethod("valueOf", 0, context => {
     // 1. Return ? thisStringValue(this value).

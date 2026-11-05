@@ -7,7 +7,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-/* @flow strict-local */
+/* @flow */
 
 import invariant from "../invariant.js";
 import type { SourceType } from "../types.js";
@@ -17,6 +17,7 @@ import { StringValue } from "../values/index.js";
 import { Construct } from "../methods/construct.js";
 import traverseFast from "./traverse-fast.js";
 import { parse } from "@babel/parser";
+import * as t from "@babel/types";
 import type { BabelNodeFile } from "@babel/types";
 
 export default function(
@@ -27,17 +28,35 @@ export default function(
   startLine: number = 1
 ): BabelNodeFile {
   try {
-    let plugins = ["objectRestSpread"];
+    let plugins = [
+      "objectRestSpread",
+      "asyncGenerators",
+      "optionalCatchBinding",
+      "optionalChaining",
+      "nullishCoalescingOperator",
+      "bigInt",
+      "numericSeparator",
+      "logicalAssignment",
+      "classProperties",
+      "classPrivateProperties",
+      "classPrivateMethods",
+    ];
     if (realm.react.enabled) {
       plugins.push("jsx");
     }
     if (realm.stripFlow) {
       plugins.push("flow");
     }
+    if (!(t.VISITOR_KEYS: any).ClassPrivateMethod) {
+      (t.VISITOR_KEYS: any).ClassPrivateMethod = t.VISITOR_KEYS.ClassMethod;
+    }
     let ast = parse(code, { filename, sourceType, startLine, plugins });
     traverseFast(ast, node => {
       invariant(node.loc);
       node.loc.source = filename;
+      if ((node.type: string) === "ClassPrivateMethod") {
+        (node: any).type = "ClassMethod";
+      }
       return false;
     });
     return ast;

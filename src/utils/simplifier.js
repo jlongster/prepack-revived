@@ -14,7 +14,7 @@ import { FatalError, InfeasiblePathError } from "../errors.js";
 import { IntervalDomain, ValuesDomain } from "../domains/index.js";
 import invariant from "../invariant.js";
 import { Realm } from "../realm.js";
-import { AbstractValue, BooleanValue, ConcreteValue, StringValue, Value } from "../values/index.js";
+import { AbstractValue, BooleanValue, ConcreteValue, IntegralValue, StringValue, Value } from "../values/index.js";
 import { Path, To } from "../singletons.js";
 import EmptyValue from "../values/EmptyValue.js";
 import { createOperationDescriptor } from "./generator.js";
@@ -103,6 +103,16 @@ export default function simplifyAndRefineAbstractValue(
   }
 }
 
+function containsTemporal(v: Value): boolean {
+  if (v.isTemporal()) return true;
+  if (v instanceof AbstractValue) {
+    for (let sub of v.args) {
+      if (containsTemporal(sub)) return true;
+    }
+  }
+  return false;
+}
+
 function simplify(realm, value: Value, isCondition: boolean = false, depth: number): Value {
   if (value instanceof ConcreteValue || depth > 5) return value;
   invariant(value instanceof AbstractValue);
@@ -176,8 +186,14 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         }
         if (y instanceof AbstractValue && y.kind === "&&") {
           // x && (x && y) <=> x && y
-          // y && (x && y) <=> x && y
-          if (x.equals(y.args[0]) || x.equals(y.args[1])) return y;
+          if (x.equals(y.args[0])) return y;
+          // y && (x && y) <=> x && y, if isCondition or both are boolean
+          if (
+            x.equals(y.args[1]) &&
+            (isCondition || (x.getType() === BooleanValue && y.args[0].getType() === BooleanValue))
+          ) {
+            return y;
+          }
         }
         // x && (x && y || x && z) <=> x && (y || z)
         if (y instanceof AbstractValue && y.kind === "||") {
@@ -185,11 +201,19 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
           let yxs, yys;
           if (yx instanceof AbstractValue && yx.kind === "&&") {
             if (x.equals(yx.args[0])) yxs = yx.args[1];
-            else if (x.equals(yx.args[1])) yxs = yx.args[0];
+            else if (
+              x.equals(yx.args[1]) &&
+              (isCondition || (x.getType() === BooleanValue && yx.args[0].getType() === BooleanValue))
+            )
+              yxs = yx.args[0];
           }
           if (yy instanceof AbstractValue && yy.kind === "&&") {
             if (x.equals(yy.args[0])) yys = yy.args[1];
-            else if (x.equals(yy.args[1])) yys = yy.args[0];
+            else if (
+              x.equals(yy.args[1]) &&
+              (isCondition || (x.getType() === BooleanValue && yy.args[0].getType() === BooleanValue))
+            )
+              yys = yy.args[0];
           }
           if (yxs !== undefined || yys !== undefined) {
             let ys = AbstractValue.createFromLogicalOp(realm, "||", yxs || yx, yys || yy, undefined, isCondition);
@@ -375,6 +399,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       if (Path.implies(notc, depth + 1)) return y;
       if (!isCondition) {
         if (
+          !containsTemporal(x) &&
           cannotDifferOnlyByZeroSign(value, x) &&
           Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, x), depth + 1)
         )
@@ -384,6 +409,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         if (!y.mightBeNumber() && Path.implies(AbstractValue.createFromBinaryOp(realm, "!==", value, y), depth + 1))
           return x;
         if (
+          !containsTemporal(y) &&
           cannotDifferOnlyByZeroSign(value, y) &&
           Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, y), depth + 1)
         )
@@ -393,7 +419,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       if (x.equals(y)) return x;
       // If under c, y already simplifies to x, then (c ? x : y) <=> y; symmetrically for x under !c.
       if (depth <= 3) {
-        if (y instanceof AbstractValue && !y.isTemporal()) {
+        if (y instanceof AbstractValue && !containsTemporal(y)) {
           let yVal = y;
           try {
             let yWhenC = Path.withCondition(c, () => simplify(realm, yVal, isCondition, depth + 1));
@@ -403,7 +429,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
             throw e;
           }
         }
-        if (x instanceof AbstractValue && !x.isTemporal()) {
+        if (x instanceof AbstractValue && !containsTemporal(x)) {
           let xVal = x;
           try {
             let xWhenNotC = Path.withInverseCondition(c, () => simplify(realm, xVal, isCondition, depth + 1));
@@ -838,12 +864,63 @@ function simplifyUndefinedCheck(
   }
 }
 
+function getKnownStringPrefix(v: Value, depth: number = 0): string {
+  if (depth > 8) return "";
+  if (v instanceof StringValue) return v.value;
+  if (v instanceof AbstractValue && v.getType() === StringValue && v.kind === "+" && v.args.length === 2) {
+    let [a, b] = v.args;
+    if (a.getType() === StringValue && b.getType() === StringValue) {
+      let pa = getKnownStringPrefix(a, depth + 1);
+      return a instanceof StringValue ? pa + getKnownStringPrefix(b, depth + 1) : pa;
+    }
+  }
+  return "";
+}
+
+function getKnownStringSuffix(v: Value, depth: number = 0): string {
+  if (depth > 8) return "";
+  if (v instanceof StringValue) return v.value;
+  if (v instanceof AbstractValue && v.getType() === StringValue && v.kind === "+" && v.args.length === 2) {
+    let [a, b] = v.args;
+    if (a.getType() === StringValue && b.getType() === StringValue) {
+      let sb = getKnownStringSuffix(b, depth + 1);
+      return b instanceof StringValue ? getKnownStringSuffix(a, depth + 1) + sb : sb;
+    }
+  }
+  return "";
+}
+
+function areStringsDisjointByAffix(x: Value, y: Value): boolean {
+  let px = getKnownStringPrefix(x);
+  let py = getKnownStringPrefix(y);
+  let minP = Math.min(px.length, py.length);
+  if (minP > 0 && px.slice(0, minP) !== py.slice(0, minP)) return true;
+  if (x instanceof StringValue && x.value.length < py.length) return true;
+  if (y instanceof StringValue && y.value.length < px.length) return true;
+
+  let sx = getKnownStringSuffix(x);
+  let sy = getKnownStringSuffix(y);
+  let minS = Math.min(sx.length, sy.length);
+  if (minS > 0 && sx.slice(sx.length - minS) !== sy.slice(sy.length - minS)) return true;
+  if (x instanceof StringValue && x.value.length < sy.length) return true;
+  if (y instanceof StringValue && y.value.length < sx.length) return true;
+  return false;
+}
+
 function simplifyEquality(realm: Realm, equality: AbstractValue, depth: number): Value {
   let loc = equality.expressionLocation;
   let op = equality.kind;
   let [x, y] = equality.args;
   if (x instanceof EmptyValue || y instanceof EmptyValue) return equality;
   if (x instanceof ConcreteValue) [x, y] = [y, x];
+  if (
+    (op === "===" || op === "==" || op === "!==" || op === "!=") &&
+    x.getType() === StringValue &&
+    y.getType() === StringValue &&
+    areStringsDisjointByAffix(x, y)
+  ) {
+    return op === "===" || op === "==" ? realm.intrinsics.false : realm.intrinsics.true;
+  }
   if (op === "===" || op === "==" || op === "!==" || op === "==") {
     if (!x.mightNotBeNull()) {
       let sy = simplifyNullCheck(realm, op, y, depth + 1);
@@ -957,65 +1034,80 @@ function negate(
     if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
     return makeBoolean(realm, x, loc);
   }
-  // If NaN is not an issue, invert binary ops
-  if (value.args.length === 2 && !value.args[0].mightBeNumber() && !value.args[1].mightBeNumber()) {
+  // Invert binary comparisons only when NaN cannot make both sides false.
+  if (value.args.length === 2) {
+    let [arg0, arg1] = value.args;
+    let coercesToNonNaNNumber = (v: Value): boolean => {
+      let t = v.getType();
+      if (t === BooleanValue || t === NullValue || t === IntegralValue) return true;
+      if (!Value.isTypeCompatibleWith(t, NumberValue)) return false;
+      let iv = IntervalDomain.of(v);
+      return iv !== undefined && !iv.mayBeNaN;
+    };
+    let canInvertStrictEq =
+      !arg0.mightBeNumber() || !arg1.mightBeNumber() || coercesToNonNaNNumber(arg0) || coercesToNonNaNNumber(arg1);
+    let canInvertRelational =
+      (arg0.getType() === StringValue && arg1.getType() === StringValue) ||
+      (coercesToNonNaNNumber(arg0) && coercesToNonNaNNumber(arg1));
     let invertedComparison;
     switch (value.kind) {
       case "===":
-        invertedComparison = "!==";
+        if (canInvertStrictEq) invertedComparison = "!==";
         break;
       case "==":
         invertedComparison = "!=";
         break;
       case "!==":
-        invertedComparison = "===";
+        if (canInvertStrictEq) invertedComparison = "===";
         break;
       case "!=":
         invertedComparison = "==";
         break;
       case "<":
-        invertedComparison = ">=";
+        if (canInvertRelational) invertedComparison = ">=";
         break;
       case "<=":
-        invertedComparison = ">";
+        if (canInvertRelational) invertedComparison = ">";
         break;
       case ">":
-        invertedComparison = "<=";
+        if (canInvertRelational) invertedComparison = "<=";
         break;
       case ">=":
-        invertedComparison = "<";
+        if (canInvertRelational) invertedComparison = "<";
         break;
       default:
         break;
     }
     if (invertedComparison !== undefined) {
-      let left = simplify(realm, value.args[0], false, depth + 1);
-      let right = simplify(realm, value.args[1], false, depth + 1);
+      let left = simplify(realm, arg0, false, depth + 1);
+      let right = simplify(realm, arg1, false, depth + 1);
       return AbstractValue.createFromBinaryOp(realm, invertedComparison, left, right, loc || value.expressionLocation);
     }
-    let invertedLogicalOp;
-    switch (value.kind) {
-      case "&&":
-        invertedLogicalOp = "||";
-        break;
-      case "||":
-        invertedLogicalOp = "&&";
-        break;
-      default:
-        break;
-    }
-    if (invertedLogicalOp !== undefined) {
-      let left = negate(realm, value.args[0], depth + 1, undefined, undefined, isCondition);
-      let right = negate(realm, value.args[1], depth + 1, undefined, undefined, isCondition);
-      return AbstractValue.createFromLogicalOp(
-        realm,
-        invertedLogicalOp,
-        left,
-        right,
-        loc || value.expressionLocation,
-        isCondition,
-        depth > 1
-      );
+    if (!arg0.mightBeNumber() && !arg1.mightBeNumber()) {
+      let invertedLogicalOp;
+      switch (value.kind) {
+        case "&&":
+          invertedLogicalOp = "||";
+          break;
+        case "||":
+          invertedLogicalOp = "&&";
+          break;
+        default:
+          break;
+      }
+      if (invertedLogicalOp !== undefined) {
+        let left = negate(realm, arg0, depth + 1, undefined, undefined, isCondition);
+        let right = negate(realm, arg1, depth + 1, undefined, undefined, isCondition);
+        return AbstractValue.createFromLogicalOp(
+          realm,
+          invertedLogicalOp,
+          left,
+          right,
+          loc || value.expressionLocation,
+          isCondition,
+          depth > 1
+        );
+      }
     }
   }
   if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
@@ -1025,6 +1117,8 @@ function negate(
 function cannotBeNaN(v: Value): boolean {
   if (!v.mightBeNumber()) return true;
   if (v instanceof NumberValue) return !Number.isNaN(v.value);
+  let iv = IntervalDomain.of(v);
+  if (iv !== undefined && !iv.mayBeNaN) return true;
   if (v instanceof AbstractValue && !v.values.isTop()) {
     for (let e of v.values.getElements()) {
       if (e instanceof NumberValue && Number.isNaN(e.value)) return false;

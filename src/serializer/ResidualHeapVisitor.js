@@ -14,12 +14,12 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { type Effects, Realm } from "../realm.js";
 import { Path } from "../singletons.js";
 import type { Descriptor, PropertyBinding, ObjectKind } from "../types.js";
-import type { Binding } from "../environment.js";
+import type { SerializerOptions } from "../options.js";
+import type { Binding, LexicalEnvironment } from "../environment.js";
 import { HashSet, IsArray, Get } from "../methods/index.js";
 import {
   AbstractObjectValue,
   AbstractValue,
-  ArrayValue,
   BoundFunctionValue,
   ECMAScriptFunctionValue,
   ECMAScriptSourceFunctionValue,
@@ -56,8 +56,11 @@ import { Modules } from "../utils/modules.js";
 import { HeapInspector, getNativeErrorConstructorName } from "../utils/HeapInspector.js";
 import { getVerifiedRecomputeRecipes, type RecomputeRecipe } from "../methods/recompute.js";
 import {
+  canEmbedClassProperty,
   canIgnoreClassLengthProperty,
+  canSerializeSettledPromise,
   ClassPropertiesToIgnore,
+  getNaturalFunctionPrototype,
   getObjectPrototypeMetadata,
   getOrDefault,
   getSuggestedArrayLiteralLength,
@@ -72,6 +75,7 @@ import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js"
 type BindingState = {|
   capturedBindings: Set<ResidualFunctionBinding>,
   capturingScopes: Set<Scope>,
+  readersByBinding: Map<ResidualFunctionBinding, Set<Scope>>,
 |};
 
 /* This class visits all values that are reachable in the residual heap.
@@ -86,7 +90,8 @@ export class ResidualHeapVisitor {
     logger: Logger,
     modules: Modules,
     additionalFunctionValuesAndEffects: Map<FunctionValue, AdditionalFunctionEffects>,
-    enableRecompute: boolean = false
+    enableRecompute: boolean = false,
+    serializerOptions?: SerializerOptions
   ) {
     invariant(realm.useAbstractInterpretation);
     this.realm = realm;
@@ -117,12 +122,24 @@ export class ResidualHeapVisitor {
     this.residualReactElementVisitor = new ResidualReactElementVisitor(this.realm, this);
     this.generatorTree = new GeneratorTree();
     this.recomputeRecipes = enableRecompute ? getVerifiedRecomputeRecipes(realm) : new Map();
+    this._resolvedBindingCache = new WeakMap();
+    this._canPruneGlobalFunctionScopes =
+      serializerOptions !== undefined &&
+      !serializerOptions.debugScopes &&
+      additionalFunctionValuesAndEffects.size === 0;
+    this._delayInitializations = serializerOptions !== undefined && !!serializerOptions.delayInitializations;
+    this._globalRootedFunctions = new Set();
+    this._valuesWithGlobalRootedScope = new Set();
   }
 
   realm: Realm;
   logger: Logger;
   modules: Modules;
   globalGenerator: Generator;
+  _canPruneGlobalFunctionScopes: boolean;
+  _delayInitializations: boolean;
+  _globalRootedFunctions: Set<FunctionValue>;
+  _valuesWithGlobalRootedScope: Set<Value>;
 
   // Caches that ensure one ResidualFunctionBinding exists per (record, name) pair
   declarativeEnvironmentRecordsBindings: Map<DeclarativeEnvironmentRecord, Map<string, ResidualFunctionBinding>>;
@@ -149,6 +166,7 @@ export class ResidualHeapVisitor {
   globalEnvironmentRecord: GlobalEnvironmentRecord;
   residualReactElementVisitor: ResidualReactElementVisitor;
   recomputeRecipes: Map<ObjectValue, RecomputeRecipe>;
+  _resolvedBindingCache: WeakMap<LexicalEnvironment, Map<string, EnvironmentRecord>>;
 
   // Going backwards from the current scope, find either the containing
   // additional function, or if there isn't one, return the global generator.
@@ -270,7 +288,7 @@ export class ResidualHeapVisitor {
   // Queues up visiting a value in some arbitrary scope.
   _visitInUnrelatedScope(scope: Scope, val: Value): void {
     let scopes = this.values.get(val);
-    if (scopes !== undefined && scopes.has(scope)) return;
+    if (scopes !== undefined && (scopes.has(scope) || (scopes.has(this.globalGenerator) && scopes.size > 1))) return;
     this._enqueueWithUnrelatedScope(scope, () => this.visitValue(val));
   }
 
@@ -297,6 +315,20 @@ export class ResidualHeapVisitor {
       invariant(propertyBinding);
       let desc = propertyBinding.descriptor;
       if (desc === undefined) continue; //deleted
+      if (symbol.$IsPrivateName) {
+        if (!(obj instanceof ECMAScriptFunctionValue && obj.$FunctionKind === "classConstructor")) {
+          let diag = new CompilerDiagnostic(
+            "Object instances with private fields or methods cannot be serialized in residual heap",
+            obj.expressionLocation,
+            "PP0001",
+            "FatalError"
+          );
+          this.realm.handleError(diag);
+          throw new FatalError();
+        }
+        this.visitDescriptor(desc);
+        continue;
+      }
       this.visitDescriptor(desc);
       this.visitValue(symbol);
     }
@@ -319,7 +351,6 @@ export class ResidualHeapVisitor {
       // Leaked object. Properties are set via assignments
       // TODO #2259: Make deduplication in the face of leaking work for custom accessors
       if (
-        !(obj instanceof ArrayValue) &&
         !obj.mightNotBeLeakedObject() &&
         (descriptor instanceof PropertyDescriptor && (descriptor.get === undefined && descriptor.set === undefined))
       ) {
@@ -330,7 +361,7 @@ export class ResidualHeapVisitor {
     }
 
     // inject properties with computed names
-    if (obj.unknownProperty !== undefined) {
+    if (obj.unknownProperty !== undefined && obj.mightNotBeLeakedObject()) {
       this.visitObjectPropertiesWithComputedNamesDescriptor(obj.unknownProperty.descriptor);
     }
 
@@ -350,14 +381,9 @@ export class ResidualHeapVisitor {
 
     if (getNativeErrorConstructorName(this.realm, obj) !== undefined) return;
     let kind = obj.getKind();
-    if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
-    if (
-      obj instanceof ECMAScriptSourceFunctionValue &&
-      obj.$FunctionKind === "generator" &&
-      proto === this.realm.intrinsics.Generator
-    ) {
-      return;
-    }
+    let naturalProto =
+      kind === "Function" ? getNaturalFunctionPrototype(this.realm, obj) : this.realm.intrinsics[kind + "Prototype"];
+    if (proto === naturalProto) return;
 
     if (!obj.$IsClassPrototype || proto !== this.realm.intrinsics.null) {
       this.visitValue(proto);
@@ -445,6 +471,7 @@ export class ResidualHeapVisitor {
     this._registerAdditionalRoot(val);
 
     this.visitObjectProperties(val);
+    if (!val.mightNotBeLeakedObject()) return;
     const realm = this.realm;
     let lenProperty;
     if (val.mightBeLeakedObject()) {
@@ -560,6 +587,16 @@ export class ResidualHeapVisitor {
       if (homeObject instanceof ObjectValue && homeObject.$IsClassPrototype) {
         isClass = true;
       }
+    } else if (val instanceof ECMAScriptSourceFunctionValue && val.$HomeObject instanceof ObjectValue) {
+      let homeObject = val.$HomeObject;
+      if (homeObject.$IsClassPrototype && homeObject.originalConstructor instanceof ECMAScriptSourceFunctionValue) {
+        this.visitValue(homeObject.originalConstructor);
+      } else if (
+        homeObject instanceof ECMAScriptSourceFunctionValue &&
+        homeObject.$FunctionKind === "classConstructor"
+      ) {
+        this.visitValue(homeObject);
+      }
     }
     this.visitObjectProperties(val);
 
@@ -570,7 +607,16 @@ export class ResidualHeapVisitor {
       return;
     }
 
-    invariant(!(val instanceof NativeFunctionValue), "all native function values should be intrinsics");
+    if (val instanceof NativeFunctionValue) {
+      let diag = new CompilerDiagnostic(
+        "Internal native functions (such as Promise resolving functions) cannot be serialized in residual heap",
+        val.expressionLocation,
+        "PP0001",
+        "FatalError"
+      );
+      this.realm.handleError(diag);
+      throw new FatalError();
+    }
 
     invariant(val instanceof ECMAScriptSourceFunctionValue);
     invariant(val.constructor === ECMAScriptSourceFunctionValue);
@@ -602,8 +648,12 @@ export class ResidualHeapVisitor {
         getModuleIdIfNodeIsRequireFunction: this.modules.getGetModuleIdIfNodeIsRequireFunction(formalParameters, [val]),
       };
 
+      let fKind = val.$FunctionKind;
+      let isGen = fKind === "generator" || fKind === "asyncGenerator";
+      let isAsync = fKind === "async" || fKind === "asyncGenerator";
+
       traverse(
-        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code))])),
+        t.file(t.program([t.expressionStatement(t.functionExpression(null, formalParameters, code, isGen, isAsync))])),
         ClosureRefVisitor,
         null,
         state
@@ -634,14 +684,31 @@ export class ResidualHeapVisitor {
         for (let innerName of functionInfo.unbound.keys()) {
           let environment = this.resolveBinding(val, innerName);
           let residualBinding = this.getBinding(environment, innerName);
+          if (functionInfo.modified.has(innerName) && !residualBinding.modified) {
+            residualBinding.modified = true;
+            this._onBindingMarkedModified(residualBinding);
+          }
           this.visitBinding(val, residualBinding);
           residualFunctionBindings.set(innerName, residualBinding);
-          if (functionInfo.modified.has(innerName)) residualBinding.modified = true;
         }
       });
     }
     if (isClass && val.$HomeObject instanceof ObjectValue) {
       this._visitClass(val, val.$HomeObject);
+    } else if (!isClass && val.$HomeObject instanceof ObjectValue) {
+      let home = val.$HomeObject;
+      if (home.$IsClassPrototype) {
+        let ctor = home.properties.get("constructor");
+        if (
+          ctor !== undefined &&
+          ctor.descriptor instanceof PropertyDescriptor &&
+          ctor.descriptor.value instanceof ECMAScriptSourceFunctionValue
+        ) {
+          this.visitValue(ctor.descriptor.value);
+        }
+      } else if (home instanceof ECMAScriptSourceFunctionValue && home.$FunctionKind === "classConstructor") {
+        this.visitValue(home);
+      }
     }
   }
 
@@ -666,14 +733,42 @@ export class ResidualHeapVisitor {
     }
   }
 
-  // Addresses the case:
-  // let x = [];
-  // let y = [];
-  // function a() { x.push("hi"); }
-  // function b() { y.push("bye"); }
-  // function c() { return x.length + y.length; }
-  // Here we need to make sure that a and b both initialize x and y because x and y will be in the same
-  // captured scope because c captures both x and y.
+  _promoteCapturingScope(bindingState: BindingState, scope: Scope): void {
+    if (bindingState.capturingScopes.has(scope)) return;
+    bindingState.capturingScopes.add(scope);
+    for (let modifiedBinding of bindingState.capturedBindings) {
+      if (this.scope === scope) {
+        this._visitBindingHelper(modifiedBinding);
+      } else {
+        this._enqueueWithUnrelatedScope(scope, () => this._visitBindingHelper(modifiedBinding));
+      }
+    }
+  }
+
+  _onBindingMarkedModified(residualFunctionBinding: ResidualFunctionBinding): void {
+    let envRec = residualFunctionBinding.declarativeEnvironmentRecord;
+    if (envRec === null) return;
+    for (let funcToScopes of this.functionToCapturedScopes.values()) {
+      let bindingState = funcToScopes.get(envRec);
+      if (bindingState === undefined) continue;
+      if (!bindingState.capturedBindings.has(residualFunctionBinding)) {
+        bindingState.capturedBindings.add(residualFunctionBinding);
+        for (let capturingScope of bindingState.capturingScopes) {
+          this._enqueueWithUnrelatedScope(capturingScope, () => this._visitBindingHelper(residualFunctionBinding));
+        }
+      }
+      let readers = bindingState.readersByBinding.get(residualFunctionBinding);
+      if (readers !== undefined) {
+        bindingState.readersByBinding.delete(residualFunctionBinding);
+        for (let readerScope of readers) {
+          this._promoteCapturingScope(bindingState, readerScope);
+        }
+      }
+    }
+  }
+
+  // Addresses the case where multiple functions share a referentialized scope (which holds modified bindings):
+  // every function that initializes that captured scope must visit all modified bindings in it.
   visitBinding(scope: Scope, residualFunctionBinding: ResidualFunctionBinding): void {
     let environment = residualFunctionBinding.declarativeEnvironmentRecord;
     if (environment === null) return;
@@ -688,43 +783,66 @@ export class ResidualHeapVisitor {
     let bindingState = getOrDefault(funcToScopes, envRec, () => ({
       capturedBindings: new Set(),
       capturingScopes: new Set(),
+      readersByBinding: new Map(),
     }));
-    // If the binding is new for this bindingState, have all functions capturing bindings from that scope visit it
-    if (!bindingState.capturedBindings.has(residualFunctionBinding)) {
-      for (let capturingScope of bindingState.capturingScopes) {
-        this._enqueueWithUnrelatedScope(capturingScope, () => this._visitBindingHelper(residualFunctionBinding));
+
+    this._visitBindingHelper(residualFunctionBinding);
+
+    if (residualFunctionBinding.modified) {
+      if (!bindingState.capturedBindings.has(residualFunctionBinding)) {
+        for (let capturingScope of bindingState.capturingScopes) {
+          if (capturingScope !== scope) {
+            this._enqueueWithUnrelatedScope(capturingScope, () => this._visitBindingHelper(residualFunctionBinding));
+          }
+        }
+        bindingState.capturedBindings.add(residualFunctionBinding);
       }
-      bindingState.capturedBindings.add(residualFunctionBinding);
-    }
-    // If the function is new for this bindingState, visit all existent bindings in this scope
-    if (!bindingState.capturingScopes.has(scope)) {
-      invariant(this.scope === scope);
-      for (let residualBinding of bindingState.capturedBindings) this._visitBindingHelper(residualBinding);
-      bindingState.capturingScopes.add(scope);
+      this._promoteCapturingScope(bindingState, scope);
+    } else if (!bindingState.capturingScopes.has(scope)) {
+      let readers = getOrDefault(bindingState.readersByBinding, residualFunctionBinding, () => new Set());
+      readers.add(scope);
     }
   }
 
   resolveBinding(val: FunctionValue, name: string): EnvironmentRecord {
+    let lexEnv = val.$Environment;
+    if (lexEnv !== undefined) {
+      let envMap = this._resolvedBindingCache.get(lexEnv);
+      if (envMap !== undefined) {
+        let cached = envMap.get(name);
+        if (cached !== undefined) return cached;
+      }
+    }
     let doesNotMatter = true;
     let reference = this.logger.tryQuery(
-      () => Environment.ResolveBinding(this.realm, name, doesNotMatter, val.$Environment),
+      () => Environment.ResolveBinding(this.realm, name, doesNotMatter, lexEnv),
       undefined
     );
+    let resolved;
     if (
       reference === undefined ||
       Environment.IsUnresolvableReference(this.realm, reference) ||
       reference.base === this.globalEnvironmentRecord ||
       reference.base === this.globalEnvironmentRecord.$DeclarativeRecord
     ) {
-      return this.globalEnvironmentRecord;
+      resolved = this.globalEnvironmentRecord;
     } else {
       invariant(!Environment.IsUnresolvableReference(this.realm, reference));
       let referencedBase = reference.base;
       let referencedName: string = (reference.referencedName: any);
       invariant(referencedName === name);
       invariant(referencedBase instanceof DeclarativeEnvironmentRecord);
-      return referencedBase;
+      resolved = referencedBase;
     }
+    if (lexEnv !== undefined) {
+      let envMap = this._resolvedBindingCache.get(lexEnv);
+      if (envMap === undefined) {
+        envMap = new Map();
+        this._resolvedBindingCache.set(lexEnv, envMap);
+      }
+      envMap.set(name, resolved);
+    }
+    return resolved;
   }
 
   hasBinding(environment: EnvironmentRecord, name: string): boolean {
@@ -799,79 +917,158 @@ export class ResidualHeapVisitor {
   }
 
   _visitClass(classFunc: ECMAScriptSourceFunctionValue, classPrototype: ObjectValue): void {
+    let claimedMethods = new Set();
     let visitClassMethod = (propertyNameOrSymbol, methodFunc, methodType, isStatic) => {
-      if (methodFunc instanceof ECMAScriptSourceFunctionValue) {
-        // if the method does not have a $HomeObject, it's not a class method
-        if (methodFunc.$HomeObject !== undefined) {
-          if (methodFunc !== classFunc) {
-            this._visitClassMethod(methodFunc, methodType, classPrototype, !!isStatic);
-          }
-        }
+      if (methodFunc instanceof ECMAScriptSourceFunctionValue && methodFunc !== classFunc) {
+        claimedMethods.add(methodFunc);
+        this._visitClassMethod(classFunc, propertyNameOrSymbol, methodFunc, methodType, classPrototype, !!isStatic);
       }
     };
-    for (let [propertyName, method] of classPrototype.properties) {
-      withDescriptorValue(propertyName, method.descriptor, visitClassMethod);
-    }
-    for (let [symbol, method] of classPrototype.symbols) {
-      withDescriptorValue(symbol, method.descriptor, visitClassMethod);
+
+    if (classPrototype.properties.has("constructor")) {
+      let constructor = classPrototype.properties.get("constructor");
+      invariant(constructor !== undefined);
+      if (constructor.descriptor === undefined) {
+        classFunc.$HasEmptyConstructor = true;
+      }
     }
 
-    // handle class inheritance
+    for (let [propertyName, method] of classPrototype.properties) {
+      if (
+        propertyName === "constructor" &&
+        method.descriptor instanceof PropertyDescriptor &&
+        method.descriptor.value === classFunc
+      ) {
+        continue;
+      }
+      if (canEmbedClassProperty(classPrototype, classFunc, method, claimedMethods)) {
+        withDescriptorValue(propertyName, method.descriptor, visitClassMethod);
+      }
+    }
+    for (let [symbol, method] of classPrototype.symbols) {
+      if (canEmbedClassProperty(classPrototype, classFunc, method, claimedMethods)) {
+        withDescriptorValue(symbol, method.descriptor, visitClassMethod);
+      }
+    }
+
+    // handle class inheritance (including built-in superclasses such as Map, Set, Array, Error)
     if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
       this.visitValue(classFunc.$Prototype);
     }
 
-    if (classPrototype.properties.has("constructor")) {
-      let constructor = classPrototype.properties.get("constructor");
+    let visitStaticClassMethod = (propertyNameOrSymbol, methodFunc, methodType) => {
+      visitClassMethod(propertyNameOrSymbol, methodFunc, methodType, true);
+    };
+    for (let [propertyName, method] of classFunc.properties) {
+      if (
+        propertyName !== "prototype" &&
+        !ClassPropertiesToIgnore.has(propertyName) &&
+        method.descriptor !== undefined &&
+        !(propertyName === "length" && canIgnoreClassLengthProperty(classFunc, method.descriptor, this.logger)) &&
+        canEmbedClassProperty(classFunc, classFunc, method, claimedMethods)
+      ) {
+        withDescriptorValue(propertyName, method.descriptor, visitStaticClassMethod);
+      }
+    }
+    for (let [symbol, method] of classFunc.symbols) {
+      if (symbol.$IsPrivateName) {
+        let desc = method.descriptor;
+        if (desc instanceof PropertyDescriptor) {
+          let pName = symbol.$PrivateName;
+          invariant(typeof pName === "string");
+          if (desc.value !== undefined) {
+            let fnVal = desc.value;
+            if (!desc.writable && fnVal instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(fnVal);
+              this._visitClassMethod(classFunc, symbol, fnVal, "value", classPrototype, true, pName);
+            }
+          } else {
+            let getter = desc.get;
+            if (getter instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(getter);
+              this._visitClassMethod(classFunc, symbol, getter, "get", classPrototype, true, pName);
+            }
+            let setter = desc.set;
+            if (setter instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(setter);
+              this._visitClassMethod(classFunc, symbol, setter, "set", classPrototype, true, pName);
+            }
+          }
+        }
+        continue;
+      }
+      if (canEmbedClassProperty(classFunc, classFunc, method, claimedMethods)) {
+        withDescriptorValue(symbol, method.descriptor, visitStaticClassMethod);
+      }
+    }
 
-      invariant(constructor !== undefined);
-      // check if the constructor was deleted, as it can't really be deleted
-      // it just gets set to empty (the default again)
-      if (constructor.descriptor === undefined) {
-        classFunc.$HasEmptyConstructor = true;
-      } else {
-        let visitClassProperty = (propertyNameOrSymbol, methodFunc, methodType) => {
-          visitClassMethod(propertyNameOrSymbol, methodFunc, methodType, true);
-        };
-        // check if we have any static methods we need to include
-        let constructorFunc = Get(this.realm, classPrototype, "constructor");
-        invariant(constructorFunc instanceof ObjectValue);
-        for (let [propertyName, method] of constructorFunc.properties) {
-          if (
-            !ClassPropertiesToIgnore.has(propertyName) &&
-            method.descriptor !== undefined &&
-            !(
-              propertyName === "length" && canIgnoreClassLengthProperty(constructorFunc, method.descriptor, this.logger)
-            )
-          ) {
-            withDescriptorValue(propertyName, method.descriptor, visitClassProperty);
+    if (classFunc.$ClassInstanceElements !== undefined) {
+      for (let elem of classFunc.$ClassInstanceElements) {
+        if (elem.kind === "privateMethod") {
+          this.classMethodInstances.set(elem.func, {
+            classConstructor: classFunc,
+            classPrototype,
+            methodType: elem.methodKind,
+            classSuperNode: undefined,
+            classMethodIsStatic: false,
+            classMethodKey: elem.privateSymbol,
+            classMethodKeyNode: undefined,
+            classMethodComputed: false,
+            privateName: elem.privateName,
+          });
+          this.visitValue(elem.func);
+        } else {
+          let elemKey = elem.key instanceof StringValue ? elem.key.value : elem.key;
+          this.classMethodInstances.set(elem.initializer, {
+            classConstructor: classFunc,
+            classPrototype,
+            methodType: elem.isPrivate ? "privateField" : "field",
+            classSuperNode: undefined,
+            classMethodIsStatic: false,
+            classMethodKey: elemKey,
+            classMethodKeyNode: undefined,
+            classMethodComputed: elem.computed,
+            privateName: elem.privateName,
+          });
+          this.visitValue(elem.initializer);
+          if (!elem.isPrivate && elem.key instanceof SymbolValue) {
+            this.visitValue(elem.key);
           }
         }
       }
     }
+
     this.classMethodInstances.set(classFunc, {
+      classConstructor: classFunc,
       classPrototype,
       methodType: "constructor",
       classSuperNode: undefined,
       classMethodIsStatic: false,
+      classMethodKey: "constructor",
       classMethodKeyNode: undefined,
       classMethodComputed: false,
     });
   }
 
   _visitClassMethod(
+    classFunc: ECMAScriptSourceFunctionValue,
+    key: string | SymbolValue,
     methodFunc: ECMAScriptSourceFunctionValue,
     methodType: "get" | "set" | "value",
     classPrototype: ObjectValue,
-    isStatic: boolean
+    isStatic: boolean,
+    privateName?: string
   ): void {
     this.classMethodInstances.set(methodFunc, {
+      classConstructor: classFunc,
       classPrototype,
       methodType: methodType === "value" ? "method" : methodType,
       classSuperNode: undefined,
       classMethodIsStatic: isStatic,
+      classMethodKey: key,
       classMethodKeyNode: undefined,
-      classMethodComputed: !!methodFunc.$HasComputedName,
+      classMethodComputed: privateName !== undefined ? false : !!methodFunc.$HasComputedName,
+      privateName,
     });
   }
 
@@ -906,6 +1103,12 @@ export class ResidualHeapVisitor {
         invariant(dateValue !== undefined);
         this.visitValue(dateValue);
         return;
+      case "BigInt": {
+        let bigIntData = val.$BigIntData;
+        invariant(bigIntData !== undefined);
+        this.visitValue(bigIntData);
+        return;
+      }
       case "Float32Array":
       case "Float64Array":
       case "Int8Array":
@@ -932,6 +1135,30 @@ export class ResidualHeapVisitor {
       case "WeakSet":
         this.visitValueWeakSet(val);
         return;
+      case "Promise": {
+        if (!canSerializeSettledPromise(val)) {
+          let msg =
+            val.$PromiseState === "pending"
+              ? "Pending Promises cannot be serialized in residual heap"
+              : "Fulfilled Promises with thenable or abstract-object values cannot be serialized in residual heap";
+          let diag = new CompilerDiagnostic(msg, val.expressionLocation, "PP0001", "FatalError");
+          this.realm.handleError(diag);
+          throw new FatalError();
+        }
+        invariant(val.$PromiseResult instanceof Value);
+        this.visitValue(val.$PromiseResult);
+        return;
+      }
+      case "Generator": {
+        let diag = new CompilerDiagnostic(
+          "Generator objects cannot be serialized in residual heap",
+          val.expressionLocation,
+          "PP0001",
+          "FatalError"
+        );
+        this.realm.handleError(diag);
+        throw new FatalError();
+      }
       default:
         if (kind !== "Object") this.logger.logError(val, `Object of kind ${kind} is not supported in residual heap.`);
         if (this.realm.react.enabled && valueIsReactLibraryObject(this.realm, val, this.logger)) {
@@ -1054,9 +1281,36 @@ export class ResidualHeapVisitor {
   // Overridable hook for post-visiting the value.
   postProcessValue(val: Value): void {}
 
+  _isGlobalRootedFunction(fn: FunctionValue): boolean {
+    if (this._globalRootedFunctions.has(fn)) return true;
+    let creator = this.generatorTree.getCreator(fn);
+    if (creator !== undefined && creator !== this.globalGenerator) return false;
+    let visited = new Set();
+    let stack = [fn];
+    while (stack.length > 0) {
+      let cur = stack.pop();
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      let fScopes = this.values.get(cur);
+      if (fScopes === undefined) continue;
+      if (fScopes.has(this.globalGenerator) || this._globalRootedFunctions.has(cur)) {
+        this._globalRootedFunctions.add(fn);
+        return true;
+      }
+      for (let s of fScopes) {
+        if (s instanceof FunctionValue) {
+          let sc = this.generatorTree.getCreator(s);
+          if (sc === undefined || sc === this.globalGenerator) stack.push(s);
+        }
+      }
+    }
+    return false;
+  }
+
   _mark(val: Value): boolean {
     let scopes = this.values.get(val);
     if (scopes === undefined) this.values.set(val, (scopes = new Set()));
+    if (scopes.has(this.globalGenerator) && scopes.size > 1) return false;
     if (this.scope instanceof Generator && this.scope.effectsToApply === undefined) {
       // If we've already marked this value for any simple parent (non-effect carrying) generator,
       // then we don't need to re-mark it, as such a set of generators is reduced to the
@@ -1069,6 +1323,33 @@ export class ResidualHeapVisitor {
         if (scopes.has(g)) return false;
       }
     } else if (scopes.has(this.scope)) return false;
+
+    if (this._canPruneGlobalFunctionScopes) {
+      if (this.scope === this.globalGenerator) {
+        this._valuesWithGlobalRootedScope.add(val);
+      } else if (
+        this.scope instanceof FunctionValue &&
+        !(val instanceof AbstractValue) &&
+        !(val instanceof ObjectValue && ObjectValue.isIntrinsicDerivedObject(val)) &&
+        this._isGlobalRootedFunction(this.scope)
+      ) {
+        if (scopes.has(this.globalGenerator)) {
+          if (scopes.size === 1) scopes.add(this.scope);
+          return false;
+        }
+        if (!this._delayInitializations) {
+          if (this._valuesWithGlobalRootedScope.has(val)) {
+            if (scopes.size === 1) scopes.add(this.scope);
+            return false;
+          }
+          this._valuesWithGlobalRootedScope.add(val);
+        } else if (scopes.size >= 16) {
+          this._visitInUnrelatedScope(this.globalGenerator, val);
+          return false;
+        }
+      }
+    }
+
     scopes.add(this.scope);
     return true;
   }
@@ -1284,7 +1565,10 @@ export class ResidualHeapVisitor {
             let newValue = modifiedBinding.value;
             invariant(newValue);
             this.visitValue(newValue);
-            residualBinding.modified = true;
+            if (!residualBinding.modified) {
+              residualBinding.modified = true;
+              this._onBindingMarkedModified(residualBinding);
+            }
             let otherFunc = residualBinding.additionalFunctionOverridesValue;
             if (otherFunc !== undefined && otherFunc !== functionValue) {
               let otherNameVal = otherFunc._SafeGetDataPropertyValue("name");
@@ -1318,9 +1602,31 @@ export class ResidualHeapVisitor {
         return this.visitEquivalentValue(value);
       },
       visitLeakedBinding: (binding: Binding) => {
+        if (
+          additionalFunctionInfo !== undefined &&
+          !binding.hasLeaked &&
+          binding.environment.creatingOptimizedFunction !== additionalFunctionInfo.functionValue
+        ) {
+          let residualBinding = this.getBinding(binding.environment, binding.name);
+          residualBinding.modified = true;
+          let funcInstance = additionalFunctionInfo.instance;
+          if (funcInstance !== undefined) {
+            funcInstance.residualFunctionBindings.set(residualBinding.name, residualBinding);
+          }
+          additionalFunctionInfo.modifiedBindings.set(binding, residualBinding);
+          if (residualBinding.potentialReferentializationScopes.size === 0) {
+            this._enqueueWithUnrelatedScope(this.globalGenerator, () => {
+              this.visitBinding(this.globalGenerator, residualBinding);
+            });
+          }
+          residualBinding.potentialReferentializationScopes.add("GLOBAL");
+          return;
+        }
         let residualBinding = this.getBinding(binding.environment, binding.name);
+        let wasModified = residualBinding.modified;
         residualBinding.modified = true;
         residualBinding.hasLeaked = true;
+        if (!wasModified) this._onBindingMarkedModified(residualBinding);
         // This may not have been referentialized if the binding is a local of an optimized function.
         // in that case, we need to figure out which optimized function it is, and referentialize it in that scope.
         let commonScope = this._getCommonScope();

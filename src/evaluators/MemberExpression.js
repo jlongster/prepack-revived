@@ -7,7 +7,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-/* @flow strict-local */
+/* @flow */
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
@@ -34,6 +34,12 @@ export default function(
 
   // 2. Let baseValue be ? GetValue(baseReference).
   let baseValue = Environment.GetValue(realm, baseReference);
+
+  if (!ast.computed && (ast.property.type: string) === "PrivateName") {
+    let bv = RequireObjectCoercible(realm, baseValue, ast.object.loc);
+    let privKey = Environment.ResolvePrivateIdentifier(realm, env, (ast.property: any).id.name);
+    return new Reference(bv, privKey, strictCode);
+  }
 
   let propertyNameValue;
   if (ast.computed === true) {

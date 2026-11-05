@@ -13,12 +13,13 @@ import type { PropertyKeyValue } from "../types.js";
 import type { ECMAScriptFunctionValue } from "../values/index.js";
 import {
   EnvironmentRecord,
+  FunctionEnvironmentRecord,
   GlobalEnvironmentRecord,
   LexicalEnvironment,
   mightBecomeAnObject,
   Reference,
 } from "../environment.js";
-import { FatalError } from "../errors.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { Realm, ExecutionContext } from "../realm.js";
 import Value from "../values/Value.js";
 import {
@@ -31,8 +32,16 @@ import {
   ObjectValue,
   UndefinedValue,
 } from "../values/index.js";
-import { GetIterator, HasSomeCompatibleType, IsCallable, IsPropertyKey, IteratorStep, IteratorValue } from "./index.js";
-import { GeneratorStart } from "./generator.js";
+import {
+  GetIterator,
+  HasSomeCompatibleType,
+  IsCallable,
+  IsPropertyKey,
+  IteratorStep,
+  IteratorValue,
+  NewPromiseCapability,
+} from "./index.js";
+import { evaluateGeneratorCall } from "./generator.js";
 import {
   AbruptCompletion,
   Completion,
@@ -43,7 +52,7 @@ import {
   ThrowCompletion,
 } from "../completions.js";
 import { GetTemplateObject, GetV, GetThisValue } from "./get.js";
-import { Create, Environment, Functions, Leak, Join, To } from "../singletons.js";
+import { Environment, Functions, Leak, Join, To } from "../singletons.js";
 import invariant from "../invariant.js";
 import { createOperationDescriptor } from "../utils/generator.js";
 import type { BabelNodeExpression, BabelNodeSpreadElement, BabelNodeTemplateLiteral } from "@babel/types";
@@ -227,6 +236,8 @@ export function PrepareForOrdinaryCall(
 
   // 10. Set the VariableEnvironment of calleeContext to localEnv.
   calleeContext.variableEnvironment = localEnv;
+  let localEnvRec = localEnv.environmentRecord;
+  if (localEnvRec instanceof FunctionEnvironmentRecord) calleeContext.functionEnvironmentRecord = localEnvRec;
 
   // 11. If callerContext is not already suspended, suspend callerContext.
   callerContext.suspend();
@@ -379,23 +390,71 @@ export function OrdinaryCallEvaluateBody(
   } else {
     invariant(f instanceof ECMAScriptSourceFunctionValue);
     let F = f;
-    if (F.$FunctionKind === "generator") {
-      // 1. Perform ? FunctionDeclarationInstantiation(functionObject, argumentsList).
-      Functions.FunctionDeclarationInstantiation(realm, F, argumentsList);
-
-      // 2. Let G be ? OrdinaryCreateFromConstructor(functionObject, "%GeneratorPrototype%", « [[GeneratorState]], [[GeneratorContext]] »).
-      let G = Create.OrdinaryCreateFromConstructor(realm, F, "GeneratorPrototype", {
-        $GeneratorState: undefined,
-        $GeneratorContext: undefined,
-      });
-
-      // 3. Perform GeneratorStart(G, FunctionBody).
-      let code = F.$ECMAScriptCode;
-      invariant(code !== undefined);
-      GeneratorStart(realm, G, code);
-
-      // 4. Return Completion{[[Type]]: return, [[Value]]: G, [[Target]]: empty}.
-      return new ReturnCompletion(G, realm.currentLocation);
+    if (F.$FunctionKind === "asyncGenerator") {
+      let diag = new CompilerDiagnostic(
+        "Calling an async generator function during initialization is not yet supported",
+        realm.currentLocation,
+        "PP0001",
+        "FatalError"
+      );
+      realm.handleError(diag);
+      throw new FatalError();
+    } else if (F.$FunctionKind === "generator") {
+      let thisVal = realm.getRunningContext().lexicalEnvironment.environmentRecord.GetThisBinding();
+      let genObj = evaluateGeneratorCall(realm, F, thisVal, argumentsList);
+      return new ReturnCompletion(genObj, realm.currentLocation);
+    } else if (F.$FunctionKind === "async") {
+      if (realm.isInPureScope()) {
+        let diag = new CompilerDiagnostic(
+          "Calling an async function in pure scope is residualized",
+          realm.currentLocation,
+          "PP0001",
+          "FatalError"
+        );
+        realm.handleError(diag);
+        throw new FatalError();
+      }
+      let promiseCapability = NewPromiseCapability(realm, realm.intrinsics.Promise);
+      let priorSavedCompletion = realm.savedCompletion;
+      realm.savedCompletion = undefined;
+      let c;
+      try {
+        Functions.FunctionDeclarationInstantiation(realm, F, argumentsList);
+        let code = F.$ECMAScriptCode;
+        invariant(code !== undefined);
+        let context = realm.getRunningContext();
+        let evalRes = context.lexicalEnvironment.evaluateCompletionDeref(code, F.$Strict);
+        if (evalRes instanceof AbruptCompletion || evalRes instanceof JoinedNormalAndAbruptCompletions) {
+          c = evalRes;
+        }
+      } catch (e) {
+        realm.savedCompletion = priorSavedCompletion;
+        if (e instanceof ThrowCompletion) {
+          Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [e.value]);
+          return new ReturnCompletion(promiseCapability.promise, realm.currentLocation);
+        }
+        throw e;
+      }
+      c = Functions.incorporateSavedCompletion(realm, c);
+      realm.savedCompletion = priorSavedCompletion;
+      if (c === undefined) {
+        Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [realm.intrinsics.undefined]);
+      } else if (c instanceof ReturnCompletion) {
+        Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [c.value]);
+      } else if (c instanceof ThrowCompletion) {
+        Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [c.value]);
+      } else {
+        let diag = new CompilerDiagnostic(
+          "Async function with conditional abrupt completion during initialization is not yet supported",
+          realm.currentLocation,
+          "PP0001",
+          "FatalError"
+        );
+        realm.handleError(diag);
+        throw new FatalError();
+      }
+      invariant(promiseCapability.promise instanceof ObjectValue);
+      return new ReturnCompletion(promiseCapability.promise, realm.currentLocation);
     } else {
       // Recursion whose depth depends on abstract values is residualized before getting here (#1586):
       // see tryResidualizeRecursiveCall in recursion.js.
@@ -440,15 +499,26 @@ export function OrdinaryCallEvaluateBody(
         // c contains return completions and possibly also normal completions (which are implicitly "return undefined;")
         // and c also contains throw completions. Hence we assert:
         invariant(c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions);
+        let bottom = realm.intrinsics.__bottomValue;
+        if (
+          !c.containsSelectedCompletion(
+            r => (r instanceof NormalCompletion || r instanceof ReturnCompletion) && r.value !== bottom
+          )
+        ) {
+          return new ThrowCompletion(
+            Join.joinValuesOfSelectedCompletions(r => r instanceof ThrowCompletion && r.value !== bottom, c),
+            c.location
+          );
+        }
 
         // We want to add only the throw completions to priorSavedCompletion (but must keep their conditions in tact).
         // The (joined) return completions must be returned to our caller
         let rc = c;
         Completion.makeAllNormalCompletionsResultInUndefined(c);
-        c = Completion.normalizeSelectedCompletions(r => r instanceof ReturnCompletion, c);
-        invariant(c.containsSelectedCompletion(r => r instanceof NormalCompletion));
-        let rv = Join.joinValuesOfSelectedCompletions(r => r instanceof NormalCompletion, c);
-        if (c.containsSelectedCompletion(r => r instanceof ThrowCompletion)) {
+        c = Completion.normalizeSelectedCompletions(r => r instanceof ReturnCompletion && r.value !== bottom, c);
+        invariant(c.containsSelectedCompletion(r => r instanceof NormalCompletion && r.value !== bottom));
+        let rv = Join.joinValuesOfSelectedCompletions(r => r instanceof NormalCompletion && r.value !== bottom, c);
+        if (c.containsSelectedCompletion(r => r instanceof ThrowCompletion && r.value !== bottom)) {
           realm.composeWithSavedCompletion(c);
           if (rv instanceof AbstractValue) {
             rv = realm.simplifyAndRefineAbstractValue(rv);

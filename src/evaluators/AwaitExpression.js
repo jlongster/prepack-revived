@@ -11,7 +11,7 @@
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import { FatalError } from "../errors.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import type { Value } from "../values/index.js";
 import type { BabelNodeAwaitExpression } from "@babel/types";
 
@@ -21,5 +21,7 @@ export default function(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
+  let diag = new CompilerDiagnostic("AwaitExpression is not yet supported", ast.loc, "PP0001", "FatalError");
+  realm.handleError(diag);
   throw new FatalError("TODO #712: AwaitExpression");
 }

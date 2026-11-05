@@ -63,7 +63,8 @@ module.exports = {
     Uint8Array: true,
     Float32Array: true,
     Int32Array: true,
-    // ES 6
+    // ES 6+
+    BigInt: true,
     Promise: true,
     Map: true,
     Set: true,

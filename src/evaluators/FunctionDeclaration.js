@@ -26,25 +26,15 @@ export default function(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
-  if (ast.generator) {
-    // 1. If the function code for GeneratorDeclaration is strict mode code, let strict be true. Otherwise let strict be false.
-    let strict = strictCode || IsStrict(ast.body);
+  let strict = strictCode || IsStrict(ast.body);
+  let name = ast.id ? new StringValue(realm, ast.id.name) : new StringValue(realm, "default");
 
-    // 2. Let name be StringValue of BindingIdentifier.
-    let name;
-    if (ast.id) {
-      name = new StringValue(realm, ast.id.name);
-    } else {
-      name = new StringValue(realm, "default");
-    }
-
-    // 3. Let F be GeneratorFunctionCreate(Normal, FormalParameters, GeneratorBody, scope, strict).
-    let F = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
-
-    // 4. Let prototype be ObjectCreate(%GeneratorPrototype%).
-    let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
-
-    // 5. Perform DefinePropertyOrThrow(F, "prototype", PropertyDescriptor{[[Value]]: prototype, [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: false}).
+  if (ast.generator && ast.async) {
+    let F = Functions.AsyncGeneratorFunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
+    if (ast.id && ast.id.name) F.__originalName = ast.id.name;
+    F.loc = ast.loc;
+    let prototype = Create.ObjectCreate(realm, realm.intrinsics.AsyncGeneratorPrototype);
+    prototype.originalConstructor = F;
     Properties.DefinePropertyOrThrow(
       realm,
       F,
@@ -52,33 +42,46 @@ export default function(
       new PropertyDescriptor({
         value: prototype,
         writable: true,
+        enumerable: false,
         configurable: false,
       })
     );
-
-    // 6. Perform SetFunctionName(F, name).
     Functions.SetFunctionName(realm, F, name);
-
-    // 7 .Return F.
+    return F;
+  } else if (ast.generator) {
+    let F = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
+    if (ast.id && ast.id.name) F.__originalName = ast.id.name;
+    F.loc = ast.loc;
+    let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
+    prototype.originalConstructor = F;
+    Properties.DefinePropertyOrThrow(
+      realm,
+      F,
+      "prototype",
+      new PropertyDescriptor({
+        value: prototype,
+        writable: true,
+        enumerable: false,
+        configurable: false,
+      })
+    );
+    Functions.SetFunctionName(realm, F, name);
+    return F;
+  } else if (ast.async) {
+    let F = Functions.AsyncFunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
+    if (ast.id && ast.id.name) F.__originalName = ast.id.name;
+    F.loc = ast.loc;
+    Functions.SetFunctionName(realm, F, name);
     return F;
   } else {
-    // 1. If the function code for FunctionDeclaration is strict mode code, let strict be true. Otherwise let strict be false.
-    let strict = strictCode || IsStrict(ast.body);
-
-    // 2. Let name be StringValue of BindingIdentifier.
-    let name;
-    if (ast.id) {
-      name = new StringValue(realm, ast.id.name);
-    } else {
-      name = new StringValue(realm, "default");
-    }
-
     // 3. Let F be FunctionCreate(Normal, FormalParameters, FunctionBody, scope, strict).
-    let F = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
+    let F = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, env, strict, undefined, !!ast.async);
     if (ast.id && ast.id.name) F.__originalName = ast.id.name;
 
-    // 4. Perform MakeConstructor(F).
-    MakeConstructor(realm, F);
+    if (!ast.async) {
+      // 4. Perform MakeConstructor(F).
+      MakeConstructor(realm, F);
+    }
 
     // 5. Perform SetFunctionName(F, name).
     Functions.SetFunctionName(realm, F, name);

@@ -42,10 +42,10 @@ import { evaluateCallWithRecomputeTracking } from "./recompute.js";
 import { tryAvoidInliningExplosion } from "./inlining.js";
 import { SameValue } from "../methods/abstract.js";
 import { Construct } from "../methods/construct.js";
-import { UpdateEmpty } from "../methods/index.js";
+import { HasOwnProperty, UpdateEmpty } from "../methods/index.js";
 import { CreateListIterator } from "../methods/iterator.js";
 import { EvalPropertyName } from "../evaluators/ObjectExpression.js";
-import { Create, Environment, Join, Properties } from "../singletons.js";
+import { Create, Environment, Functions, Join, Properties } from "../singletons.js";
 import traverseFast from "../utils/traverse-fast.js";
 import invariant from "../invariant.js";
 import parse from "../utils/parse.js";
@@ -72,6 +72,93 @@ import type {
 } from "@babel/types";
 import * as t from "@babel/types";
 import { PropertyDescriptor } from "../descriptors.js";
+
+function initializeInstanceElements(realm: Realm, receiver: ObjectValue, F: ObjectValue): void {
+  if (!(F instanceof ECMAScriptSourceFunctionValue)) return;
+  let elements = F.$ClassInstanceElements;
+  if (elements === undefined || elements.length === 0) return;
+
+  for (let elem of elements) {
+    if (elem.kind !== "privateMethod") continue;
+    let sym = elem.privateSymbol;
+    let existing = receiver.symbols.get(sym);
+    let existingDesc = existing !== undefined ? existing.descriptor : undefined;
+    if (elem.methodKind === "method") {
+      if (existingDesc !== undefined) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Duplicate private method initialization");
+      }
+      Properties.DefinePropertyOrThrow(
+        realm,
+        receiver,
+        sym,
+        new PropertyDescriptor({
+          value: elem.func,
+          writable: false,
+          enumerable: false,
+          configurable: false,
+        })
+      );
+    } else {
+      let prevGet =
+        existingDesc instanceof PropertyDescriptor && !(existingDesc.get instanceof UndefinedValue)
+          ? existingDesc.get
+          : undefined;
+      let prevSet =
+        existingDesc instanceof PropertyDescriptor && !(existingDesc.set instanceof UndefinedValue)
+          ? existingDesc.set
+          : undefined;
+      if (
+        (elem.methodKind === "get" && prevGet !== undefined) ||
+        (elem.methodKind === "set" && prevSet !== undefined)
+      ) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Duplicate private accessor initialization");
+      }
+      Properties.DefinePropertyOrThrow(
+        realm,
+        receiver,
+        sym,
+        new PropertyDescriptor({
+          get: elem.methodKind === "get" ? elem.func : prevGet || realm.intrinsics.undefined,
+          set: elem.methodKind === "set" ? elem.func : prevSet || realm.intrinsics.undefined,
+          enumerable: false,
+          configurable: true,
+        })
+      );
+    }
+  }
+
+  for (let elem of elements) {
+    if (elem.kind !== "field") continue;
+    let initVal = elem.hasValue ? Call(realm, elem.initializer, receiver, []) : realm.intrinsics.undefined;
+    if (elem.setFunctionName && initVal instanceof ObjectValue && !HasOwnProperty(realm, initVal, "name")) {
+      Functions.SetFunctionName(
+        realm,
+        initVal,
+        elem.isPrivate && elem.privateName !== undefined ? "#" + elem.privateName : elem.key
+      );
+    }
+    if (elem.isPrivate) {
+      invariant(elem.key instanceof SymbolValue);
+      let existing = receiver.symbols.get(elem.key);
+      if (existing !== undefined && existing.descriptor !== undefined) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Duplicate private field initialization");
+      }
+      Properties.DefinePropertyOrThrow(
+        realm,
+        receiver,
+        elem.key,
+        new PropertyDescriptor({
+          value: initVal,
+          writable: true,
+          enumerable: false,
+          configurable: false,
+        })
+      );
+    } else {
+      Create.CreateDataPropertyOrThrow(realm, receiver, elem.key, initVal);
+    }
+  }
+}
 
 function InternalCall(
   realm: Realm,
@@ -259,6 +346,7 @@ function InternalConstruct(
       if (kind === "base") {
         invariant(thisArgument, "this wasn't initialized for some reason");
         OrdinaryCallBindThis(realm, F, calleeContext, thisArgument);
+        initializeInstanceElements(realm, thisArgument, F);
       }
 
       // 9. Let constructorEnv be the LexicalEnvironment of calleeContext.
@@ -849,7 +937,7 @@ export class FunctionImplementation {
 
     // 4. Let Strict be the value of the [[Strict]] internal slot of F.
     let Strict = F.$Strict;
-    if (!Strict) {
+    if (!Strict && F.$FunctionKind === "normal" && kind === "normal") {
       Properties.DefinePropertyOrThrow(
         realm,
         F,
@@ -894,8 +982,10 @@ export class FunctionImplementation {
     ParameterList: Array<BabelNodeLVal>,
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
-    Strict: boolean
+    Strict: boolean,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue {
+    if (isAsync === true) return this.AsyncGeneratorFunctionCreate(realm, kind, ParameterList, Body, Scope, Strict);
     // 1. Let functionPrototype be the intrinsic object %Generator%.
     let functionPrototype = realm.intrinsics.Generator;
 
@@ -903,7 +993,44 @@ export class FunctionImplementation {
     let F = this.FunctionAllocate(realm, functionPrototype, Strict, "generator");
 
     // 3. Return FunctionInitialize(F, kind, ParameterList, Body, Scope).
-    return this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
+    if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
+    return result;
+  }
+
+  AsyncFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method" | "arrow",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
+    Strict: boolean
+  ): ECMAScriptSourceFunctionValue {
+    let functionPrototype = realm.intrinsics.AsyncFunctionPrototype;
+    let F = this.FunctionAllocate(realm, functionPrototype, Strict, "async");
+    F.$IsAsync = true;
+    let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
+    if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
+    return result;
+  }
+
+  AsyncGeneratorFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
+    Strict: boolean
+  ): ECMAScriptSourceFunctionValue {
+    let functionPrototype = realm.intrinsics.AsyncGenerator;
+    let F = this.FunctionAllocate(realm, functionPrototype, Strict, "asyncGenerator");
+    F.$IsAsync = true;
+    let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
+    F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
+    if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
+    return result;
   }
 
   // ECMA262 9.2.7
@@ -945,14 +1072,18 @@ export class FunctionImplementation {
     realm: Realm,
     functionPrototype: ObjectValue | AbstractObjectValue,
     strict: boolean,
-    functionKind: "normal" | "non-constructor" | "generator"
+    functionKind: "normal" | "non-constructor" | "generator" | "async" | "asyncGenerator"
   ): ECMAScriptSourceFunctionValue {
     // 1. Assert: Type(functionPrototype) is Object.
     invariant(functionPrototype instanceof ObjectValue, "expected functionPrototype to be an object");
 
-    // 2. Assert: functionKind is either "normal", "non-constructor" or "generator".
+    // 2. Assert: functionKind is valid.
     invariant(
-      functionKind === "normal" || functionKind === "non-constructor" || functionKind === "generator",
+      functionKind === "normal" ||
+        functionKind === "non-constructor" ||
+        functionKind === "generator" ||
+        functionKind === "async" ||
+        functionKind === "asyncGenerator",
       "invalid functionKind"
     );
 
@@ -1206,9 +1337,9 @@ export class FunctionImplementation {
       if (savedCompletion instanceof JoinedNormalAndAbruptCompletions) {
         let subsequentEffects = realm.getCapturedEffects(c);
         realm.stopEffectCaptureAndUndoEffects(savedCompletion);
+        realm.savedCompletion = savedCompletion.composedWith;
         let joinedEffects = Join.composeWithEffects(savedCompletion, subsequentEffects);
         realm.applyEffects(joinedEffects);
-        realm.savedCompletion = savedCompletion.composedWith;
         if (realm.savedCompletion !== undefined) return this.incorporateSavedCompletion(realm, joinedEffects.result);
         return joinedEffects.result;
       }
@@ -1248,8 +1379,10 @@ export class FunctionImplementation {
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
     Strict: boolean,
-    prototype?: ObjectValue
+    prototype?: ObjectValue,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue {
+    if (isAsync === true) return this.AsyncFunctionCreate(realm, kind, ParameterList, Body, Scope, Strict);
     // 1. If the prototype argument was not passed, then
     if (!prototype) {
       // a. Let prototype be the intrinsic object %FunctionPrototype%.
@@ -1540,6 +1673,10 @@ export class FunctionImplementation {
     return realm.intrinsics.undefined;
   }
 
+  InitializeInstanceElements(realm: Realm, receiver: ObjectValue, F: ObjectValue): void {
+    initializeInstanceElements(realm, receiver, F);
+  }
+
   // ECMA 14.3.8
   DefineMethod(
     realm: Realm,
@@ -1571,7 +1708,16 @@ export class FunctionImplementation {
     }
 
     // 6. Let closure be FunctionCreate(kind, StrictFormalParameters, FunctionBody, scope, strict). If functionPrototype was passed as a parameter, then pass its value as the prototype optional argument of FunctionCreate.
-    let closure = this.FunctionCreate(realm, kind, prop.params, prop.body, scope, strict, functionPrototype);
+    let closure = this.FunctionCreate(
+      realm,
+      kind,
+      prop.params,
+      prop.body,
+      scope,
+      strict,
+      functionPrototype,
+      !!prop.async
+    );
 
     // 7. Perform MakeMethod(closure, object).
     this.MakeMethod(realm, closure, obj);

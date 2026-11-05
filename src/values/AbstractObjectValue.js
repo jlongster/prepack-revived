@@ -27,6 +27,7 @@ import {
 } from "./index.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import { IsDataDescriptor } from "../methods/index.js";
+import { createShapedValue } from "../utils/ShapedValues.js";
 import { Leak, Join, Widen } from "../singletons.js";
 import invariant from "../invariant.js";
 import { createOperationDescriptor, type OperationDescriptor } from "../utils/generator.js";
@@ -647,7 +648,7 @@ export default class AbstractObjectValue extends AbstractValue {
         }
         return getEnvironmentProperty(this.$Realm, this, Receiver, P);
       }
-      let generateAbstractGet = () => {
+      let generateAbstractGet = (isPure: boolean) => {
         let ob = Receiver;
         if (this.kind === "explicit conversion to object") ob = this.args[0];
         let type = Value;
@@ -659,14 +660,9 @@ export default class AbstractObjectValue extends AbstractValue {
         let shape = shapeContainer.shape;
         let propertyShape, propertyGetter;
         // propertyShape expects only a string value
-        if (
-          (realm.instantRender.enabled || realm.react.enabled) &&
-          shape !== undefined &&
-          (typeof P === "string" || P instanceof StringValue)
-        ) {
+        if (shape !== undefined && (typeof P === "string" || P instanceof StringValue)) {
           propertyShape = shape.getPropertyShape(P instanceof StringValue ? P.value : P);
-          if (propertyShape !== undefined) {
-            type = propertyShape.getAbstractType();
+          if (propertyShape !== undefined && (realm.instantRender.enabled || realm.react.enabled)) {
             propertyGetter = propertyShape.getGetter();
           }
         }
@@ -674,35 +670,40 @@ export default class AbstractObjectValue extends AbstractValue {
         if (typeof P === "string") {
           P = new StringValue(this.$Realm, P);
         }
-        // Create an temporal array with widened properties
-        if (type === ArrayValue) {
-          return ArrayValue.createTemporalWithWidenedNumericProperty(
-            realm,
-            [ob, P],
-            createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter })
-          );
-        }
-        let propAbsVal = AbstractValue.createTemporalFromBuildFunction(
-          realm,
-          type,
-          [ob, P],
-          createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter }),
-          {
-            skipInvariant: true,
-            isPure: true,
-            shape: propertyShape,
+        let key = P;
+        let read = (readType, readShape) => {
+          // Create an temporal array with widened properties
+          if (readType === ArrayValue) {
+            let array = ArrayValue.createTemporalWithWidenedNumericProperty(
+              realm,
+              [ob, key],
+              createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter })
+            );
+            array.shape = readShape;
+            return array;
           }
-        );
-        return propAbsVal;
+          return AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            readType,
+            [ob, key],
+            createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter }),
+            {
+              skipInvariant: true,
+              isPure,
+              shape: readShape,
+            }
+          );
+        };
+        if (propertyShape !== undefined) return createShapedValue(realm, propertyShape, read);
+        return read(type, undefined);
       };
       if (this.isSimpleObject() && this.isIntrinsic()) {
-        return generateAbstractGet();
+        return generateAbstractGet(true);
       } else if (this.$Realm.isInPureScope()) {
-        // This object might have leaked to a getter.
+        // This object might be null/undefined or have a getter that throws or has side effects.
         Leak.value(this.$Realm, Receiver);
-        // The getter might throw anything.
         return this.$Realm.evaluateWithPossibleThrowCompletion(
-          generateAbstractGet,
+          () => generateAbstractGet(false),
           TypesDomain.topVal,
           ValuesDomain.topVal
         );
@@ -759,7 +760,7 @@ export default class AbstractObjectValue extends AbstractValue {
     if (!(P instanceof AbstractValue)) return this.$Get(P, Receiver);
     let keyVal: AbstractValue = P;
     if (this.values.isTop() || !this.isSimpleObject()) {
-      if (this.isSimpleObject() && this.isIntrinsic()) {
+      if (this.isSimpleObject() && this.isIntrinsic() && !P.mightBeObject()) {
         return AbstractValue.createTemporalFromBuildFunction(
           this.$Realm,
           Value,
@@ -813,12 +814,18 @@ export default class AbstractObjectValue extends AbstractValue {
         Leak.value(this.$Realm, Receiver);
         // Coercion can only have effects on anything reachable from the key.
         Leak.value(this.$Realm, P);
-        return AbstractValue.createTemporalFromBuildFunction(
-          this.$Realm,
-          Value,
-          [Receiver, P],
-          createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
-          { skipInvariant: true, isPure: true }
+        let propKey = P;
+        return this.$Realm.evaluateWithPossibleThrowCompletion(
+          () =>
+            AbstractValue.createTemporalFromBuildFunction(
+              this.$Realm,
+              Value,
+              [Receiver, propKey],
+              createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
+              { skipInvariant: true }
+            ),
+          TypesDomain.topVal,
+          ValuesDomain.topVal
         );
       }
       let error = new CompilerDiagnostic(

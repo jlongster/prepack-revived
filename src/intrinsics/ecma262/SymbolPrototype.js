@@ -102,4 +102,23 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
   // ECMA262 19.4.3.5
   obj.defineNativeProperty(realm.intrinsics.SymbolToStringTag, new StringValue(realm, "Symbol"), { writable: false });
+
+  // ES2019 Symbol.prototype.description
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    obj.defineNativeGetter("description", context => {
+      let s = context.throwIfNotConcrete();
+      let sym;
+      if (s instanceof SymbolValue) {
+        sym = s;
+      } else {
+        if (!(s instanceof ObjectValue) || !s.$SymbolData) {
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+        }
+        sym = s.$SymbolData;
+      }
+      sym.throwIfNotConcreteSymbol();
+      invariant(sym instanceof SymbolValue);
+      return sym.$Description || realm.intrinsics.undefined;
+    });
+  }
 }

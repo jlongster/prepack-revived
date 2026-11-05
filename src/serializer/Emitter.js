@@ -250,7 +250,11 @@ export class Emitter {
       let { body, dependencies, func } = a.shift();
       // If body is not generator body no need to wait for it.
       if (this._isGeneratorBody(body) && body !== currentBody) {
-        this._emitAfterWaitingForGeneratorBody(body, dependencies, func);
+        if (this._activeGeneratorStack.includes(body)) {
+          this._emitAfterWaitingForGeneratorBody(body, dependencies, func);
+        } else {
+          this.emitNowOrAfterWaitingForDependencies(dependencies, func, currentBody);
+        }
       } else {
         this.emitNowOrAfterWaitingForDependencies(dependencies, func, body);
       }
@@ -372,6 +376,18 @@ export class Emitter {
           result = recurse(val.$DateValue);
           if (result !== undefined) return result;
           break;
+        case "BigInt":
+          if (val.$BigIntData instanceof Value) {
+            result = recurse(val.$BigIntData);
+            if (result !== undefined) return result;
+          }
+          break;
+        case "Promise":
+          if (val.$PromiseResult instanceof Value) {
+            result = recurse(val.$PromiseResult);
+            if (result !== undefined) return result;
+          }
+          break;
         case "ReactElement":
           let realm = val.$Realm;
           let type = getProperty(realm, val, "type");
@@ -430,7 +446,11 @@ export class Emitter {
         this._emitAfterWaitingForValue(delayReason, dependencies, targetBody, func);
       } else if (this._isGeneratorBody(delayReason)) {
         // delayReason is a generator body.
-        this._emitAfterWaitingForGeneratorBody(delayReason, dependencies, func);
+        if (this._activeGeneratorStack.includes(delayReason)) {
+          this._emitAfterWaitingForGeneratorBody(delayReason, dependencies, func);
+        } else {
+          this.emitNowOrAfterWaitingForDependencies(dependencies, func, this._body);
+        }
       } else {
         // Unknown delay reason.
         invariant(false);

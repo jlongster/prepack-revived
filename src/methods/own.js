@@ -68,6 +68,7 @@ export function OrdinaryOwnPropertyKeys(
 
   // 4. For each own property key P of O that is a Symbol, in ascending chronological order of property creation
   for (let key of o.symbols.keys()) {
+    if (key.$IsPrivateName) continue;
     // i. Add P as the last element of keys.
     keys.push(key);
   }

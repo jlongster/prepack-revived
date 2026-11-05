@@ -10,12 +10,20 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { NativeFunctionValue, BooleanValue } from "../../values/index.js";
+import { AbstractValue, NativeFunctionValue, BooleanValue } from "../../values/index.js";
 import { Create, To } from "../../singletons.js";
 
 export default function(realm: Realm): NativeFunctionValue {
   // ECMA262 19.3.1.1
   let func = new NativeFunctionValue(realm, "Boolean", "Boolean", 1, (context, [value], argCount, NewTarget) => {
+    // ToBoolean of an abstract value has no side effects: Boolean(x) is !!x.
+    if (!NewTarget && value instanceof AbstractValue && value.mightNotBeTrue() && value.mightNotBeFalse()) {
+      let negated = AbstractValue.createFromUnaryOp(realm, "!", value, true, undefined, true);
+      if (negated instanceof AbstractValue)
+        return AbstractValue.createFromUnaryOp(realm, "!", negated, true, undefined, true);
+      if (negated instanceof BooleanValue) return new BooleanValue(realm, !negated.value);
+    }
+
     // 1. Let b be ToBoolean(value).
     let b = new BooleanValue(realm, To.ToBooleanPartial(realm, value));
 

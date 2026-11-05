@@ -54,14 +54,17 @@ export function mapCases<T: ConcreteValue>(
       true,
       true
     );
-    let runCase = () => Path.withCondition(condition, () => Path.withCondition(fact, () => f(c)));
+    let runCase = () =>
+      Path.withCondition(condition, () =>
+        Path.withCondition(fact, () => realm.evaluateForEffects(() => f(c), undefined, "mapCases"))
+      );
     for (let [otherC, otherCondition] of conditions) {
       if (otherC !== c && otherCondition instanceof AbstractValue) {
         let prev = runCase;
         runCase = () => Path.withInverseCondition(otherCondition, prev);
       }
     }
-    let effects = realm.evaluateForEffects(runCase, undefined, "mapCases");
+    let effects = runCase();
     joinedEffects = joinedEffects === undefined ? effects : Join.joinEffects(condition, effects, joinedEffects);
   }
   invariant(joinedEffects !== undefined);

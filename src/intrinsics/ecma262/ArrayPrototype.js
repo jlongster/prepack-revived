@@ -33,6 +33,7 @@ import invariant from "../../invariant.js";
 import { SameValueZeroPartial, AbstractRelationalComparison } from "../../methods/abstract.js";
 import {
   StrictEqualityComparisonPartial,
+  IsArray,
   IsCallable,
   IsConcatSpreadable,
   IsExtensible,
@@ -48,6 +49,17 @@ import { PropertyDescriptor } from "../../descriptors.js";
 import { createOperationDescriptor } from "../../utils/generator.js";
 import { IntervalDomain } from "../../domains/index.js";
 import { mapCases } from "../../utils/cases.js";
+import { ShapeInformation } from "../../utils/ShapeInformation.js";
+import type { ShapeInformationInterface } from "../../types.js";
+
+const indexShape = new ShapeInformation({ kind: "scalar", jsType: "integral" }, undefined, undefined, {});
+
+// Shapes of the (element, index) arguments of a callback invoked on the elements of an abstract
+// input array whose shape is known.
+function callbackArgShapes(O: ObjectValue | AbstractObjectValue): void | Array<void | ShapeInformationInterface> {
+  if (!(O instanceof ArrayValue) || O.shape === undefined) return undefined;
+  return [O.shape.getPropertyShape("0"), indexShape];
+}
 
 // The maximum number of distinct values an abstract array length may have for array methods to
 // evaluate once per possible length and join the results.
@@ -58,13 +70,27 @@ export default function(realm: Realm, obj: ObjectValue): void {
   // one of a few numbers: the method is evaluated once per possible length, under the path
   // condition that the length has that value (which To.ToLength picks up), and the effects and
   // results are joined.
+  const MUTATING_ARRAY_METHODS = new Set([
+    "copyWithin",
+    "fill",
+    "pop",
+    "push",
+    "reverse",
+    "shift",
+    "sort",
+    "splice",
+    "unshift",
+  ]);
+
   function defineArrayMethod(
     name: string,
     length: number,
     callback: (context: Value, args: Array<Value>, argCount: number) => Value
   ): void {
     obj.defineNativeMethod(name, length, (context, args, argCount) => {
-      if (context instanceof ArrayValue && !ArrayValue.isIntrinsicAndHasWidenedNumericProperty(context)) {
+      if (context instanceof ArrayValue && ArrayValue.isIntrinsicAndHasWidenedNumericProperty(context)) {
+        if (MUTATING_ARRAY_METHODS.has(name)) context.recordWidenedMutation();
+      } else if (context instanceof ArrayValue) {
         let lenVal = Get(realm, context, "length");
         if (lenVal instanceof AbstractValue) {
           let lengths = IntervalDomain.enumerate(lenVal, MAX_LENGTH_CASES, true);
@@ -467,6 +493,28 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     if (
       ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
+      O instanceof ArrayValue &&
+      !O._widenedMutated &&
+      ArrayValue.getWidenedElementType(O) !== Value &&
+      callbackfn === realm.intrinsics.Boolean &&
+      (!thisArg || thisArg instanceof UndefinedValue) &&
+      !realm.instantRender.enabled &&
+      realm.generator !== undefined &&
+      O.$GetOwnProperty("filter") === undefined
+    ) {
+      return ArrayValue.createTemporalWithWidenedNumericProperty(
+        realm,
+        [O, new StringValue(realm, "filter"), callbackfn],
+        createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
+        undefined,
+        ArrayValue.getWidenedElementType(O),
+        true,
+        true
+      );
+    }
+
+    if (
+      ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
       realm.isInPureScope() &&
       O.$GetOwnProperty("filter") === undefined
     ) {
@@ -490,12 +538,19 @@ export default function(realm: Realm, obj: ObjectValue): void {
         Leak.value(realm, callbackfn);
         if (thisArg) Leak.value(realm, thisArg);
       }
-      return ArrayValue.createTemporalWithWidenedNumericProperty(
+      let filtered = ArrayValue.createTemporalWithWidenedNumericProperty(
         realm,
         args,
         createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
-        possibleNestedOptimizedFunctions
+        possibleNestedOptimizedFunctions,
+        Value,
+        true,
+        false,
+        callbackArgShapes(O)
       );
+      // The elements of the filtered array are elements of O.
+      if (O instanceof ArrayValue) filtered.shape = O.shape;
+      return filtered;
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
@@ -754,9 +809,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
       // If we have an object that is an array with widened numeric properties, then
       // we can return a temporal here as we know nothing of the array's properties.
       // This should be safe to do, as we never expose the internals of the array.
+      let pureFrom = !fromIndex || fromIndex instanceof UndefinedValue || To.IsToNumberPure(realm, fromIndex);
       if (
         ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
-        realm.isInPureScope() &&
+        (realm.isInPureScope() || pureFrom) &&
         O.$GetOwnProperty("includes") === undefined
       ) {
         let args = [O, new StringValue(realm, "includes"), searchElement];
@@ -767,7 +823,8 @@ export default function(realm: Realm, obj: ObjectValue): void {
           realm,
           BooleanValue,
           args,
-          createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
+          createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
+          pureFrom ? { isPure: true } : {}
         );
       }
 
@@ -837,9 +894,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // If we have an object that is an array with widened numeric properties, then
     // we can return a temporal here as we know nothing of the array's properties.
     // This should be safe to do, as we never expose the internals of the array.
+    let pureFrom = !fromIndex || fromIndex instanceof UndefinedValue || To.IsToNumberPure(realm, fromIndex);
     if (
       ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
-      realm.isInPureScope() &&
+      (realm.isInPureScope() || pureFrom) &&
       O.$GetOwnProperty("indexOf") === undefined
     ) {
       let args = [O, new StringValue(realm, "indexOf"), searchElement];
@@ -850,7 +908,8 @@ export default function(realm: Realm, obj: ObjectValue): void {
         realm,
         NumberValue,
         args,
-        createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
+        createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
+        pureFrom ? { isPure: true } : {}
       );
     }
 
@@ -1084,21 +1143,24 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // If we have an object that is an array with widened numeric properties, then
     // we can return a temporal here as we know nothing of the array's properties.
     // This should be safe to do, as we never expose the internals of the array.
-    if (
-      ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
-      realm.isInPureScope() &&
-      O.$GetOwnProperty("join") === undefined
-    ) {
-      let args = [O, new StringValue(realm, "join")];
-      if (separator) {
-        args.push(separator);
+    if (ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) && O.$GetOwnProperty("join") === undefined) {
+      let elemType = ArrayValue.getWidenedElementType(O);
+      let pureElems =
+        elemType === StringValue || elemType === BooleanValue || Value.isTypeCompatibleWith(elemType, NumberValue);
+      let pureSep = !separator || separator instanceof UndefinedValue || To.IsToStringPure(realm, separator);
+      if (realm.isInPureScope() || (pureElems && pureSep)) {
+        let args = [O, new StringValue(realm, "join")];
+        if (separator) {
+          args.push(separator);
+        }
+        return AbstractValue.createTemporalFromBuildFunction(
+          realm,
+          StringValue,
+          args,
+          createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
+          pureElems && pureSep ? { isPure: true } : {}
+        );
       }
-      return AbstractValue.createTemporalFromBuildFunction(
-        realm,
-        StringValue,
-        args,
-        createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
-      );
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
@@ -1262,9 +1324,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // If we have an object that is an array with widened numeric properties, then
     // we can return a temporal here as we know nothing of the array's properties.
     // This should be safe to do, as we never expose the internals of the array.
+    let pureFrom = !fromIndex || fromIndex instanceof UndefinedValue || To.IsToNumberPure(realm, fromIndex);
     if (
       ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
-      realm.isInPureScope() &&
+      (realm.isInPureScope() || pureFrom) &&
       O.$GetOwnProperty("lastIndexOf") === undefined
     ) {
       let args = [O, new StringValue(realm, "lastIndexOf"), searchElement];
@@ -1275,7 +1338,8 @@ export default function(realm: Realm, obj: ObjectValue): void {
         realm,
         NumberValue,
         args,
-        createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
+        createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
+        pureFrom ? { isPure: true } : {}
       );
     }
 
@@ -1351,7 +1415,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
         realm,
         args,
         createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
-        possibleNestedOptimizedFunctions
+        possibleNestedOptimizedFunctions,
+        Value,
+        true,
+        false,
+        callbackArgShapes(O)
       );
     }
 
@@ -2048,17 +2116,27 @@ export default function(realm: Realm, obj: ObjectValue): void {
     // 1. Let O be ? ToObject(this value).
     let O = To.ToObject(realm, context);
 
-    if (
-      ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) &&
-      realm.isInPureScope() &&
-      O.$GetOwnProperty("slice") === undefined
-    ) {
-      let newArgs = [O, new StringValue(realm, "slice"), start, end];
-      return ArrayValue.createTemporalWithWidenedNumericProperty(
-        realm,
-        newArgs,
-        createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL")
-      );
+    if (ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O) && O.$GetOwnProperty("slice") === undefined) {
+      let elemType = ArrayValue.getWidenedElementType(O);
+      let nonObjElems = !Value.isTypeCompatibleWith(ObjectValue, elemType);
+      let pureBounds =
+        (!start || start instanceof UndefinedValue || To.IsToNumberPure(realm, start)) &&
+        (!end || end instanceof UndefinedValue || To.IsToNumberPure(realm, end));
+      if (
+        realm.isInPureScope() ||
+        (nonObjElems && pureBounds && !(O instanceof ObjectValue && O.properties.has("constructor")))
+      ) {
+        let newArgs = [O, new StringValue(realm, "slice"), start, end];
+        return ArrayValue.createTemporalWithWidenedNumericProperty(
+          realm,
+          newArgs,
+          createOperationDescriptor("UNKNOWN_ARRAY_METHOD_PROPERTY_CALL"),
+          undefined,
+          elemType,
+          nonObjElems && pureBounds,
+          O instanceof ArrayValue && O._widenedIsDense === true
+        );
+      }
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
@@ -2758,6 +2836,87 @@ export default function(realm: Realm, obj: ObjectValue): void {
   // ECMA262 22.1.3.30
   obj.defineNativeProperty("values", realm.intrinsics.ArrayProto_values);
 
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    const flattenIntoArray = (
+      target: ObjectValue,
+      source: ObjectValue,
+      sourceLen: number,
+      start: number,
+      depth: number,
+      mapperFunction?: Value,
+      thisArg?: Value
+    ): number => {
+      let targetIndex = start;
+      let sourceIndex = 0;
+      while (sourceIndex < sourceLen) {
+        let P = new StringValue(realm, sourceIndex + "");
+        let exists = HasProperty(realm, source, P);
+        if (exists === true) {
+          let element = Get(realm, source, P);
+          if (mapperFunction !== undefined) {
+            element = Call(realm, mapperFunction, thisArg || realm.intrinsics.undefined, [
+              element,
+              new NumberValue(realm, sourceIndex),
+              source,
+            ]);
+          }
+          let shouldFlatten = false;
+          if (depth > 0) {
+            shouldFlatten = IsArray(realm, element);
+          }
+          if (shouldFlatten === true) {
+            let elemObj = element.throwIfNotConcreteObject();
+            let elementLen = To.ToLength(realm, Get(realm, elemObj, "length"));
+            targetIndex = flattenIntoArray(target, elemObj, elementLen, targetIndex, depth - 1);
+          } else {
+            if (targetIndex >= Math.pow(2, 53) - 1) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "array length overflow");
+            }
+            Create.CreateDataPropertyOrThrow(realm, target, new StringValue(realm, targetIndex + ""), element);
+            targetIndex += 1;
+          }
+        }
+        sourceIndex += 1;
+      }
+      return targetIndex;
+    };
+
+    // ES2019 Array.prototype.flat ( [ depth ] )
+    obj.defineNativeMethod("flat", 0, (context, [depth]) => {
+      let O = To.ToObject(realm, context).throwIfNotConcreteObject();
+      let sourceLen = To.ToLength(realm, Get(realm, O, "length"));
+      let depthNum = 1;
+      if (depth !== undefined && !(depth instanceof UndefinedValue)) {
+        depthNum = To.ToInteger(realm, depth.throwIfNotConcrete());
+      }
+      let A = Create.ArraySpeciesCreate(realm, O, 0);
+      flattenIntoArray(A, O, sourceLen, 0, depthNum);
+      return A;
+    });
+
+    // ES2019 Array.prototype.flatMap ( mapperFunction [ , thisArg ] )
+    obj.defineNativeMethod("flatMap", 1, (context, [mapperFunction, thisArg]) => {
+      let O = To.ToObject(realm, context).throwIfNotConcreteObject();
+      let sourceLen = To.ToLength(realm, Get(realm, O, "length"));
+      if (!IsCallable(realm, mapperFunction)) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "mapperFunction is not callable");
+      }
+      let A = Create.ArraySpeciesCreate(realm, O, 0);
+      flattenIntoArray(A, O, sourceLen, 0, 1, mapperFunction, thisArg || realm.intrinsics.undefined);
+      return A;
+    });
+
+    // ES2022 Array.prototype.at ( index )
+    obj.defineNativeMethod("at", 1, (context, [index]) => {
+      let O = To.ToObject(realm, context);
+      let len = To.ToLength(realm, Get(realm, O, "length"));
+      let relativeIndex = To.ToInteger(realm, index.throwIfNotConcrete());
+      let k = relativeIndex >= 0 ? relativeIndex : len + relativeIndex;
+      if (k < 0 || k >= len) return realm.intrinsics.undefined;
+      return Get(realm, O, new StringValue(realm, k + ""));
+    });
+  }
+
   // ECMA262 22.1.3.32
   {
     // 1. Let unscopableList be ObjectCreate(null).
@@ -2786,6 +2945,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 9. Perform CreateDataProperty(unscopableList, "values", true).
     Create.CreateDataProperty(realm, unscopableList, "values", realm.intrinsics.true);
+    if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+      Create.CreateDataProperty(realm, unscopableList, "flat", realm.intrinsics.true);
+      Create.CreateDataProperty(realm, unscopableList, "flatMap", realm.intrinsics.true);
+      Create.CreateDataProperty(realm, unscopableList, "at", realm.intrinsics.true);
+    }
 
     // 10. Assert: Each of the above calls will return true.
 

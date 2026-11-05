@@ -115,6 +115,7 @@ export default class StringExotic extends ObjectValue {
 
     // 7. For each own property key P of O such that Type(P) is Symbol, in ascending chronological order of property creation,
     for (let key of this.symbols.keys()) {
+      if (key.$IsPrivateName === true) continue;
       // i. Add P as the last element of keys.
       keys.push(key);
     }

@@ -124,6 +124,9 @@ export class ResidualFunctionInstantiator<
   }
 
   _getLiteralTruthiness(node: BabelNodeExpression): Truthiness {
+    if ((node.type: string) === "BigIntLiteral") {
+      return (node: any).value !== "0";
+    }
     switch (node.type) {
       case "BooleanLiteral":
       case "NumericLiteral":
@@ -199,7 +202,7 @@ export class ResidualFunctionInstantiator<
       const functionExpression: BabelNodeFunctionExpression = node;
       const functionTag = ((functionExpression.body: any): FunctionBodyAstNode).uniqueOrderedTag;
       // Un-interpreted nested function?
-      if (functionTag !== undefined) {
+      if (functionTag !== undefined && !functionExpression.generator && !functionExpression.async) {
         // Un-interpreted nested function.
 
         const duplicateFunctionInfo = this.factoryFunctionInfos.get(functionTag);
@@ -223,19 +226,63 @@ export class ResidualFunctionInstantiator<
     return this._replaceFallback(node);
   }
 
+  _collectHoistedVarsFromDeadBranch(node: ?BabelNode): null | Array<string> {
+    if (!node) return [];
+    let names = new Set();
+    let hasFuncDecl = false;
+    let visit = (cur: any) => {
+      if (!cur || typeof cur !== "object" || hasFuncDecl) return;
+      if (Array.isArray(cur)) {
+        for (let el of cur) visit(el);
+        return;
+      }
+      if (!cur.type) return;
+      switch (cur.type) {
+        case "FunctionExpression":
+        case "ArrowFunctionExpression":
+        case "ObjectMethod":
+        case "ClassMethod":
+          return;
+        case "FunctionDeclaration":
+          hasFuncDecl = true;
+          return;
+        case "VariableDeclaration":
+          if (cur.kind === "var") {
+            for (let name of Object.keys(t.getBindingIdentifiers(cur))) names.add(name);
+          }
+          break;
+        default:
+          break;
+      }
+      for (let key in cur) {
+        if (key === "loc" || key === "leadingComments" || key === "trailingComments" || key === "innerComments")
+          continue;
+        visit(cur[key]);
+      }
+    };
+    visit(node);
+    return hasFuncDecl ? null : Array.from(names);
+  }
+
+  _withHoistedVars(hoistedVars: Array<string>, stmt: BabelNode): BabelNode {
+    if (hoistedVars.length === 0) return stmt;
+    let varDecl = t.variableDeclaration("var", hoistedVars.map(name => t.variableDeclarator(t.identifier(name))));
+    if (stmt.type === "EmptyStatement") return varDecl;
+    return t.blockStatement([varDecl, (stmt: any)]);
+  }
+
   _replaceIfStatement(node: BabelNodeIfStatement): BabelNode {
     let testTruthiness = this._getLiteralTruthiness(node.test);
     if (testTruthiness === true) {
-      // Strictly speaking this is not safe: Annex B.3.4 allows FunctionDeclarations as the body of IfStatements in sloppy mode,
-      // which have weird hoisting behavior: `console.log(typeof f); if (true) function f(){} console.log(typeof f)` will print 'undefined', 'function', but
-      // `console.log(typeof f); function f(){} console.log(typeof f)` will print 'function', 'function'.
-      // However, Babylon can't parse these, so it doesn't come up.
-      return this._replace(node.consequent);
+      let hoisted = this._collectHoistedVarsFromDeadBranch(node.alternate);
+      if (hoisted !== null) {
+        return this._withHoistedVars(hoisted, this._replace(node.consequent));
+      }
     } else if (testTruthiness === false) {
-      if (node.alternate !== null) {
-        return this._replace(node.alternate);
-      } else {
-        return t.emptyStatement();
+      let hoisted = this._collectHoistedVarsFromDeadBranch(node.consequent);
+      if (hoisted !== null) {
+        let alt = node.alternate !== null ? this._replace(node.alternate) : t.emptyStatement();
+        return this._withHoistedVars(hoisted, alt);
       }
     }
 
@@ -265,7 +312,10 @@ export class ResidualFunctionInstantiator<
   _replaceWhileStatement(node: BabelNodeWhileStatement): BabelNode {
     let testTruthiness = this._getLiteralTruthiness(node.test);
     if (testTruthiness === false) {
-      return t.emptyStatement();
+      let hoisted = this._collectHoistedVarsFromDeadBranch(node.body);
+      if (hoisted !== null) {
+        return this._withHoistedVars(hoisted, t.emptyStatement());
+      }
     }
 
     return this._replaceFallback(node);
@@ -309,6 +359,7 @@ export class ResidualFunctionInstantiator<
         return this._replaceLabeledStatement(node);
       case "BreakStatement":
       case "ContinueStatement":
+      case "PrivateName":
         return node;
       case "JSXIdentifier":
       case "JSXMemberExpressions":

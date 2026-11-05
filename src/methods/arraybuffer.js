@@ -11,7 +11,17 @@
 
 import type { Realm } from "../realm.js";
 import type { DataBlock, ElementType } from "../types.js";
-import { Value, ObjectValue, NumberValue, EmptyValue, NullValue, UndefinedValue } from "../values/index.js";
+import {
+  AbstractValue,
+  Value,
+  ObjectValue,
+  NumberValue,
+  EmptyValue,
+  NullValue,
+  UndefinedValue,
+} from "../values/index.js";
+import { FatalError } from "../errors.js";
+import { InternalSlotDescriptor } from "../descriptors.js";
 import { SpeciesConstructor } from "./construct.js";
 import { IsConstructor } from "./index.js";
 import { IsDetachedBuffer } from "./is.js";
@@ -92,6 +102,55 @@ export function CopyDataBlockBytes(
   return realm.intrinsics.empty;
 }
 
+function defineTrackedArrayBufferSlot(
+  realm: Realm,
+  obj: ObjectValue,
+  slotName: "$ArrayBufferData" | "$ArrayBufferByteLength",
+  initialValue: Uint8Array | number | null
+): void {
+  let binding = {
+    descriptor: new InternalSlotDescriptor(initialValue),
+    object: obj,
+    key: slotName,
+    internalSlot: true,
+  };
+  if (slotName === "$ArrayBufferData") {
+    obj.$ArrayBufferData_binding = binding;
+  } else {
+    obj.$ArrayBufferByteLength_binding = binding;
+  }
+  Object.defineProperty(obj, slotName, {
+    configurable: true,
+    enumerable: true,
+    get() {
+      invariant(binding.descriptor instanceof InternalSlotDescriptor);
+      return binding.descriptor.value;
+    },
+    set(v) {
+      if (!obj.mightNotBeLeakedObject()) {
+        AbstractValue.reportIntrospectionError(obj, slotName);
+        throw new FatalError();
+      }
+      realm.recordModifiedProperty(binding);
+      invariant(binding.descriptor instanceof InternalSlotDescriptor);
+      binding.descriptor.value = v;
+    },
+  });
+}
+
+export function recordArrayBufferDataModification(realm: Realm, arrayBuffer: ObjectValue): void {
+  let dataBinding = arrayBuffer.$ArrayBufferData_binding;
+  if (dataBinding !== undefined) {
+    if (!arrayBuffer.mightNotBeLeakedObject()) {
+      AbstractValue.reportIntrospectionError(arrayBuffer, "$ArrayBufferData");
+      throw new FatalError();
+    }
+    realm.recordModifiedProperty(dataBinding);
+  } else {
+    Properties.ThrowIfInternalSlotNotWritable(realm, arrayBuffer, "$ArrayBufferData");
+  }
+}
+
 // ECMA262 24.1.1.1
 export function AllocateArrayBuffer(realm: Realm, constructor: ObjectValue, byteLength: number): ObjectValue {
   // 1. Let obj be ? OrdinaryCreateFromConstructor(constructor, "%ArrayBufferPrototype%", « [[ArrayBufferData]], [[ArrayBufferByteLength]] »).
@@ -106,11 +165,14 @@ export function AllocateArrayBuffer(realm: Realm, constructor: ObjectValue, byte
   // 3. Let block be ? CreateByteDataBlock(byteLength).
   let block = CreateByteDataBlock(realm, byteLength);
 
-  // 4. Set obj's [[ArrayBufferData]] internal slot to block.
-  obj.$ArrayBufferData = block;
-
-  // 5. Set obj's [[ArrayBufferByteLength]] internal slot to byteLength.
-  obj.$ArrayBufferByteLength = byteLength;
+  // 4-5. Track [[ArrayBufferData]] and [[ArrayBufferByteLength]] as restorable internal slots.
+  if (realm.useAbstractInterpretation) {
+    defineTrackedArrayBufferSlot(realm, obj, "$ArrayBufferData", block);
+    defineTrackedArrayBufferSlot(realm, obj, "$ArrayBufferByteLength", byteLength);
+  } else {
+    obj.$ArrayBufferData = block;
+    obj.$ArrayBufferByteLength = byteLength;
+  }
 
   // 6. Return obj.
   return obj;
@@ -124,10 +186,13 @@ export function DetachArrayBuffer(realm: Realm, arrayBuffer: ObjectValue): NullV
   );
 
   // 2. Set arrayBuffer.[[ArrayBufferData]] to null.
-  Properties.ThrowIfInternalSlotNotWritable(realm, arrayBuffer, "$ArrayBufferData").$ArrayBufferData = null;
-
-  // 3. Set arrayBuffer.[[ArrayBufferByteLength]] to 0.
-  Properties.ThrowIfInternalSlotNotWritable(realm, arrayBuffer, "$ArrayBufferByteLength").$ArrayBufferByteLength = 0;
+  if (arrayBuffer.$ArrayBufferData_binding !== undefined) {
+    arrayBuffer.$ArrayBufferData = null;
+    arrayBuffer.$ArrayBufferByteLength = 0;
+  } else {
+    Properties.ThrowIfInternalSlotNotWritable(realm, arrayBuffer, "$ArrayBufferData").$ArrayBufferData = null;
+    Properties.ThrowIfInternalSlotNotWritable(realm, arrayBuffer, "$ArrayBufferByteLength").$ArrayBufferByteLength = 0;
+  }
 
   // 4. Return NormalCompletion(null).
   return realm.intrinsics.null;
@@ -428,7 +493,8 @@ export function SetValueInBuffer(
   invariant(typeof value === "number");
 
   // 5. Let block be arrayBuffer.[[ArrayBufferData]].
-  let block = Properties.ThrowIfInternalSlotNotWritable(realm, arrayBuffer, "$ArrayBufferData").$ArrayBufferData;
+  recordArrayBufferDataModification(realm, arrayBuffer);
+  let block = arrayBuffer.$ArrayBufferData;
 
   // 6. Assert: block is not undefined.
   invariant(block instanceof Uint8Array);

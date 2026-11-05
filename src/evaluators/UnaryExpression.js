@@ -7,15 +7,15 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-/* @flow strict-local */
+/* @flow */
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import { SimpleNormalCompletion } from "../completions.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import {
   AbstractObjectValue,
+  BigIntValue,
   Value,
   BooleanValue,
   ConcreteValue,
@@ -35,6 +35,7 @@ import { Environment, Leak, To } from "../singletons.js";
 import { createOperationDescriptor } from "../utils/generator.js";
 import { resolveTypeofGlobal, resolveTypeofEnvironmentValue, isEnvironmentDerived } from "../intrinsics/env/models.js";
 import type { BabelNodeUnaryExpression } from "@babel/types";
+import { evaluateOptionalChain } from "./OptionalChain.js";
 
 function isInstance(proto, Constructor): boolean {
   return proto instanceof Constructor || proto === Constructor.prototype;
@@ -69,8 +70,89 @@ function evaluateDeleteOperation(expr: Value | Reference, realm: Realm) {
 
     // b. Let baseObj be ! ToObject(GetBase(ref)).
     let base = Environment.GetBase(realm, ref);
-    // Constructing the reference checks that base is coercible to an object hence
-    invariant(base instanceof ConcreteValue || base instanceof AbstractObjectValue);
+    if (base instanceof AbstractValue) {
+      base = realm.simplifyAndRefineAbstractValue(base);
+    }
+    if (base instanceof AbstractValue && !(base instanceof AbstractObjectValue) && base.kind === "conditional") {
+      let [cond, left, right] = base.args;
+      invariant(cond instanceof AbstractValue);
+      return realm.evaluateWithAbstractConditional(
+        cond,
+        () =>
+          realm.evaluateForEffects(
+            () =>
+              evaluateDeleteOperation(
+                new Reference((left: any), Environment.GetReferencedName(realm, ref), ref.strict, ref.thisValue),
+                realm
+              ),
+            null,
+            "evaluateDeleteOperation/left"
+          ),
+        () =>
+          realm.evaluateForEffects(
+            () =>
+              evaluateDeleteOperation(
+                new Reference((right: any), Environment.GetReferencedName(realm, ref), ref.strict, ref.thisValue),
+                realm
+              ),
+            null,
+            "evaluateDeleteOperation/right"
+          )
+      );
+    }
+    invariant(base instanceof Value);
+    const baseValue: Value = base;
+    if (realm.isInPureScope() && !realm.instantRender.enabled) {
+      let savedHandler = realm.errorHandler;
+      let savedSuppress = realm.suppressDiagnostics;
+      let effects;
+      try {
+        realm.suppressDiagnostics = true;
+        realm.errorHandler = () => "Fail";
+        effects = realm.evaluateForEffects(
+          () => {
+            invariant(base instanceof Value);
+            let baseObj = To.ToObject(realm, base);
+            let deleteStatus = baseObj.$Delete(Environment.GetReferencedName(realm, ref));
+            if (!deleteStatus && Environment.IsStrictReference(realm, ref)) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+            }
+            return new BooleanValue(realm, deleteStatus);
+          },
+          undefined,
+          "evaluateDeleteOperation"
+        );
+      } catch (e) {
+        if (!(e instanceof FatalError)) throw e;
+      } finally {
+        realm.errorHandler = savedHandler;
+        realm.suppressDiagnostics = savedSuppress;
+      }
+      if (effects !== undefined) {
+        realm.applyEffects(effects);
+        return realm.returnOrThrowCompletion(effects.result);
+      }
+      let propName = Environment.GetReferencedNamePartial(realm, ref);
+      let propVal = typeof propName === "string" ? new StringValue(realm, propName) : propName;
+      Leak.value(realm, base);
+      Leak.value(realm, propVal);
+      return realm.evaluateWithPossibleThrowCompletion(
+        () =>
+          AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            BooleanValue,
+            [baseValue, propVal],
+            createOperationDescriptor("PROPERTY_DELETE")
+          ),
+        TypesDomain.topVal,
+        ValuesDomain.topVal
+      );
+    }
+    if (!(base instanceof ConcreteValue || base instanceof AbstractObjectValue)) {
+      invariant(base instanceof AbstractValue);
+      AbstractValue.reportIntrospectionError(base, Environment.GetReferencedName(realm, ref));
+      throw new FatalError();
+    }
     let baseObj = To.ToObject(realm, base);
 
     // c. Let deleteStatus be ? baseObj.[[Delete]](GetReferencedName(ref)).
@@ -106,7 +188,9 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
   if (ast.operator === "+" || ast.operator === "-" || ast.operator === "~") {
     let val = Environment.GetValue(realm, expr);
     const previousErrorHandler = realm.errorHandler;
+    const savedSuppress = realm.suppressDiagnostics;
     let isPure = true;
+    realm.suppressDiagnostics = true;
     realm.errorHandler = diagnostic => {
       isPure = false;
       return "Recover";
@@ -126,28 +210,31 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
       }
     } finally {
       realm.errorHandler = previousErrorHandler;
+      realm.suppressDiagnostics = savedSuppress;
     }
     if (isPure && effects) {
       realm.applyEffects(effects);
-      if (effects.result instanceof SimpleNormalCompletion) return effects.result.value;
       return realm.returnOrThrowCompletion(effects.result);
     }
-    Leak.value(realm, val, ast.loc);
+    Leak.value(realm, val, ast.argument.loc || ast.loc);
     return realm.evaluateWithPossibleThrowCompletion(
       () =>
         AbstractValue.createTemporalFromBuildFunction(
           realm,
-          ast.operator === "~" ? IntegralValue : NumberValue,
+          val.getType() === BigIntValue ? BigIntValue : ast.operator === "~" ? IntegralValue : NumberValue,
           [val],
-          createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix }),
-          { isPure: true }
+          createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix })
         ),
       TypesDomain.topVal,
       ValuesDomain.topVal
     );
   }
   let effects;
+  let savedHandler = realm.errorHandler;
+  let savedSuppress = realm.suppressDiagnostics;
   try {
+    realm.suppressDiagnostics = true;
+    realm.errorHandler = () => "Fail";
     effects = realm.evaluateForEffects(
       () => func(ast, expr, strictCode, realm),
       undefined,
@@ -155,13 +242,11 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
     );
   } catch (error) {
     if (error instanceof FatalError) {
+      realm.errorHandler = savedHandler;
+      realm.suppressDiagnostics = savedSuppress;
+      let value = Environment.GetValue(realm, expr);
       return realm.evaluateWithPossibleThrowCompletion(
         () => {
-          let value = Environment.GetValue(realm, expr);
-
-          // if the value is abstract, then create a unary op for it,
-          // otherwise we rethrow the error as we don't handle it at this
-          // point in time
           if (value instanceof AbstractValue) {
             return AbstractValue.createFromUnaryOp(realm, ast.operator, value);
           }
@@ -173,6 +258,9 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
     } else {
       throw error;
     }
+  } finally {
+    realm.errorHandler = savedHandler;
+    realm.suppressDiagnostics = savedSuppress;
   }
   realm.applyEffects(effects);
   return realm.returnOrThrowCompletion(effects.result);
@@ -188,6 +276,16 @@ function evaluateOperation(
     if (value.getType() === SymbolValue) {
       // Symbols never implicitly coerce to primitives.
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+    }
+    if (value.getType() === BigIntValue) {
+      let diag = new CompilerDiagnostic(
+        "Abstract BigInt unary operations are not supported",
+        ast.loc,
+        "PP0001",
+        "FatalError"
+      );
+      realm.handleError(diag);
+      throw new FatalError();
     }
     let error = new CompilerDiagnostic(
       "might be a symbol or an object with an unknown valueOf or toString or Symbol.toPrimitive method",
@@ -207,6 +305,9 @@ function evaluateOperation(
     // 2. Return ? ToNumber(? GetValue(expr)).
     let value = Environment.GetValue(realm, expr);
     if (value instanceof AbstractValue) {
+      if (value.getType() === BigIntValue) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Cannot convert a BigInt value to a number");
+      }
       if (!To.IsToNumberPure(realm, value)) reportError(value);
       return AbstractValue.createFromUnaryOp(realm, "+", value);
     }
@@ -219,14 +320,18 @@ function evaluateOperation(
     // 1. Let expr be the result of evaluating UnaryExpression.
     expr;
 
-    // 2. Let oldValue be ? ToNumber(? GetValue(expr)).
+    // 2. Let oldValue be ? ToNumeric(? GetValue(expr)).
     let value = Environment.GetValue(realm, expr);
     if (value instanceof AbstractValue) {
       if (!To.IsToNumberPure(realm, value)) reportError(value);
       return AbstractValue.createFromUnaryOp(realm, "-", value);
     }
     invariant(value instanceof ConcreteValue);
-    let oldValue = To.ToNumber(realm, value);
+    let numeric = To.ToNumeric(realm, value);
+    if (numeric instanceof BigIntValue) {
+      return new BigIntValue(realm, -numeric.value);
+    }
+    let oldValue = numeric.value;
 
     // 3. If oldValue is NaN, return NaN.
     if (isNaN(oldValue)) {
@@ -241,14 +346,18 @@ function evaluateOperation(
     // 1. Let expr be the result of evaluating UnaryExpression.
     expr;
 
-    // 2. Let oldValue be ? ToInt32(? GetValue(expr)).
+    // 2. Let oldValue be ? ToNumeric(? GetValue(expr)).
     let value = Environment.GetValue(realm, expr);
     if (value instanceof AbstractValue) {
       if (!To.IsToNumberPure(realm, value)) reportError(value);
       return AbstractValue.createFromUnaryOp(realm, "~", value);
     }
     invariant(value instanceof ConcreteValue);
-    let oldValue = To.ToInt32(realm, value);
+    let numeric = To.ToNumeric(realm, value);
+    if (numeric instanceof BigIntValue) {
+      return new BigIntValue(realm, ~numeric.value);
+    }
+    let oldValue = To.ToInt32(realm, numeric);
 
     // 3. Return the result of applying bitwise complement to oldValue. The result is a signed 32-bit integer.
     return IntegralValue.createFromNumberValue(realm, ~oldValue);
@@ -315,6 +424,8 @@ function evaluateOperation(
       return new StringValue(realm, "number");
     } else if (isInstance(proto, SymbolValue)) {
       return new StringValue(realm, "symbol");
+    } else if (isInstance(proto, BigIntValue)) {
+      return new StringValue(realm, "bigint");
     } else if (isInstance(proto, ObjectValue)) {
       if (IsCallable(realm, val)) {
         return new StringValue(realm, "function");
@@ -333,6 +444,12 @@ export default function(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
+  if (
+    ast.operator === "delete" &&
+    (ast.argument.type === "OptionalMemberExpression" || ast.argument.type === "OptionalCallExpression")
+  ) {
+    return evaluateOptionalChain(ast.argument, strictCode, env, realm, ref => evaluateDeleteOperation(ref, realm));
+  }
   let expr = env.evaluate(ast.argument, strictCode);
 
   if (ast.operator === "delete") {

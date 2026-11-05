@@ -9,7 +9,6 @@
 
 /* @flow strict-local */
 
-import { SimpleNormalCompletion } from "../completions.js";
 import type { Realm } from "../realm.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import type { LexicalEnvironment } from "../environment.js";
@@ -17,6 +16,7 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
   FunctionValue,
@@ -49,6 +49,9 @@ export default function(
   // evaluate right
   let rref = env.evaluate(ast.right, strictCode);
   let rval = Environment.GetValue(realm, rref);
+  if (ast.operator === "in" && realm.persistentReadTracker !== undefined && rval instanceof ObjectValue) {
+    realm.recordPersistentObjectKeyRead(rval, lval instanceof StringValue ? lval.value : "*");
+  }
 
   return computeBinary(realm, ast.operator, lval, rval, ast.left.loc, ast.right.loc, ast.loc);
 }
@@ -206,11 +209,21 @@ export function computeBinary(
     }
   }
 
-  let resultType;
+  let resultType = Value;
   const compute = () => {
     let lvalIsAbstract = lval instanceof AbstractValue;
     let rvalIsAbstract = rval instanceof AbstractValue;
     if (lvalIsAbstract || rvalIsAbstract) {
+      if (lval.getType() === BigIntValue || rval.getType() === BigIntValue) {
+        let diag = new CompilerDiagnostic(
+          "Abstract BigInt binary operations are not supported",
+          loc || lloc || rloc,
+          "PP0001",
+          "FatalError"
+        );
+        realm.handleError(diag);
+        throw new FatalError();
+      }
       // If the left-hand side of an instanceof operation is a primitive,
       // and the right-hand side is a simple object (it does not have [Symbol.hasInstance]),
       // then the result should always compute to `false`.
@@ -391,7 +404,7 @@ export function computeBinary(
 
     if (isPure && effects) {
       realm.applyEffects(effects);
-      if (effects.result instanceof SimpleNormalCompletion) return effects.result.value;
+      return realm.returnOrThrowCompletion(effects.result);
     }
 
     // If this ended up reporting an error, it might not be pure, so we'll leave it in
@@ -403,18 +416,38 @@ export function computeBinary(
       // The "in" operator have side-effects on its right val other than throw.
       Leak.value(realm, rval, loc);
     }
+    let fallbackType = resultType || getBinaryFallbackResultType(op, lval, rval);
     return realm.evaluateWithPossibleThrowCompletion(
       () =>
         AbstractValue.createTemporalFromBuildFunction(
           realm,
-          resultType,
+          fallbackType,
           [lval, rval],
-          createOperationDescriptor("BINARY_EXPRESSION", { binaryOperator: op }),
-          { isPure: true }
+          createOperationDescriptor("BINARY_EXPRESSION", { binaryOperator: op })
         ),
       TypesDomain.topVal,
       ValuesDomain.topVal
     );
   }
   return compute();
+}
+
+function getBinaryFallbackResultType(op: BabelBinaryOperator, lval: Value, rval: Value): typeof Value {
+  switch (op) {
+    case "===":
+    case "!==":
+    case "==":
+    case "!=":
+    case "<":
+    case "<=":
+    case ">":
+    case ">=":
+    case "in":
+    case "instanceof":
+      return BooleanValue;
+    case "+":
+      return lval.getType() === StringValue || rval.getType() === StringValue ? StringValue : Value;
+    default:
+      return NumberValue;
+  }
 }

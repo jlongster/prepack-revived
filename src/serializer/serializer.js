@@ -42,6 +42,83 @@ import { ResidualOptimizedFunctions } from "./ResidualOptimizedFunctions";
 import { checkResidualRecursionSnapshots } from "../methods/recursion.js";
 import { wrapProgramWithAssumptionGuards } from "../intrinsics/env/assumptions.js";
 
+const UNPARENTHESIZED_OPTIONAL_BASES = new Set([
+  "Identifier",
+  "ThisExpression",
+  "Super",
+  "MemberExpression",
+  "CallExpression",
+  "OptionalMemberExpression",
+  "OptionalCallExpression",
+  "StringLiteral",
+  "BooleanLiteral",
+  "NullLiteral",
+  "NumericLiteral",
+  "BigIntLiteral",
+  "RegExpLiteral",
+  "ArrayExpression",
+  "ObjectExpression",
+  "TemplateLiteral",
+  "TaggedTemplateExpression",
+  "MetaProperty",
+  "ParenthesizedExpression",
+]);
+
+function wrapParen(expr: any): any {
+  if (!expr || expr.type === "ParenthesizedExpression") return expr;
+  return { type: "ParenthesizedExpression", expression: expr };
+}
+
+function isOptionalChainExpr(expr: any): boolean {
+  return !!expr && (expr.type === "OptionalMemberExpression" || expr.type === "OptionalCallExpression");
+}
+
+function isNullishCoalesce(expr: any): boolean {
+  return !!expr && expr.type === "LogicalExpression" && expr.operator === "??";
+}
+
+function ensureModernSyntaxParentheses(ast: BabelNodeFile): void {
+  traverseFast(ast, node => {
+    if (node.type === "LogicalExpression") {
+      let n: any = node;
+      if (n.operator === "??") {
+        if (n.left && n.left.type === "LogicalExpression" && n.left.operator !== "??") n.left = wrapParen(n.left);
+        if (n.right && n.right.type === "LogicalExpression" && n.right.operator !== "??") n.right = wrapParen(n.right);
+      } else if (n.operator === "&&" || n.operator === "||") {
+        if (isNullishCoalesce(n.left)) n.left = wrapParen(n.left);
+        if (isNullishCoalesce(n.right)) n.right = wrapParen(n.right);
+      }
+    } else if (node.type === "BinaryExpression") {
+      let n: any = node;
+      if (isNullishCoalesce(n.left)) n.left = wrapParen(n.left);
+      if (isNullishCoalesce(n.right)) n.right = wrapParen(n.right);
+    } else if (node.type === "UnaryExpression" || node.type === "AwaitExpression") {
+      let n: any = node;
+      if (isNullishCoalesce(n.argument)) n.argument = wrapParen(n.argument);
+    } else if (node.type === "OptionalMemberExpression") {
+      let n: any = node;
+      if (n.object && !UNPARENTHESIZED_OPTIONAL_BASES.has(n.object.type)) {
+        n.object = wrapParen(n.object);
+      }
+    } else if (node.type === "OptionalCallExpression") {
+      let n: any = node;
+      if (n.callee && !UNPARENTHESIZED_OPTIONAL_BASES.has(n.callee.type)) {
+        n.callee = wrapParen(n.callee);
+      }
+    } else if (node.type === "MemberExpression") {
+      let n: any = node;
+      if (isOptionalChainExpr(n.object) || isNullishCoalesce(n.object)) n.object = wrapParen(n.object);
+    } else if (node.type === "CallExpression" || node.type === "NewExpression") {
+      let n: any = node;
+      if (isOptionalChainExpr(n.callee) || isNullishCoalesce(n.callee)) n.callee = wrapParen(n.callee);
+    } else if (node.type === "TaggedTemplateExpression") {
+      let n: any = node;
+      if (isOptionalChainExpr(n.tag) || isNullishCoalesce(n.tag)) n.tag = wrapParen(n.tag);
+    }
+    return false;
+  });
+}
+
 export class Serializer {
   constructor(realm: Realm, serializerOptions: SerializerOptions = {}) {
     invariant(realm.useAbstractInterpretation);
@@ -212,7 +289,8 @@ export class Serializer {
             this.logger,
             this.modules,
             additionalFunctionValuesAndEffects,
-            this.options.lazyObjectsRuntime == null
+            this.options.lazyObjectsRuntime == null,
+            this.options
           );
           statistics.deepTraversal.measure(() => residualHeapVisitor.visitRoots());
           return [residualHeapVisitor.toInfo(), residualHeapVisitor.generatorTree, residualHeapVisitor.inspector];
@@ -320,6 +398,7 @@ export class Serializer {
       if (this.realm.stripFlow) {
         stripFlowTypeAnnotations(ast);
       }
+      ensureModernSyntaxParentheses(ast);
 
       // the signature for generate is not complete, hence the any
       let generated = statistics.babelGenerate.measure(() => generate(ast, { sourceMaps: sourceMaps }, (code: any)));

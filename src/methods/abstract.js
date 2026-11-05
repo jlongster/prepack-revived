@@ -14,7 +14,9 @@ import type { PropertyKeyValue } from "../types.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import {
   BoundFunctionValue,
+  BigIntValue,
   EmptyValue,
+  HostBigInt,
   NumberValue,
   IntegralValue,
   SymbolValue,
@@ -107,6 +109,14 @@ export function HasSameType(x: ConcreteValue, y: ConcreteValue): boolean {
   );
 }
 
+function tryStringToBigInt(str: string): { ok: boolean, value?: any } {
+  try {
+    return { ok: true, value: HostBigInt(str) };
+  } catch (_e) {
+    return { ok: false };
+  }
+}
+
 // ECMA262 7.2.12 Abstract Relational Comparison
 export function AbstractRelationalComparison(
   realm: Realm,
@@ -169,6 +179,31 @@ export function AbstractRelationalComparison(
 
     // f. If m < n, return true. Otherwise, return false.
     return m < n ? realm.intrinsics.true : realm.intrinsics.false;
+  } else if (px instanceof BigIntValue && py instanceof StringValue) {
+    let parsed = tryStringToBigInt(py.value);
+    if (!parsed.ok) return realm.intrinsics.undefined;
+    return px.value < parsed.value ? realm.intrinsics.true : realm.intrinsics.false;
+  } else if (px instanceof StringValue && py instanceof BigIntValue) {
+    let parsed = tryStringToBigInt(px.value);
+    if (!parsed.ok) return realm.intrinsics.undefined;
+    return parsed.value < py.value ? realm.intrinsics.true : realm.intrinsics.false;
+  } else if (px instanceof BigIntValue && py instanceof BigIntValue) {
+    return px.value < py.value ? realm.intrinsics.true : realm.intrinsics.false;
+  } else if (px instanceof BigIntValue || py instanceof BigIntValue) {
+    if (px instanceof BigIntValue) {
+      let ny = To.ToNumber(realm, py);
+      if (isNaN(ny)) return realm.intrinsics.undefined;
+      if (ny === +Infinity) return realm.intrinsics.true;
+      if (ny === -Infinity) return realm.intrinsics.false;
+      return px.value < ny ? realm.intrinsics.true : realm.intrinsics.false;
+    } else {
+      invariant(py instanceof BigIntValue);
+      let nx = To.ToNumber(realm, px);
+      if (isNaN(nx)) return realm.intrinsics.undefined;
+      if (nx === +Infinity) return realm.intrinsics.false;
+      if (nx === -Infinity) return realm.intrinsics.true;
+      return nx < py.value ? realm.intrinsics.true : realm.intrinsics.false;
+    }
   } else {
     // 4. Else,
     // a. Let nx be ? ToNumber(px). Because px and py are primitive values evaluation order is not important.
@@ -247,6 +282,18 @@ export function AbstractEqualityComparison(
     return AbstractEqualityComparison(realm, new NumberValue(realm, To.ToNumber(realm, x)), y, op);
   }
 
+  // 5b. BigInt and String loose equality
+  if (x instanceof BigIntValue && y instanceof StringValue) {
+    let parsed = tryStringToBigInt(y.value);
+    if (!parsed.ok) return new BooleanValue(realm, op !== "==");
+    return AbstractEqualityComparison(realm, x, new BigIntValue(realm, parsed.value), op);
+  }
+  if (x instanceof StringValue && y instanceof BigIntValue) {
+    let parsed = tryStringToBigInt(x.value);
+    if (!parsed.ok) return new BooleanValue(realm, op !== "==");
+    return AbstractEqualityComparison(realm, new BigIntValue(realm, parsed.value), y, op);
+  }
+
   // 6. If Type(x) is Boolean, return the result of the comparison ToNumber(x) == y.
   if (x instanceof BooleanValue) {
     return AbstractEqualityComparison(realm, new NumberValue(realm, To.ToNumber(realm, x)), y, op);
@@ -257,8 +304,11 @@ export function AbstractEqualityComparison(
     return AbstractEqualityComparison(realm, x, new NumberValue(realm, To.ToNumber(realm, y)), op);
   }
 
-  // 8. If Type(x) is either String, Number, or Symbol and Type(y) is Object, return the result of the comparison x == ToPrimitive(y).
-  if ((x instanceof StringValue || x instanceof NumberValue || x instanceof SymbolValue) && y instanceof ObjectValue) {
+  // 8. If Type(x) is either String, Number, BigInt, or Symbol and Type(y) is Object, return the result of the comparison x == ToPrimitive(y).
+  if (
+    (x instanceof StringValue || x instanceof NumberValue || x instanceof BigIntValue || x instanceof SymbolValue) &&
+    y instanceof ObjectValue
+  ) {
     const py = To.ToPrimitiveOrAbstract(realm, y);
     if (py instanceof AbstractValue) {
       let res = AbstractValue.createFromBinaryOp(realm, "==", x, py);
@@ -268,8 +318,11 @@ export function AbstractEqualityComparison(
     return AbstractEqualityComparison(realm, x, py, op);
   }
 
-  // 9. If Type(x) is Object and Type(y) is either String, Number, or Symbol, return the result of the comparison ToPrimitive(x) == y.
-  if (x instanceof ObjectValue && (y instanceof StringValue || y instanceof NumberValue || y instanceof SymbolValue)) {
+  // 9. If Type(x) is Object and Type(y) is either String, Number, BigInt, or Symbol, return the result of the comparison ToPrimitive(x) == y.
+  if (
+    x instanceof ObjectValue &&
+    (y instanceof StringValue || y instanceof NumberValue || y instanceof BigIntValue || y instanceof SymbolValue)
+  ) {
     const px = To.ToPrimitiveOrAbstract(realm, x);
     if (px instanceof AbstractValue) {
       let res = AbstractValue.createFromBinaryOp(realm, "==", px, y);
@@ -277,6 +330,18 @@ export function AbstractEqualityComparison(
       return res;
     }
     return AbstractEqualityComparison(realm, px, y, op);
+  }
+
+  // 9b. BigInt and Number loose equality
+  if (x instanceof BigIntValue && y instanceof NumberValue) {
+    if (isNaN(y.value) || !isFinite(y.value)) return new BooleanValue(realm, op !== "==");
+    let eq = x.value == y.value; // eslint-disable-line eqeqeq
+    return new BooleanValue(realm, op === "==" ? eq : !eq);
+  }
+  if (x instanceof NumberValue && y instanceof BigIntValue) {
+    if (isNaN(x.value) || !isFinite(x.value)) return new BooleanValue(realm, op !== "==");
+    let eq = x.value == y.value; // eslint-disable-line eqeqeq
+    return new BooleanValue(realm, op === "==" ? eq : !eq);
   }
 
   // 10. Return false.
@@ -449,6 +514,11 @@ export function SameValueNonNumber(realm: Realm, x: ConcreteValue, y: ConcreteVa
   if (x instanceof SymbolValue) {
     // a. If x and y are both the same Symbol value, return true; otherwise, return false.
     return x === y;
+  }
+
+  // 7b. If Type(x) is BigInt, then
+  if (x instanceof BigIntValue && y instanceof BigIntValue) {
+    return x.value === y.value;
   }
 
   // 8. Return true if x and y are the same Object value. Otherwise, return false.

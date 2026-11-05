@@ -22,10 +22,12 @@ import type { SourceFile, SourceType } from "./types.js";
 import * as t from "@babel/types";
 
 import { AbruptCompletion, Completion, ThrowCompletion } from "./completions.js";
+import { beginPromiseJobQueue, drainPromiseJobs, endPromiseJobQueue } from "./methods/promise.js";
 import { CompilerDiagnostic, FatalError } from "./errors.js";
 import { ExecutionContext } from "./realm.js";
 import {
   AbstractValue,
+  BigIntValue,
   NullValue,
   SymbolValue,
   BooleanValue,
@@ -175,11 +177,16 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
     super(realm);
     this.bindings = (Object.create(null): any);
     this.frozen = false;
+    this.allBindingsMightHaveBeenCaptured = false;
   }
 
   bindings: { [name: string]: Binding };
   // Frozen Records cannot have bindings created or deleted but can have bindings updated
   frozen: boolean;
+  $PrivateBindings: void | Map<string, SymbolValue>;
+  // True when every binding currently in this record has mightHaveBeenCaptured set
+  // (lets Realm.markVisibleLocalBindingsAsPotentiallyCaptured skip the record).
+  allBindingsMightHaveBeenCaptured: boolean;
 
   // ECMA262 8.1.1.1.1
   HasBinding(N: string): boolean {
@@ -205,6 +212,7 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
     invariant(!envRec.bindings[N], `shouldn't have the binding ${N}`);
 
     // 3. Create a mutable binding in envRec for N and record that it is uninitialized. If D is true, record that the newly created binding may be deleted by a subsequent DeleteBinding call.
+    this.allBindingsMightHaveBeenCaptured = false;
     this.bindings[N] = realm.recordModifiedBinding({
       initialized: false,
       mutable: true,
@@ -242,6 +250,7 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
       mightHaveBeenCaptured: false,
       hasLeaked: false,
     };
+    this.allBindingsMightHaveBeenCaptured = false;
     this.bindings[N] = skipRecord ? binding : realm.recordModifiedBinding(binding);
 
     // 4. Return NormalCompletion(empty).
@@ -305,8 +314,17 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
       throw realm.createErrorThrowCompletion(realm.intrinsics.ReferenceError, `${N} has not yet been initialized`);
     } else if (binding.mutable) {
       // 5. Else if the binding for N in envRec is a mutable binding, change its bound value to V.
-      if (binding.hasLeaked) {
-        Leak.value(realm, V);
+      let tracker = realm.persistentReadTracker;
+      if (
+        tracker !== undefined &&
+        realm.savedCompletion === undefined &&
+        realm.pathConditions === tracker.entryPathConditions &&
+        !tracker.readBindings.has(binding)
+      ) {
+        tracker.definitelyWrittenBindings.add(binding);
+      }
+      if (binding.hasLeaked || (realm.liveOuterBindings !== undefined && realm.liveOuterBindings.has(binding))) {
+        if (binding.hasLeaked) Leak.value(realm, V);
         invariant(realm.generator);
         realm.generator.emitBindingAssignment(binding, V);
       } else {
@@ -344,7 +362,16 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
     }
 
     // 4. Return the value currently bound to N in envRec.
-    if (binding.hasLeaked && binding.mutable) {
+    if (
+      realm.persistentReadTracker !== undefined &&
+      !realm.persistentReadTracker.definitelyWrittenBindings.has(binding)
+    ) {
+      realm.persistentReadTracker.readBindings.add(binding);
+    }
+    if (
+      (binding.hasLeaked || (realm.liveOuterBindings !== undefined && realm.liveOuterBindings.has(binding))) &&
+      binding.mutable
+    ) {
       return deriveGetBinding(realm, binding);
     }
     invariant(binding.value);
@@ -1184,13 +1211,19 @@ export class LexicalEnvironment {
     context.variableEnvironment = this;
     context.realm = this.realm;
     this.realm.pushContext(context);
+    beginPromiseJobQueue(this.realm);
     let res, code;
     try {
       let ast;
       [ast, code] = this.concatenateAndParse(sources, sourceType);
       if (onParse) onParse(ast);
       res = this.realm.statistics.evaluation.measure(() => this.evaluateCompletion(ast, false));
+      if (!(res instanceof AbruptCompletion)) {
+        res = Environment.GetValue(this.realm, res);
+        drainPromiseJobs(this.realm);
+      }
     } finally {
+      endPromiseJobQueue(this.realm);
       this.realm.popContext(context);
       this.realm.onDestroyScope(context.lexicalEnvironment);
       if (!this.destroyed) this.realm.onDestroyScope(this);
@@ -1201,7 +1234,7 @@ export class LexicalEnvironment {
     }
     if (res instanceof AbruptCompletion) return [res, code];
 
-    return [Environment.GetValue(this.realm, res), code];
+    return [res, code];
   }
 
   execute(
@@ -1406,6 +1439,7 @@ export type BaseValue =
   | SymbolValue
   | NumberValue
   | IntegralValue
+  | BigIntValue
   | EnvironmentRecord;
 export type ReferenceName = string | SymbolValue;
 
@@ -1423,6 +1457,7 @@ export function mightBecomeAnObject(base: Value): boolean {
     type === BooleanValue ||
     type === StringValue ||
     type === SymbolValue ||
+    type === BigIntValue ||
     type === NumberValue ||
     type === IntegralValue
   );

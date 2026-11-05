@@ -28,141 +28,99 @@ export default function(
 ): Value {
   // ECMA262 14.1.21
 
+  let strict = strictCode || IsStrict(ast.body);
+  let isGenerator = ast.generator === true;
+  let isAsync = ast.async === true;
+
   if (ast.id) {
-    if (ast.generator === true) {
-      // 1. If the function code for this GeneratorExpression is strict mode code, let strict be true. Otherwise let strict be false.
-      let strict = strictCode || IsStrict(ast.body);
-
-      // 2. Let scope be the running execution context's LexicalEnvironment.
-      let scope = env;
-
-      // 3. Let funcEnv be NewDeclarativeEnvironment(scope).
-      let funcEnv = Environment.NewDeclarativeEnvironment(realm, scope);
-
-      // 4. Let envRec be funcEnv's EnvironmentRecord.
-      let envRec = funcEnv.environmentRecord;
-
-      // 5. Let name be StringValue of BindingIdentifier.
-      invariant(ast.id);
-      let name = ast.id.name;
-
-      // 6. Perform envRec.CreateImmutableBinding(name, false).
-      envRec.CreateImmutableBinding(name, false);
-
-      // 7. Let closure be GeneratorFunctionCreate(Normal, FormalParameters, GeneratorBody, funcEnv, strict).
-      let closure = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
-      closure.loc = ast.loc;
-      closure.__originalName = name;
-
-      // 8. Let prototype be ObjectCreate(%GeneratorPrototype%).
-      let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
-      prototype.originalConstructor = closure;
-
-      // 9. Perform DefinePropertyOrThrow(closure, "prototype", PropertyDescriptor{[[Value]]: prototype, [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: false}).
-      Properties.DefinePropertyOrThrow(
-        realm,
-        closure,
-        "prototype",
-        new PropertyDescriptor({
-          value: prototype,
-          writable: true,
-          enumerable: false,
-          configurable: false,
-        })
-      );
-
-      // 10. Perform SetFunctionName(closure, name).
-      Functions.SetFunctionName(realm, closure, new StringValue(realm, name));
-
-      // 11. Perform envRec.InitializeBinding(name, closure).
-      envRec.InitializeBinding(name, closure);
-
-      // 12. Return closure.
-      return closure;
-    } else {
-      // 1. If the function code for FunctionExpression is strict mode code, let strict be true. Otherwise let strict be false.
-      let strict = strictCode || IsStrict(ast.body);
-
-      // 2. Let scope be the running execution context's LexicalEnvironment.
-      let scope = env;
-
-      // 3. Let funcEnv be NewDeclarativeEnvironment(scope).
-      let funcEnv = Environment.NewDeclarativeEnvironment(realm, scope, false);
-
-      // 4. Let envRec be funcEnv's EnvironmentRecord.
-      let envRec = funcEnv.environmentRecord;
-
-      // 5. Let name be StringValue of BindingIdentifier.
-      invariant(ast.id);
-      let name = ast.id.name;
-
-      // 6. Perform envRec.CreateImmutableBinding(name, false).
+    let scope = env;
+    let isNormal = !isGenerator && !isAsync;
+    let funcEnv = isNormal
+      ? Environment.NewDeclarativeEnvironment(realm, scope, false)
+      : Environment.NewDeclarativeEnvironment(realm, scope);
+    let envRec = funcEnv.environmentRecord;
+    invariant(ast.id);
+    let name = ast.id.name;
+    if (isNormal) {
       envRec.CreateImmutableBinding(name, false, false, true);
-      // I don't think this gets deleted anywhere else
-      //if (realm.modifiedBindings) realm.modifiedBindings.delete(name);
-
-      // 7. Let closure be FunctionCreate(Normal, FormalParameters, FunctionBody, funcEnv, strict).
-      let closure = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
-      closure.loc = ast.loc;
-      closure.__originalName = name;
-
-      // 8. Perform MakeConstructor(closure).
-      MakeConstructor(realm, closure);
-
-      // 9. Perform SetFunctionName(closure, name).
-      Functions.SetFunctionName(realm, closure, new StringValue(realm, name));
-
-      // 10. Perform envRec.InitializeBinding(name, closure).
-      envRec.InitializeBinding(name, closure, true);
-
-      // 11. Return closure.
-      return closure;
+    } else {
+      envRec.CreateImmutableBinding(name, false);
     }
-  } else {
-    if (ast.generator === true) {
-      // 1. If the function code for this GeneratorExpression is strict mode code, let strict be true. Otherwise let strict be false.
-      let strict = strictCode || IsStrict(ast.body);
 
-      // 2. Let scope be the LexicalEnvironment of the running execution context.
-      let scope = env;
-
-      // 3. Let closure be GeneratorFunctionCreate(Normal, FormalParameters, GeneratorBody, scope, strict).
-      let closure = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, scope, strict);
-
-      // 4. Let prototype be ObjectCreate(%GeneratorPrototype%).
-      let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
+    let closure;
+    if (isGenerator && isAsync) {
+      closure = Functions.AsyncGeneratorFunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
+      closure.loc = ast.loc;
+      let prototype = Create.ObjectCreate(realm, realm.intrinsics.AsyncGeneratorPrototype);
       prototype.originalConstructor = closure;
-
-      // 5. Perform DefinePropertyOrThrow(closure, "prototype", PropertyDescriptor{[[Value]]: prototype, [[Writable]]: true, [[Enumerable]]: false, [[Configurable]]: false}).
       Properties.DefinePropertyOrThrow(
         realm,
         closure,
         "prototype",
-        new PropertyDescriptor({
-          value: prototype,
-          writable: true,
-          enumerable: false,
-          configurable: false,
-        })
+        new PropertyDescriptor({ value: prototype, writable: true, enumerable: false, configurable: false })
       );
+    } else if (isGenerator) {
+      closure = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
+      closure.loc = ast.loc;
+      let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
+      prototype.originalConstructor = closure;
+      Properties.DefinePropertyOrThrow(
+        realm,
+        closure,
+        "prototype",
+        new PropertyDescriptor({ value: prototype, writable: true, enumerable: false, configurable: false })
+      );
+    } else if (isAsync) {
+      closure = Functions.AsyncFunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
+      closure.loc = ast.loc;
+    } else {
+      closure = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, funcEnv, strict);
+      closure.loc = ast.loc;
+      MakeConstructor(realm, closure);
+    }
+    closure.__originalName = name;
 
-      // 6. Return closure.
+    Functions.SetFunctionName(realm, closure, new StringValue(realm, name));
+    if (isNormal) {
+      envRec.InitializeBinding(name, closure, true);
+    } else {
+      envRec.InitializeBinding(name, closure);
+    }
+    return closure;
+  } else {
+    let scope = env;
+    if (isGenerator && isAsync) {
+      let closure = Functions.AsyncGeneratorFunctionCreate(realm, "normal", ast.params, ast.body, scope, strict);
+      closure.loc = ast.loc;
+      let prototype = Create.ObjectCreate(realm, realm.intrinsics.AsyncGeneratorPrototype);
+      prototype.originalConstructor = closure;
+      Properties.DefinePropertyOrThrow(
+        realm,
+        closure,
+        "prototype",
+        new PropertyDescriptor({ value: prototype, writable: true, enumerable: false, configurable: false })
+      );
+      return closure;
+    } else if (isGenerator) {
+      let closure = Functions.GeneratorFunctionCreate(realm, "normal", ast.params, ast.body, scope, strict);
+      closure.loc = ast.loc;
+      let prototype = Create.ObjectCreate(realm, realm.intrinsics.GeneratorPrototype);
+      prototype.originalConstructor = closure;
+      Properties.DefinePropertyOrThrow(
+        realm,
+        closure,
+        "prototype",
+        new PropertyDescriptor({ value: prototype, writable: true, enumerable: false, configurable: false })
+      );
+      return closure;
+    } else if (isAsync) {
+      let closure = Functions.AsyncFunctionCreate(realm, "normal", ast.params, ast.body, scope, strict);
+      closure.loc = ast.loc;
       return closure;
     } else {
-      // 1. If the function code for FunctionExpression is strict mode code, let strict be true. Otherwise let strict be false.
-      let strict = strictCode || IsStrict(ast.body);
-
-      // 2. Let scope be the LexicalEnvironment of the running execution context.
-      let scope = env;
-
-      // 3. Let closure be FunctionCreate(Normal, FormalParameters, FunctionBody, scope, strict).
       let closure = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, scope, strict);
       closure.loc = ast.loc;
-
-      // 4. Perform MakeConstructor(closure).
       MakeConstructor(realm, closure);
-
-      // 5. Return closure.
       return closure;
     }
   }

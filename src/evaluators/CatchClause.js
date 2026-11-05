@@ -36,18 +36,22 @@ export default function(
   // 3. Let catchEnvRec be catchEnv's EnvironmentRecord.
   let catchEnvRec = catchEnv.environmentRecord;
 
-  // 4. For each element argName of the BoundNames of CatchParameter, do
-  for (let argName of Environment.BoundNames(realm, ast.param)) {
-    // a. Perform ! catchEnvRec.CreateMutableBinding(argName, false).
-    catchEnvRec.CreateMutableBinding(argName, false);
+  // 4. If CatchParameter is present, for each element argName of the BoundNames of CatchParameter, do
+  if (ast.param != null) {
+    for (let argName of Environment.BoundNames(realm, ast.param)) {
+      // a. Perform ! catchEnvRec.CreateMutableBinding(argName, false).
+      catchEnvRec.CreateMutableBinding(argName, false);
+    }
   }
 
   // 5. Set the running execution context's LexicalEnvironment to catchEnv.
   realm.getRunningContext().lexicalEnvironment = catchEnv;
 
   try {
-    // 6. Let status be the result of performing BindingInitialization for CatchParameter passing thrownValue and catchEnv as arguments.
-    Environment.BindingInitialization(realm, ast.param, thrownValue.value, strictCode, catchEnv);
+    // 6. If CatchParameter is present, perform BindingInitialization for CatchParameter.
+    if (ast.param != null) {
+      Environment.BindingInitialization(realm, ast.param, thrownValue.value, strictCode, catchEnv);
+    }
 
     // 7. If status is an abrupt completion, then
     // a. Set the running execution context's LexicalEnvironment to oldEnv.

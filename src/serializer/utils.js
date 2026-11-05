@@ -11,12 +11,16 @@
 
 import {
   AbstractValue,
+  ECMAScriptFunctionValue,
   ECMAScriptSourceFunctionValue,
   EmptyValue,
   FunctionValue,
   IntegralValue,
+  NullValue,
   ObjectValue,
   SymbolValue,
+  UndefinedValue,
+  Value,
 } from "../values/index.js";
 import type { Effects, Realm, SideEffectType } from "../realm.js";
 
@@ -131,14 +135,64 @@ export function withDescriptorValue(
     if (descriptor.value !== undefined) {
       func(propertyNameOrSymbol, descriptor.value, "value");
     } else {
-      if (descriptor.get !== undefined) {
+      if (descriptor.get !== undefined && !(descriptor.get instanceof UndefinedValue)) {
         func(propertyNameOrSymbol, descriptor.get, "get");
       }
-      if (descriptor.set !== undefined) {
+      if (descriptor.set !== undefined && !(descriptor.set instanceof UndefinedValue)) {
         func(propertyNameOrSymbol, descriptor.set, "set");
       }
     }
   }
+}
+
+export function canEmbedClassProperty(
+  owner: ObjectValue,
+  classFunc: ObjectValue,
+  pb: PropertyBinding,
+  claimedMethods: Set<FunctionValue>
+): boolean {
+  if (pb.pathNode !== undefined) return false;
+  let desc = pb.descriptor;
+  if (!(desc instanceof PropertyDescriptor)) return false;
+  if (!!desc.enumerable || !desc.configurable) return false;
+  if (desc.value !== undefined) {
+    return (
+      !!desc.writable &&
+      desc.value instanceof ECMAScriptSourceFunctionValue &&
+      desc.value !== classFunc &&
+      desc.value.$HomeObject === owner &&
+      !claimedMethods.has(desc.value)
+    );
+  }
+  let hasGet = desc.get !== undefined && !(desc.get instanceof UndefinedValue);
+  let hasSet = desc.set !== undefined && !(desc.set instanceof UndefinedValue);
+  if (!hasGet && !hasSet) return false;
+  if (hasGet) {
+    if (
+      !(
+        desc.get instanceof ECMAScriptSourceFunctionValue &&
+        desc.get !== classFunc &&
+        desc.get.$HomeObject === owner &&
+        !claimedMethods.has(desc.get)
+      )
+    ) {
+      return false;
+    }
+  }
+  if (hasSet) {
+    if (
+      !(
+        desc.set instanceof ECMAScriptSourceFunctionValue &&
+        desc.set !== classFunc &&
+        desc.set.$HomeObject === owner &&
+        !claimedMethods.has(desc.set)
+      )
+    ) {
+      return false;
+    }
+  }
+  if (hasGet && hasSet && desc.get === desc.set) return false;
+  return true;
 }
 
 export const ClassPropertiesToIgnore: Set<string> = new Set(["arguments", "name", "caller"]);
@@ -159,6 +213,50 @@ export function canIgnoreClassLengthProperty(val: ObjectValue, desc: void | Desc
   return true;
 }
 
+export function getNaturalFunctionPrototype(realm: Realm, func: ObjectValue): ObjectValue {
+  if (func instanceof ECMAScriptFunctionValue) {
+    if (func.$FunctionKind === "generator") return realm.intrinsics.Generator;
+    if (func.$FunctionKind === "async") return realm.intrinsics.AsyncFunctionPrototype;
+    if (func.$FunctionKind === "asyncGenerator") return realm.intrinsics.AsyncGenerator;
+  }
+  return realm.intrinsics.FunctionPrototype;
+}
+
+function mightHaveThenProperty(obj: ObjectValue): boolean {
+  let cur: ?Value = obj;
+  let seen = new Set();
+  while (cur instanceof ObjectValue) {
+    if (seen.has(cur)) return true;
+    seen.add(cur);
+    if (cur.$PromiseState !== undefined) return true;
+    if (cur.isPartialObject() || cur.mightBeLeakedObject() || cur.unknownProperty !== undefined) return true;
+    if (cur.properties.has("then")) {
+      let pb = cur.properties.get("then");
+      if (pb !== undefined && pb.descriptor !== undefined) return true;
+    }
+    cur = cur.$Prototype;
+  }
+  return cur !== null && !(cur instanceof NullValue);
+}
+
+export function canSerializeSettledPromise(val: ObjectValue): boolean {
+  if (val.$PromiseState === "rejected") {
+    return val.$PromiseResult instanceof Value;
+  }
+  if (val.$PromiseState !== "fulfilled") return false;
+  let res = val.$PromiseResult;
+  if (!(res instanceof Value)) return false;
+  if (res instanceof AbstractValue) {
+    return !res.mightBeObject();
+  }
+  if (res instanceof ObjectValue) {
+    return !mightHaveThenProperty(res);
+  }
+  return true;
+}
+
+export const canSerializePromiseAsResolved = canSerializeSettledPromise;
+
 export function getObjectPrototypeMetadata(
   realm: Realm,
   obj: ObjectValue
@@ -170,7 +268,13 @@ export function getObjectPrototypeMetadata(
   if (obj.$IsClassPrototype) {
     skipPrototype = true;
   }
-  if (proto && proto.$IsClassPrototype) {
+  if (
+    proto &&
+    proto.$IsClassPrototype &&
+    obj.getKind() === "Object" &&
+    !IsArray(realm, obj) &&
+    !(obj instanceof FunctionValue)
+  ) {
     invariant(proto instanceof ObjectValue);
     // we now need to check if the prototpe has a constructor
     let _constructor = proto.properties.get("constructor");

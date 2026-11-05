@@ -10,7 +10,7 @@
 /* @flow strict-local */
 
 import type { Effects, Realm } from "../realm.js";
-import type { PropertyBinding, PropertyKeyValue, Descriptor, ObjectKind } from "../types.js";
+import type { PropertyBinding, PropertyKeyValue, Descriptor, ObjectKind, ShapeInformationInterface } from "../types.js";
 import {
   AbstractValue,
   BoundFunctionValue,
@@ -41,7 +41,8 @@ type PossibleNestedOptimizedFunctions = [
 function evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
   realm: Realm,
   abstractArrayValue: ArrayValue,
-  possibleNestedOptimizedFunctions: PossibleNestedOptimizedFunctions
+  possibleNestedOptimizedFunctions: PossibleNestedOptimizedFunctions,
+  argShapes: void | Array<void | ShapeInformationInterface>
 ): void {
   for (let { func, thisValue } of possibleNestedOptimizedFunctions) {
     let funcToModel = func;
@@ -70,15 +71,16 @@ function evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
 
     let funcCall = () => {
       invariant(funcToModel instanceof ECMAScriptSourceFunctionValue);
-      return realm.evaluateFunctionForPureEffects(
-        func,
-        Utils.createModelledFunctionCall(realm, funcToModel, undefined, thisValue),
+      let effects = realm.evaluateForEffects(
+        Utils.createModelledFunctionCall(realm, funcToModel, undefined, thisValue, argShapes, true),
         null,
-        "temporalArray nestedOptimizedFunction",
-        () => {
-          throw new NestedOptimizedFunctionSideEffect();
-        }
+        "temporalArray nestedOptimizedFunction"
       );
+      Utils.dropNetZeroModifications(effects, func);
+      Utils.reportSideEffectsFromEffects(realm, effects, func, () => {
+        throw new NestedOptimizedFunctionSideEffect();
+      });
+      return effects;
     };
     // We take the modelled function and wrap it in a pure evaluation so we can check for
     // side-effects that occur when evaluating the function. If there are side-effects, then
@@ -122,7 +124,8 @@ function modelUnknownPropertyOfSpecializedArray(
   realm: Realm,
   args: Array<Value>,
   array: ArrayValue,
-  possibleNestedOptimizedFunctions: ?PossibleNestedOptimizedFunctions
+  possibleNestedOptimizedFunctions: ?PossibleNestedOptimizedFunctions,
+  elementType: typeof Value = Value
 ): PropertyBinding {
   let sentinelProperty = {
     key: undefined,
@@ -192,7 +195,7 @@ function modelUnknownPropertyOfSpecializedArray(
   }
 
   let aliasSet = AbstractValue.createFromType(realm, Value, "mayAliasSet", [...mayAliasedObjects]);
-  sentinelProperty.descriptor.value = AbstractValue.createFromType(realm, Value, "widened numeric property", [
+  sentinelProperty.descriptor.value = AbstractValue.createFromType(realm, elementType, "widened numeric property", [
     aliasSet,
   ]);
 
@@ -203,7 +206,9 @@ function createArrayWithWidenedNumericProperty(
   realm: Realm,
   args: Array<Value>,
   intrinsicName: string,
-  possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions
+  possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions,
+  elementType: typeof Value = Value,
+  argShapes?: Array<void | ShapeInformationInterface>
 ): ArrayValue {
   let abstractArrayValue = new ArrayValue(realm, intrinsicName);
 
@@ -212,7 +217,8 @@ function createArrayWithWidenedNumericProperty(
       evaluatePossibleNestedOptimizedFunctionsAndStoreEffects(
         realm,
         abstractArrayValue,
-        possibleNestedOptimizedFunctions
+        possibleNestedOptimizedFunctions,
+        argShapes
       );
     } else {
       // If nested optimized functions are disabled, we need to fallback to
@@ -229,7 +235,8 @@ function createArrayWithWidenedNumericProperty(
     realm,
     args,
     abstractArrayValue,
-    possibleNestedOptimizedFunctions
+    possibleNestedOptimizedFunctions,
+    elementType
   );
   return abstractArrayValue;
 }
@@ -239,6 +246,12 @@ export default class ArrayValue extends ObjectValue {
     super(realm, realm.intrinsics.ArrayPrototype, intrinsicName);
   }
   nestedOptimizedFunctionEffects: void | Map<ECMAScriptSourceFunctionValue, Effects>;
+  // For arrays with widened numeric properties that model an abstract input array, the shape of
+  // the array (whose element shape is used for the arguments of nested optimized callbacks).
+  shape: void | ShapeInformationInterface;
+  _widenedIsDense: void | boolean;
+  _widenedMutated: void | boolean;
+  _lastWidenedLength: void | AbstractValue;
 
   getKind(): ObjectKind {
     return "Array";
@@ -261,6 +274,7 @@ export default class ArrayValue extends ObjectValue {
       return Properties.ArraySetLength(this.$Realm, A, Desc);
     } else if (IsArrayIndex(this.$Realm, P)) {
       if (ArrayValue.isIntrinsicAndHasWidenedNumericProperty(this)) {
+        this.recordWidenedMutation();
         // The length of an array with widenend numeric properties is always abstract
         let succeeded = Properties.OrdinaryDefineOwnProperty(this.$Realm, A, P, Desc);
         if (succeeded === false) return false;
@@ -351,19 +365,61 @@ export default class ArrayValue extends ObjectValue {
     realm: Realm,
     args: Array<Value>,
     operationDescriptor: OperationDescriptor,
-    possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions
+    possibleNestedOptimizedFunctions?: PossibleNestedOptimizedFunctions,
+    elementType: typeof Value = Value,
+    isPure: boolean = true,
+    isDense: boolean = false,
+    argShapes?: Array<void | ShapeInformationInterface>
   ): ArrayValue {
     invariant(realm.generator !== undefined);
 
     let value = realm.generator.deriveConcreteObject(
-      intrinsicName =>
-        createArrayWithWidenedNumericProperty(realm, args, intrinsicName, possibleNestedOptimizedFunctions),
+      intrinsicName => {
+        let arr = createArrayWithWidenedNumericProperty(
+          realm,
+          args,
+          intrinsicName,
+          possibleNestedOptimizedFunctions,
+          elementType,
+          argShapes
+        );
+        if (isDense) arr._widenedIsDense = true;
+        return arr;
+      },
       args,
       operationDescriptor,
-      { isPure: true }
+      { isPure }
     );
     invariant(value instanceof ArrayValue);
     return value;
+  }
+
+  recordWidenedMutation(): void {
+    this._widenedMutated = true;
+    this._widenedIsDense = false;
+    const prop = this.unknownProperty;
+    const propDesc = prop !== undefined ? prop.descriptor : undefined;
+    if (prop !== undefined && propDesc instanceof PropertyDescriptor && propDesc.value instanceof AbstractValue) {
+      let cur = propDesc.value;
+      if (cur.kind === "widened numeric property" && cur.getType() !== Value) {
+        this.$Realm.recordModifiedProperty(prop);
+        let desc = new PropertyDescriptor(propDesc);
+        desc.value = AbstractValue.createFromType(this.$Realm, Value, "widened numeric property", cur.args);
+        prop.descriptor = desc;
+      }
+    }
+  }
+
+  static getWidenedElementType(obj: Value): typeof Value {
+    if (ArrayValue.isIntrinsicAndHasWidenedNumericProperty(obj)) {
+      invariant(
+        obj instanceof ArrayValue && obj.unknownProperty !== undefined && obj.unknownProperty.descriptor !== undefined
+      );
+      const desc = obj.unknownProperty.descriptor.throwIfNotConcrete(obj.$Realm);
+      invariant(desc.value instanceof AbstractValue);
+      return desc.value.getType();
+    }
+    return Value;
   }
 
   static isIntrinsicAndHasWidenedNumericProperty(obj: Value): boolean {

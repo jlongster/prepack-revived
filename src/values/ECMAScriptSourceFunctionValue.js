@@ -11,7 +11,7 @@
 
 import type { Realm } from "../realm.js";
 import type { BabelNodeBlockStatement, BabelNodeSourceLocation, BabelNodeLVal } from "@babel/types";
-import type { FunctionBodyAstNode } from "../types.js";
+import type { ClassInstanceElement, FunctionBodyAstNode } from "../types.js";
 import { ECMAScriptFunctionValue } from "./index.js";
 import * as t from "@babel/types";
 import invariant from "../invariant.js";
@@ -27,6 +27,7 @@ export default class ECMAScriptSourceFunctionValue extends ECMAScriptFunctionVal
   $ECMAScriptCode: BabelNodeBlockStatement;
   $HasComputedName: ?boolean;
   $HasEmptyConstructor: ?boolean;
+  $ClassInstanceElements: void | Array<ClassInstanceElement>;
   loc: ?BabelNodeSourceLocation;
 
   initialize(params: Array<BabelNodeLVal>, body: BabelNodeBlockStatement) {

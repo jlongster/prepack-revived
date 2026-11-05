@@ -13,6 +13,7 @@ import type {
   AbstractObjectValue,
   AbstractValue,
   ArrayValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
   ECMAScriptFunctionValue,
@@ -150,11 +151,32 @@ export type PropertyBinding = {
   // contains a operation descriptor that produces a member expression that resolves to this property binding (location)
   pathNode?: AbstractValue,
   internalSlot?: boolean,
+  // set if the property was created after a write with an unknown name: the unknown property's value at that time
+  createdAfterUnknownWrite?: Value | Descriptor,
 };
 
 export type LexicalEnvironmentTypes = "global" | "module" | "script" | "function" | "block" | "catch" | "loop" | "with";
 
 export type PropertyKeyValue = string | StringValue | SymbolValue;
+
+export type ClassInstanceElement =
+  | {
+      kind: "field",
+      isPrivate: boolean,
+      privateName?: string,
+      key: PropertyKeyValue,
+      computed: boolean,
+      initializer: ECMAScriptSourceFunctionValue,
+      hasValue: boolean,
+      setFunctionName: boolean,
+    }
+  | {
+      kind: "privateMethod",
+      methodKind: "method" | "get" | "set",
+      privateName: string,
+      privateSymbol: SymbolValue,
+      func: ECMAScriptSourceFunctionValue,
+    };
 
 export type Intrinsics = {
   undefined: UndefinedValue,
@@ -215,6 +237,8 @@ export type Intrinsics = {
   NumberPrototype: ObjectValue,
   Symbol: NativeFunctionValue,
   SymbolPrototype: ObjectValue,
+  BigInt: NativeFunctionValue,
+  BigIntPrototype: ObjectValue,
   StringPrototype: ObjectValue,
   Object: NativeFunctionValue,
   Function: NativeFunctionValue,
@@ -279,6 +303,12 @@ export type Intrinsics = {
   Generator: ObjectValue,
   GeneratorPrototype: ObjectValue,
   GeneratorFunction: NativeFunctionValue,
+  AsyncFunctionPrototype: ObjectValue,
+  AsyncFunction: NativeFunctionValue,
+  AsyncIteratorPrototype: ObjectValue,
+  AsyncGenerator: ObjectValue,
+  AsyncGeneratorPrototype: ObjectValue,
+  AsyncGeneratorFunction: NativeFunctionValue,
 
   __IntrospectionError: NativeFunctionValue,
   __IntrospectionErrorPrototype: ObjectValue,
@@ -319,6 +349,7 @@ export type ObjectKind =
   | "Array"
   | "Function"
   | "Symbol"
+  | "BigInt"
   | "String"
   | "Number"
   | "Boolean"
@@ -331,7 +362,9 @@ export type ObjectKind =
   | "WeakMap"
   | "WeakSet"
   | TypedArrayKind
-  | "ReactElement";
+  | "ReactElement"
+  | "Promise"
+  | "Generator";
 // TODO #26 #712: Promises. All kinds of iterators. Generators.
 
 export type ClassComponentMetadata = {
@@ -541,6 +574,25 @@ export type FunctionType = {
     ParameterList: Array<BabelNodeLVal>,
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
+    Strict: boolean,
+    isAsync?: boolean
+  ): ECMAScriptSourceFunctionValue,
+
+  AsyncFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method" | "arrow",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
+    Strict: boolean
+  ): ECMAScriptSourceFunctionValue,
+
+  AsyncGeneratorFunctionCreate(
+    realm: Realm,
+    kind: "normal" | "method",
+    ParameterList: Array<BabelNodeLVal>,
+    Body: BabelNodeBlockStatement,
+    Scope: LexicalEnvironment,
     Strict: boolean
   ): ECMAScriptSourceFunctionValue,
 
@@ -563,7 +615,7 @@ export type FunctionType = {
     realm: Realm,
     functionPrototype: ObjectValue | AbstractObjectValue,
     strict: boolean,
-    functionKind: "normal" | "non-constructor" | "generator"
+    functionKind: "normal" | "non-constructor" | "generator" | "async" | "asyncGenerator"
   ): ECMAScriptSourceFunctionValue,
 
   // ECMA262 9.4.1.3
@@ -597,7 +649,8 @@ export type FunctionType = {
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
     Strict: boolean,
-    prototype?: ObjectValue
+    prototype?: ObjectValue,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue,
 
   // ECMA262 18.2.1.2
@@ -611,6 +664,8 @@ export type FunctionType = {
 
   // ECMA 9.2.10
   MakeMethod(realm: Realm, F: ECMAScriptSourceFunctionValue, homeObject: ObjectValue): Value,
+
+  InitializeInstanceElements(realm: Realm, receiver: ObjectValue, F: ObjectValue): void,
 
   // ECMA 14.3.8
   DefineMethod(
@@ -627,6 +682,8 @@ export type EnvironmentType = {
   // ECMA262 6.2.3
   // IsSuperReference(V). Returns true if this reference has a thisValue component.
   IsSuperReference(realm: Realm, V: Reference): boolean,
+
+  ResolvePrivateIdentifier(realm: Realm, env: LexicalEnvironment, privateName: string): SymbolValue,
 
   // ECMA262 6.2.3
   // HasPrimitiveBase(V). Returns true if Type(base) is Boolean, String, Symbol, or Number.
@@ -853,7 +910,7 @@ export type CreateType = {
     realm: Realm,
     constructor: ObjectValue,
     newTarget: void | ObjectValue,
-    kind: "normal" | "generator",
+    kind: "normal" | "generator" | "async" | "asyncGenerator",
     args: Array<Value>
   ): Value,
 };
@@ -941,6 +998,8 @@ export type ToType = {
 
   // ECMA262 7.1.3
   ToNumber(realm: Realm, val: numberOrValue): number,
+  ToNumeric(realm: Realm, val: ConcreteValue): NumberValue | BigIntValue,
+  ToBigInt(realm: Realm, val: Value): BigIntValue,
 
   ToNumberOrAbstract(realm: Realm, val: numberOrValue): number | AbstractValue,
 
@@ -1004,9 +1063,17 @@ export type UtilsType = {|
   describeValue: Value => string,
   jsonToDisplayString: <T: { toDisplayJson(number): DisplayResult }>(T, number) => string,
   verboseToDisplayJson: ({}, number) => DisplayResult,
-  createModelledFunctionCall: (Realm, FunctionValue, void | string | ArgModel, void | Value) => void => Value,
+  createModelledFunctionCall: (
+    Realm,
+    FunctionValue,
+    void | string | ArgModel,
+    void | Value,
+    void | Array<void | ShapeInformationInterface>,
+    void | boolean
+  ) => void => Value,
   isBindingMutationOutsideFunction: (binding: Binding, bindingEntry: BindingEntry, F: FunctionValue) => boolean,
   areEffectsPure: (realm: Realm, effects: Effects, F: FunctionValue) => boolean,
+  dropNetZeroModifications: (effects: Effects, F: FunctionValue) => void,
   reportSideEffectsFromEffects: (
     realm: Realm,
     effects: Effects,
@@ -1040,6 +1107,8 @@ export interface ShapeInformationInterface {
   getPropertyShape(key: string): void | ShapeInformationInterface;
   getGetter(): void | SupportedGraphQLGetters;
   getAbstractType(): typeof Value;
+  getVariants(): void | Array<ShapeInformationInterface>;
+  getJSType(): string;
 }
 
 type ECMAScriptType =
@@ -1087,11 +1156,20 @@ type ShapeDescriptorOfEnum = ShapeDescriptorCommon & {
   kind: "enum",
 };
 
+// A value that is exactly one of the variants. Variants are discriminated at runtime by typeof
+// (and === for undefined/null), so at most one variant may have each of the jsTypes void, null,
+// boolean, number/integral, string, and at most one of object/array.
+type ShapeDescriptorOfUnion = ShapeDescriptorCommon & {
+  kind: "union",
+  variants: Array<ShapeDescriptor>,
+};
+
 export type ShapeDescriptorNonLink =
   | ShapeDescriptorOfObject
   | ShapeDescriptorOfArray
   | ShapeDescriptorOfPrimitive
-  | ShapeDescriptorOfEnum;
+  | ShapeDescriptorOfEnum
+  | ShapeDescriptorOfUnion;
 
 export type ShapeDescriptor = ShapeDescriptorNonLink | ShapeDescriptorOfLink;
 

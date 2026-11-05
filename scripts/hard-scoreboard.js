@@ -117,32 +117,41 @@ function parseTest(code) {
 }
 
 // Same sandbox as execInContext in scripts/test-runner.js.
+// Evaluates top-level script code, drains microtasks (as browsers/engines do after a <script>), then calls inspect().
 function execInContext(code) {
   let result = "";
   let logOutput = "";
   let write = (prefix, values) => {
     logOutput += "\n" + prefix + values.join("");
   };
+  let onUnhandled = () => {};
+  let onHandled = () => {};
+  process.on("unhandledRejection", onUnhandled);
+  process.on("rejectionHandled", onHandled);
   try {
-    new vm.Script(`var global = this;\nvar self = this;\n${code}\nreport(inspect());`).runInNewContext(
-      {
-        setTimeout,
-        setInterval,
-        clearTimeout,
-        clearInterval,
-        report: s => {
-          result = s;
-        },
-        console: {
-          log: (...s) => write("", s),
-          warn: (...s) => write("WARN:", s),
-          error: (...s) => write("ERROR:", s),
-        },
+    let ctx = vm.createContext({
+      setTimeout,
+      setInterval,
+      clearTimeout,
+      clearInterval,
+      report: s => {
+        result = s;
       },
-      { timeout: EXEC_TIMEOUT }
-    );
+      console: {
+        log: (...s) => write("", s),
+        warn: (...s) => write("WARN:", s),
+        error: (...s) => write("ERROR:", s),
+      },
+    });
+    new vm.Script(`var global = this;\nvar self = this;\n${code}`).runInContext(ctx, { timeout: EXEC_TIMEOUT });
+    if (typeof process._tickCallback === "function") process._tickCallback();
+    new vm.Script(`report(inspect());`).runInContext(ctx, { timeout: EXEC_TIMEOUT });
+    if (typeof process._tickCallback === "function") process._tickCallback();
   } catch (e) {
     return Promise.resolve({ value: "" + e, threw: true });
+  } finally {
+    process.removeListener("unhandledRejection", onUnhandled);
+    process.removeListener("rejectionHandled", onHandled);
   }
   if (result && typeof result.then === "function") {
     let timer;

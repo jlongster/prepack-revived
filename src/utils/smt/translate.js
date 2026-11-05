@@ -396,19 +396,41 @@ export class SmtTranslator {
           case "*": {
             if (args[0] instanceof NumberValue) return `(Num ${constMul(args[0].value, `(tonum ${b})`)})`;
             if (args[1] instanceof NumberValue) return `(Num ${constMul(args[1].value, `(tonum ${a})`)})`;
-            return `(Num (numop ${NUMOP_CODES["*"]} (tonum ${a}) (tonum ${b})))`;
+            if (args[0].getType() === BooleanValue) {
+              return `(Num (ite ((_ is Bool) ${a}) (ite (jb ${a}) ${constMul(1, `(tonum ${b})`)} ${constMul(
+                0,
+                `(tonum ${b})`
+              )}) NaN))`;
+            }
+            if (args[1].getType() === BooleanValue) {
+              return `(Num (ite ((_ is Bool) ${b}) (ite (jb ${b}) ${constMul(1, `(tonum ${a})`)} ${constMul(
+                0,
+                `(tonum ${a})`
+              )}) NaN))`;
+            }
+            let ta = `(tonum ${a})`;
+            let tb = `(tonum ${b})`;
+            return `(Num (ite (or ((_ is NaN) ${ta}) ((_ is NaN) ${tb})) NaN (numop ${NUMOP_CODES["*"]} ${ta} ${tb})))`;
           }
           case "/": {
             let ta = `(tonum ${a})`;
             let tb = `(tonum ${b})`;
-            return `(Num (ite (nzero ${tb}) ${this.freshN()} (numop ${NUMOP_CODES["/"]} ${ta} ${tb})))`;
+            return `(Num (ite (or ((_ is NaN) ${ta}) ((_ is NaN) ${tb})) NaN (ite (nzero ${tb}) ${this.freshN()} (numop ${
+              NUMOP_CODES["/"]
+            } ${ta} ${tb}))))`;
           }
           case "**": {
             let ta = `(tonum ${a})`;
             let tb = `(tonum ${b})`;
             return `(Num (ite (nzero ${ta}) ${this.freshN()} (numop ${NUMOP_CODES["**"]} ${ta} ${tb})))`;
           }
-          case "%":
+          case "%": {
+            let ta = `(tonum ${a})`;
+            let tb = `(tonum ${b})`;
+            return `(Num (ite (or ((_ is NaN) ${ta}) ((_ is NaN) ${tb}) ((_ is PInf) ${ta}) ((_ is NInf) ${ta}) (nzero ${tb})) NaN (numop ${
+              NUMOP_CODES["%"]
+            } ${ta} ${tb})))`;
+          }
           case "&":
           case "|":
           case "^":
@@ -474,8 +496,17 @@ export class SmtTranslator {
 function pureOperationSpec(v: AbstractValue): void | [OperationDescriptor, Array<Value>] {
   let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
   if (entry !== undefined) {
-    return entry.isPure === true ? [entry.operationDescriptor, entry.args] : undefined;
+    if (
+      entry.isPure === true ||
+      entry.operationDescriptor.type === "BINARY_EXPRESSION" ||
+      entry.operationDescriptor.type === "UNARY_EXPRESSION"
+    ) {
+      return [entry.operationDescriptor, entry.args];
+    }
+    return undefined;
   }
+  // Abstract arguments (e.g. recursion probe arguments) may share a name while denoting different values.
+  if (typeof v.kind === "string" && v.kind.startsWith("abstractCounted:")) return undefined;
   if (v.operationDescriptor !== undefined) {
     return [v.operationDescriptor, v.args];
   }
@@ -487,6 +518,8 @@ function samePureDescriptor(a: OperationDescriptor, b: OperationDescriptor): boo
   if (a.type !== b.type) return false;
   if (a.type === "ABSTRACT_PROPERTY") return true;
   if (a.type === "ABSTRACT_FROM_TEMPLATE") return a.data.templateSource === b.data.templateSource;
+  if (a.type === "BINARY_EXPRESSION") return a.data.binaryOperator === b.data.binaryOperator;
+  if (a.type === "UNARY_EXPRESSION") return a.data.unaryOperator === b.data.unaryOperator;
   if (a.type === "IDENTIFIER") return a.data.id === b.data.id;
   return false;
 }

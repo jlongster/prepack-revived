@@ -11,7 +11,7 @@
 
 import { DeclarativeEnvironmentRecord, type Binding } from "../environment.js";
 import { AbstractValue, ConcreteValue, ObjectValue, Value } from "../values/index.js";
-import type { ECMAScriptSourceFunctionValue, FunctionValue } from "../values/index.js";
+import type { ECMAScriptSourceFunctionValue, FunctionValue, SymbolValue } from "../values/index.js";
 import type {
   BabelNodeExpression,
   BabelNodeStatement,
@@ -66,12 +66,19 @@ export type AdditionalFunctionInfo = {
 };
 
 export type ClassMethodInstance = {|
+  classConstructor: FunctionValue,
   classPrototype: ObjectValue,
-  methodType: "constructor" | "method" | "get" | "set",
-  classSuperNode: void | BabelNodeIdentifier,
+  methodType: "constructor" | "method" | "get" | "set" | "field" | "privateField",
+  classSuperNode: void | BabelNodeExpression,
   classMethodIsStatic: boolean,
+  classMethodKey?: string | SymbolValue,
   classMethodKeyNode: void | BabelNodeExpression,
   classMethodComputed: boolean,
+  privateName?: string,
+  staticPrivateFields?: Array<{ privateName: string, valueNode: ?BabelNodeExpression }>,
+  minInsertionIndex?: number,
+  minInsertionBody?: SerializedBody,
+  homeKey?: string | SymbolValue,
 |};
 
 // Each of these will correspond to a different preludeGenerator and thus will
