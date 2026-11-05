@@ -21,13 +21,13 @@ export const MAX_KEY_CASES = 8;
 // Evaluates f once for each value in cases, under the path condition `value === c`, and joins the
 // effects and results. cases must contain every value that value can have at runtime (as computed
 // by the values or interval domain); cases ruled out by the current path conditions are skipped.
-export function mapCases(
+export function mapCases<T: ConcreteValue>(
   realm: Realm,
   value: AbstractValue,
-  cases: Array<ConcreteValue>,
-  f: ConcreteValue => Value
+  cases: $ReadOnlyArray<T>,
+  f: T => Value
 ): Value {
-  let conditions = new Map();
+  let conditions: Map<T, Value> = new Map();
   for (let c of cases) {
     let condition = AbstractValue.createFromBinaryOp(realm, "===", value, c, value.expressionLocation, undefined, true);
     if (condition.mightNotBeFalse()) conditions.set(c, condition);

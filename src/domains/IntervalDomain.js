@@ -48,7 +48,7 @@ const MAX_DEPTH = 12;
 
 export default class IntervalDomain {
   constructor(lo: number, hi: number, integral: boolean, mayBeNaN: boolean, mayBeNegZero: boolean) {
-    invariant(lo <= hi || (lo !== lo && hi !== hi), "empty or malformed interval");
+    invariant(lo <= hi || (Number.isNaN(lo) && Number.isNaN(hi)), "empty or malformed interval");
     this.lo = lo === 0 ? 0 : lo;
     this.hi = hi === 0 ? 0 : hi;
     this.integral = integral && isFinite(lo) && isFinite(hi);
@@ -72,7 +72,7 @@ export default class IntervalDomain {
   static refinementHook: void | ((value: AbstractValue, interval: IntervalDomain) => IntervalDomain);
 
   static point(n: number): IntervalDomain {
-    if (n !== n) return new IntervalDomain(NaN, NaN, false, true, false);
+    if (Number.isNaN(n)) return new IntervalDomain(NaN, NaN, false, true, false);
     return new IntervalDomain(n, n, Number.isInteger(n), false, Object.is(n, -0));
   }
 
@@ -82,7 +82,7 @@ export default class IntervalDomain {
 
   // Returns true if the interval contains no non-NaN values (i.e. it only describes NaN).
   isOnlyNaN(): boolean {
-    return this.lo !== this.lo;
+    return Number.isNaN(this.lo);
   }
 
   join(other: IntervalDomain): IntervalDomain {
@@ -214,7 +214,7 @@ export default class IntervalDomain {
   // as a length or index); otherwise undefined is returned when -0 is possible.
   static enumerate(value: Value, limit: number, ignoreNegZero: boolean): void | Array<number> {
     if (value instanceof NumberValue) {
-      if (value.value !== value.value) return undefined;
+      if (Number.isNaN(value.value)) return undefined;
       if (Object.is(value.value, -0)) return ignoreNegZero ? [0] : undefined;
       return [value.value];
     }
@@ -225,7 +225,7 @@ export default class IntervalDomain {
       for (let v of value.values.getElements()) {
         if (!(v instanceof NumberValue)) return undefined;
         let n = v.value;
-        if (n !== n) return undefined;
+        if (Number.isNaN(n)) return undefined;
         if (Object.is(n, -0)) {
           if (!ignoreNegZero) return undefined;
           n = 0;
@@ -259,7 +259,7 @@ export default class IntervalDomain {
     let result = [];
     for (let v of value.values.getElements()) {
       if (v instanceof StringValue) result.push(v);
-      else if (v instanceof NumberValue && v.value === v.value)
+      else if (v instanceof NumberValue && !Number.isNaN(v.value))
         result.push(new NumberValue(realm, v.value === 0 ? 0 : v.value));
       else return undefined;
     }
@@ -313,8 +313,15 @@ function refineWithPathConditions(
   return interval;
 }
 
-const flippedOperator = { "<": ">", "<=": ">=", ">": "<", ">=": "<=", "===": "===", "==": "==" };
-const negatedOperator = { "<": ">=", "<=": ">", ">": "<=", ">=": "<", "!==": "===", "!=": "==" };
+const flippedOperator: { [string]: string } = { "<": ">", "<=": ">=", ">": "<", ">=": "<=", "===": "===", "==": "==" };
+const negatedOperator: { [string]: string } = {
+  "<": ">=",
+  "<=": ">",
+  ">": "<=",
+  ">=": "<",
+  "!==": "===",
+  "!=": "==",
+};
 
 // If condition (assumed true) constrains value against a number constant, return the constraint.
 // If integral is true, value is known to be an integer, so strict bounds can be tightened.
@@ -339,7 +346,7 @@ function factAbout(value: AbstractValue, condition: AbstractValue, integral: boo
   } else {
     return undefined;
   }
-  if (op === undefined || k !== k) return undefined;
+  if (op === undefined || Number.isNaN(k)) return undefined;
   // A negated relational comparison also holds for NaN, so NaN stays possible.
   let mayBeNaN = false;
   if (negated) {
@@ -563,7 +570,7 @@ function arithmetic(op: "+" | "-" | "*", a: IntervalDomain, b: IntervalDomain): 
     if ((aHasZero && bHasInf) || (bHasZero && aHasInf)) return IntervalDomain.top;
   }
   let candidates = op === "+" ? [a.lo + b.lo, a.hi + b.hi] : [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi];
-  if (candidates.some(c => c !== c)) return IntervalDomain.top;
+  if (candidates.some(c => Number.isNaN(c))) return IntervalDomain.top;
   let mayBeNaN = a.mayBeNaN || b.mayBeNaN;
   let lo = Math.min(...candidates);
   let hi = Math.max(...candidates);

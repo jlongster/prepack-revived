@@ -298,20 +298,22 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       // If under c, y already simplifies to x, then (c ? x : y) <=> y; symmetrically for x under !c.
       if (depth <= 3) {
         if (y instanceof AbstractValue && !y.isTemporal()) {
+          let yVal = y;
           try {
-            let yWhenC = Path.withCondition(c, () => simplify(realm, y, isCondition, depth + 1));
-            if (yWhenC.equals(x)) return y;
+            let yWhenC = Path.withCondition(c, () => simplify(realm, yVal, isCondition, depth + 1));
+            if (yWhenC.equals(x)) return yVal;
           } catch (e) {
-            if (e instanceof InfeasiblePathError) return y;
+            if (e instanceof InfeasiblePathError) return yVal;
             throw e;
           }
         }
         if (x instanceof AbstractValue && !x.isTemporal()) {
+          let xVal = x;
           try {
-            let xWhenNotC = Path.withInverseCondition(c, () => simplify(realm, x, isCondition, depth + 1));
-            if (xWhenNotC.equals(y)) return x;
+            let xWhenNotC = Path.withInverseCondition(c, () => simplify(realm, xVal, isCondition, depth + 1));
+            if (xWhenNotC.equals(y)) return xVal;
           } catch (e) {
-            if (e instanceof InfeasiblePathError) return x;
+            if (e instanceof InfeasiblePathError) return xVal;
             throw e;
           }
         }
@@ -399,8 +401,10 @@ function withNegated<T>(realm: Realm, condition: AbstractValue, fn: () => T): T 
   } else if (condition.kind === "conditional" && negatedConjunctions.length < 15) {
     let [cc, ca, cb] = condition.args;
     negatedConjunctions.push([cc, ca]);
-    let notCc = AbstractValue.createFromUnaryOp(realm, "!", cc, true, undefined, true, true);
-    negatedConjunctions.push([notCc, cb]);
+    if (cc instanceof AbstractValue) {
+      let notCc = AbstractValue.createFromUnaryOp(realm, "!", cc, true, undefined, true, true);
+      negatedConjunctions.push([notCc, cb]);
+    }
   }
   try {
     return Path.withInverseCondition(condition, () => propagateUnits(realm, fn, 0));

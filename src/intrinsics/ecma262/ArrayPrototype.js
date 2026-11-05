@@ -11,6 +11,7 @@
 
 import type { Realm } from "../../realm.js";
 import {
+  AbstractObjectValue,
   AbstractValue,
   ArrayValue,
   BooleanValue,
@@ -966,7 +967,8 @@ export default function(realm: Realm, obj: ObjectValue): void {
     if (!(val instanceof AbstractValue)) return val;
     if (!val.mightHaveBeenDeleted()) return realm.simplifyAndRefineAbstractValue(val);
     let mapped = mapEmptyToUndefined(val, { nodes: 32 }, new Map());
-    if (mapped !== undefined) return realm.simplifyAndRefineAbstractValue(mapped);
+    if (mapped !== undefined)
+      return mapped instanceof AbstractValue ? realm.simplifyAndRefineAbstractValue(mapped) : mapped;
     if (!val.values.isTop()) return val.promoteEmptyToUndefined();
     return undefined;
   }
@@ -1031,7 +1033,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
   }
 
   function mightValueBeNaN(val: Value): boolean {
-    if (val instanceof NumberValue) return val.value !== val.value;
+    if (val instanceof NumberValue) return Number.isNaN(val.value);
     if (!(val instanceof AbstractValue) || !val.mightBeNumber()) return false;
     let r = IntervalDomain.of(val);
     return r === undefined ? true : r.mayBeNaN;
