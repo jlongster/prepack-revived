@@ -12,7 +12,7 @@
 // With --run, each program is also run through Prepack and classified.
 
 const { generate } = require("./generate");
-const { divider } = require("./report");
+const divider = "-".repeat(process.stdout.columns || 80);
 
 const argv = process.argv.slice(2);
 const opt = (name, def) => {
