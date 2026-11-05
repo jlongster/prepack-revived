@@ -400,9 +400,22 @@ export default class AbstractValue extends Value {
       // x === y and y !== z => !(x === z)
       let [x1, y1] = this.args;
       let [x2, y2] = val.args;
-      if (x1.equals(x2) && y1 instanceof ConcreteValue && y2 instanceof ConcreteValue && !y1.equals(y2)) return true;
+      let concreteStrictlyNotEqual = (a: ConcreteValue, b: ConcreteValue) =>
+        !(a instanceof NumberValue && b instanceof NumberValue ? a.value === b.value : a.equals(b));
+      if (
+        x1.equals(x2) &&
+        y1 instanceof ConcreteValue &&
+        y2 instanceof ConcreteValue &&
+        concreteStrictlyNotEqual(y1, y2)
+      )
+        return true;
       // x === y and x !== z => !(z === y)
-      if (y1.equals(y2) && x1 instanceof ConcreteValue && x2 instanceof ConcreteValue && !x1.equals(x2)) {
+      if (
+        y1.equals(y2) &&
+        x1 instanceof ConcreteValue &&
+        x2 instanceof ConcreteValue &&
+        concreteStrictlyNotEqual(x1, x2)
+      ) {
         return true;
       }
     }

@@ -1259,6 +1259,11 @@ export class Realm {
         this.pushPathConditionsLeadingToNormalCompletions(completion);
         if (cc.savedEffects === undefined) this.captureEffects(cc);
       } else {
+        if (this.savedCompletion.savedEffects !== undefined) {
+          let incorporated = Functions.incorporateSavedCompletion(this, completion);
+          invariant(incorporated instanceof Completion);
+          return incorporated;
+        }
         this.savedCompletion = undefined;
       }
       return cc;

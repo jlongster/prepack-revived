@@ -40,9 +40,12 @@ export class Completion {
   }
 
   static makeAllNormalCompletionsResultInUndefined(completion: Completion): void {
-    let undefinedVal = completion.value.$Realm.intrinsics.undefined;
-    if (completion instanceof SimpleNormalCompletion) completion.value = undefinedVal;
-    else if (completion instanceof JoinedNormalAndAbruptCompletions) {
+    let realm = completion.value.$Realm;
+    let undefinedVal = realm.intrinsics.undefined;
+    let bottomVal = realm.intrinsics.__bottomValue;
+    if (completion instanceof SimpleNormalCompletion) {
+      if (completion.value !== bottomVal) completion.value = undefinedVal;
+    } else if (completion instanceof JoinedNormalAndAbruptCompletions) {
       if (completion.composedWith !== undefined)
         Completion.makeAllNormalCompletionsResultInUndefined(completion.composedWith);
       Completion.makeAllNormalCompletionsResultInUndefined(completion.consequent);

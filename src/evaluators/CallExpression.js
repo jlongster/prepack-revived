@@ -97,6 +97,9 @@ function evaluateReference(
     realm.isInPureScope()
   ) {
     let base = ref.base;
+    if (!base.mightNotBeNull() || !base.mightNotBeUndefined()) {
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+    }
     if (base.kind === "conditional") {
       let [condValue, consequentVal, alternateVal] = base.args;
       invariant(condValue instanceof AbstractValue);
@@ -165,7 +168,7 @@ function evaluateConditionalReferenceBase(
             );
             return evaluateReference(consequentRef, ast, strictCode, env, realm);
           }
-          return consequentVal;
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
         },
         null,
         "evaluateConditionalReferenceBase consequent"
@@ -183,7 +186,7 @@ function evaluateConditionalReferenceBase(
             );
             return evaluateReference(alternateRef, ast, strictCode, env, realm);
           }
-          return alternateVal;
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
         },
         null,
         "evaluateConditionalReferenceBase alternate"
