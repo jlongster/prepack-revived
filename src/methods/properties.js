@@ -553,8 +553,13 @@ export class PropertiesImplementation {
     }
 
     // We assume that simple objects have no getter/setter properties and
-    // that all properties are writable.
-    if (!O.isSimpleObject() || (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && realm.isInPureScope())) {
+    // that all properties are writable. Non-widened ArrayValues have exotic
+    // length-updating [[DefineOwnProperty]] semantics on index writes.
+    if (
+      !O.isSimpleObject() ||
+      (!pIsLoopVar && O instanceof ArrayValue && !ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O)) ||
+      (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && realm.isInPureScope())
+    ) {
       if (realm.isInPureScope()) {
         // If we're in pure scope, we can leak the object and leave an
         // assignment in place.

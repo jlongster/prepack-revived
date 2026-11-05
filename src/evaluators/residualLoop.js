@@ -624,7 +624,7 @@ function collectReadOnlyParams(
   realm: Realm,
   env: LexicalEnvironment,
   state: TransformState
-): Array<{ name: string, value: Value }> {
+): Array<{ name: string, value: Value, binding: Binding }> {
   let params = [];
   for (let name of state.freeNames) {
     if (state.assignedNames.has(name) || state.capturedByInnerFunction.has(name) || isReservedName(name)) continue;
@@ -635,7 +635,7 @@ function collectReadOnlyParams(
     if (binding === undefined || !binding.initialized || binding.hasLeaked) continue;
     let val = binding.value;
     if (val === undefined) continue;
-    params.push({ name, value: val });
+    params.push({ name, value: val, binding });
   }
   return params;
 }
@@ -732,10 +732,22 @@ export function residualizeLoop(
 
   let inGlobalCode = !realm.isInPureScope();
   let readOnlyCandidates = inGlobalCode ? [] : collectReadOnlyParams(realm, env, state);
-  let attempt = (params: Array<{ name: string, value: Value }>) => {
+  let leakedCandidates: Set<string> = new Set();
+  let attempt = (params: Array<{ name: string, value: Value, binding: Binding }>) => {
     let loopEnv = Environment.NewDeclarativeEnvironment(realm, env);
     try {
-      let out = tryResidualLoop(realm, ast, transformed, strictCode, env, loopEnv, labelSet, reason, params);
+      let out = tryResidualLoop(
+        realm,
+        ast,
+        transformed,
+        strictCode,
+        env,
+        loopEnv,
+        labelSet,
+        reason,
+        params,
+        leakedCandidates
+      );
       if (out.effects === undefined) realm.onDestroyScope(loopEnv);
       return out;
     } catch (e) {
@@ -745,7 +757,11 @@ export function residualizeLoop(
   };
 
   let res = attempt(readOnlyCandidates);
-  if (res.effects === undefined && readOnlyCandidates.length > 0) {
+  if (res.effects === undefined && leakedCandidates.size > 0) {
+    let remaining = readOnlyCandidates.filter(p => !leakedCandidates.has(p.name));
+    res = attempt(remaining);
+  }
+  if (res.effects === undefined && readOnlyCandidates.length > 0 && leakedCandidates.size === 0) {
     // A helper called inside the loop may have mutated an outer local binding that was not syntactically assigned.
     res = attempt([]);
   }
@@ -807,7 +823,8 @@ function tryResidualLoop(
   loopEnv: LexicalEnvironment,
   labelSet: ?Array<string>,
   reason: string,
-  params: Array<{ name: string, value: Value }>
+  params: Array<{ name: string, value: Value, binding: Binding }>,
+  leakedCandidates: Set<string>
 ): { effects?: Effects, loopEnv: LexicalEnvironment, failure?: string } {
   let state = transformed.state;
   let needsExitCode = state.usesReturn || state.exits.length > 0;
@@ -847,6 +864,12 @@ function tryResidualLoop(
           if (state.usesArguments) leakEnclosingFunctionBindings(realm, env);
           Leak.value(realm, wrapper);
           if (thisVal !== undefined) Leak.value(realm, thisVal);
+          for (let p of params) {
+            if (p.binding.hasLeaked) leakedCandidates.add(p.name);
+          }
+          if (leakedCandidates.size > 0) {
+            throw new FatalError("read-only loop parameter binding was leaked");
+          }
         }
 
         // Evaluate one abstract iteration to find out what the loop might modify.

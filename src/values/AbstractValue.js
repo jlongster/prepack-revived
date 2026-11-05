@@ -176,11 +176,24 @@ export default class AbstractValue extends Value {
     let thisArgs = this.args;
     let n = thisArgs.length;
 
+    let operationDescriptorsAreEqual = (d1: void | OperationDescriptor, d2: void | OperationDescriptor): boolean => {
+      if (d1 === d2) return true;
+      if (d1 === undefined || d2 === undefined) return false;
+      if (d1.type !== d2.type) return false;
+      let k1 = Object.keys(d1.data);
+      let k2 = Object.keys(d2.data);
+      if (k1.length !== k2.length) return false;
+      for (let k of k1) {
+        if ((d1.data: any)[k] !== (d2.data: any)[k]) return false;
+      }
+      return true;
+    };
+
     let argsAreEqual = () => {
       invariant(x instanceof AbstractValue);
       let xArgs = x.args;
       let m = xArgs.length;
-      invariant(n === m); // Will be true if kinds are the same. Caller should see to it.
+      if (n !== m) return false;
       for (let i = 0; i < n; i++) {
         let a = thisArgs[i];
         let b = xArgs[i];
@@ -195,7 +208,10 @@ export default class AbstractValue extends Value {
         this.kind === x.kind &&
         this.hashValue === x.hashValue &&
         ((this.intrinsicName && this.intrinsicName.length > 0 && this.intrinsicName === x.intrinsicName) ||
-          (n > 0 && argsAreEqual())))
+          (this.intrinsicName === x.intrinsicName &&
+            operationDescriptorsAreEqual(this.operationDescriptor, x.operationDescriptor) &&
+            n > 0 &&
+            argsAreEqual())))
     );
   }
 

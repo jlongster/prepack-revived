@@ -653,11 +653,6 @@ export default class ObjectValue extends ConcreteValue {
 
   // ECMA262 9.1.7
   $HasProperty(P: PropertyKeyValue): boolean {
-    if (this.unknownProperty !== undefined && this.$GetOwnProperty(P) === undefined) {
-      AbstractValue.reportIntrospectionError(this, P);
-      throw new FatalError();
-    }
-
     return OrdinaryHasProperty(this.$Realm, this, P);
   }
 

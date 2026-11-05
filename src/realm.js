@@ -907,6 +907,7 @@ export class Realm {
     let saved_createdObjects = this.createdObjects;
     let saved_createdAbstracts = this.createdAbstracts;
     let saved_completion = this.savedCompletion;
+    let saved_pathConditions = this.pathConditions;
     let saved_abstractValuesDefined = this._abstractValuesDefined;
     this.generator = new Generator(this, generatorName, this.pathConditions);
     this.createdObjects = new Set();
@@ -964,6 +965,7 @@ export class Realm {
         } else {
           this.restoreBindings(this.modifiedBindings);
           this.restoreProperties(this.modifiedProperties);
+          this.pathConditions = saved_pathConditions;
           let completion = this.savedCompletion;
           while (completion !== undefined) {
             const { savedEffects } = completion;
@@ -1238,28 +1240,62 @@ export class Realm {
   composeWithSavedCompletion(completion: Completion): Completion {
     if (this.savedCompletion === undefined) {
       if (completion instanceof JoinedNormalAndAbruptCompletions) {
+        let savedPathConditions = this.pathConditions;
+        try {
+          this.pushPathConditionsLeadingToNormalCompletions(completion);
+        } catch (e) {
+          if (!(e instanceof InfeasiblePathError)) throw e;
+          this.pathConditions = savedPathConditions;
+          let abruptOnly = Completion.makeSelectedCompletionsInfeasibleInCopy(
+            c => c instanceof NormalCompletion,
+            completion
+          );
+          if (abruptOnly instanceof AbruptCompletion) return abruptOnly;
+        }
         this.savedCompletion = completion;
-        this.pushPathConditionsLeadingToNormalCompletions(completion);
         this.captureEffects(completion);
       }
       return completion;
     } else {
+      let prevSavedCompletion = this.savedCompletion;
       let savedPathConditions = this.pathConditions;
-      if (this.savedCompletion.pathConditionsAtCreation !== undefined) {
-        this.pathConditions = this.savedCompletion.pathConditionsAtCreation;
+      if (prevSavedCompletion.pathConditionsAtCreation !== undefined) {
+        this.pathConditions = prevSavedCompletion.pathConditionsAtCreation;
       }
       let cc;
       try {
-        cc = Join.composeCompletions(this.savedCompletion, completion);
+        cc = Join.composeCompletions(prevSavedCompletion, completion);
       } finally {
         this.pathConditions = savedPathConditions;
       }
       if (cc instanceof JoinedNormalAndAbruptCompletions) {
+        try {
+          this.pushPathConditionsLeadingToNormalCompletions(completion);
+        } catch (e) {
+          if (!(e instanceof InfeasiblePathError)) throw e;
+          this.pathConditions = savedPathConditions;
+          if (
+            completion instanceof JoinedNormalAndAbruptCompletions &&
+            completion.composedWith === prevSavedCompletion
+          ) {
+            completion.composedWith = undefined;
+          }
+          let abruptCompletion = Completion.makeSelectedCompletionsInfeasibleInCopy(
+            c => c instanceof NormalCompletion,
+            completion
+          );
+          if (prevSavedCompletion.savedEffects !== undefined) {
+            let incorporated = Functions.incorporateSavedCompletion(this, abruptCompletion);
+            invariant(incorporated instanceof Completion);
+            return incorporated;
+          }
+          this.savedCompletion = undefined;
+          return Join.composeCompletions(prevSavedCompletion, abruptCompletion);
+        }
         this.savedCompletion = cc;
-        this.pushPathConditionsLeadingToNormalCompletions(completion);
         if (cc.savedEffects === undefined) this.captureEffects(cc);
       } else {
-        if (this.savedCompletion.savedEffects !== undefined) {
+        if (prevSavedCompletion.savedEffects !== undefined) {
           let incorporated = Functions.incorporateSavedCompletion(this, completion);
           invariant(incorporated instanceof Completion);
           return incorporated;
