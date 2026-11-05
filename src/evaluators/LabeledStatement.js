@@ -41,30 +41,23 @@ function LabelledEvaluation(
       labelSet.push(label);
 
       // 3. Let stmtResult be LabelledEvaluation of LabelledItem with argument labelSet.
-      let normalCompletionStmtResult;
-      try {
-        normalCompletionStmtResult = LabelledEvaluation(labelSet, labeledAst.body, strictCode, env, realm);
-      } catch (stmtResult) {
-        // 4. If stmtResult.[[Type]] is break and SameValue(stmtResult.[[Target]], label) is true, then
-        if (stmtResult instanceof BreakCompletion && stmtResult.target === label) {
-          // a. Let stmtResult be NormalCompletion(stmtResult.[[Value]]).
-          normalCompletionStmtResult = stmtResult.value;
-        } else if (
-          stmtResult instanceof JoinedAbruptCompletions ||
-          stmtResult instanceof JoinedNormalAndAbruptCompletions
-        ) {
-          let nc = Completion.normalizeSelectedCompletions(
-            c => c instanceof BreakCompletion && c.target === label,
-            stmtResult
-          );
-          return realm.returnOrThrowCompletion(nc);
-        } else {
-          // 5. Return Completion(stmtResult).
-          throw stmtResult;
-        }
+      // The end of the labeled statement is a join point for (conditional) break completions that target label.
+      let stmtResult = realm.evaluateCompletionInSavedCompletionScope(() =>
+        LabelledEvaluation(labelSet, labeledAst.body, strictCode, env, realm)
+      );
+      let selector = c => c instanceof BreakCompletion && c.target === label;
+      // 4. If stmtResult.[[Type]] is break and SameValue(stmtResult.[[Target]], label) is true, then
+      if (stmtResult instanceof BreakCompletion && stmtResult.target === label) {
+        // a. Let stmtResult be NormalCompletion(stmtResult.[[Value]]).
+        stmtResult = stmtResult.value;
+      } else if (
+        stmtResult instanceof JoinedAbruptCompletions ||
+        stmtResult instanceof JoinedNormalAndAbruptCompletions
+      ) {
+        stmtResult = Completion.normalizeSelectedCompletions(selector, stmtResult);
       }
       // 5. Return Completion(stmtResult).
-      return normalCompletionStmtResult;
+      return realm.returnOrThrowCompletion(stmtResult);
 
     case "VariableDeclaration":
       if (((ast: any): BabelNodeVariableDeclaration).kind === "var") {

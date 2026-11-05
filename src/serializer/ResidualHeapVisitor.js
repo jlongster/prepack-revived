@@ -1240,6 +1240,10 @@ export class ResidualHeapVisitor {
         fixpoint_rerun();
       },
       visitBindingAssignment: (binding: Binding, value: Value) => {
+        callbacks.visitLeakedBinding(binding);
+        return this.visitEquivalentValue(value);
+      },
+      visitLeakedBinding: (binding: Binding) => {
         let residualBinding = this.getBinding(binding.environment, binding.name);
         residualBinding.modified = true;
         residualBinding.hasLeaked = true;
@@ -1256,7 +1260,6 @@ export class ResidualHeapVisitor {
             this.visitBinding(commonScope, residualBinding);
           });
         }
-        return this.visitEquivalentValue(value);
       },
     };
     return callbacks;

@@ -119,6 +119,19 @@ function tryToEvaluateConstructOrLeaveAsAbstract(
 }
 
 function createConstruct(constructor: Value, argsList: Array<Value>, realm: Realm): ObjectValue | AbstractObjectValue {
+  if (constructor instanceof AbstractValue && constructor.kind === "conditional") {
+    // Construct each possible constructor under its condition and join the results. A side that is not
+    // a constructor (e.g. undefined, see #2561) becomes a conditional TypeError.
+    let [condition, consequent, alternate] = constructor.args;
+    let result = realm.evaluateWithAbstractConditional(
+      condition,
+      () =>
+        realm.evaluateForEffects(() => createConstruct(consequent, argsList, realm), undefined, "createConstruct/1"),
+      () => realm.evaluateForEffects(() => createConstruct(alternate, argsList, realm), undefined, "createConstruct/2")
+    );
+    invariant(result instanceof ObjectValue || result instanceof AbstractObjectValue);
+    return result;
+  }
   // 7. If IsConstructor(constructor) is false, throw a TypeError exception.
   if (IsConstructor(realm, constructor) === false) {
     throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);

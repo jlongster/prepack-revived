@@ -148,6 +148,9 @@ export class ResidualOperationSerializer {
       case "THROW":
         babelNode = this._serializeThrow(data, nodes);
         break;
+      case "TRY_CATCH":
+        invariant(declaredId !== undefined);
+        return this._serializeTryCatch(data, declaredId, context, valuesToProcess);
 
       // Invariants
       case "INVARIANT":
@@ -460,6 +463,28 @@ export class ResidualOperationSerializer {
     let statements = context.serializeGenerator(generator, valuesToProcess);
     let block = t.blockStatement(statements);
     return t.doWhileStatement(t.identifier(testId), block);
+  }
+
+  _serializeTryCatch(
+    { generator }: OperationDescriptorData,
+    declaredId: string,
+    context: SerializationContext,
+    valuesToProcess: Set<AbstractValue | ObjectValue>
+  ): BabelNodeStatement {
+    invariant(generator !== undefined);
+    let statements = context.serializeGenerator(generator, valuesToProcess);
+    let id = t.identifier(declaredId);
+    let exceptionId = t.identifier(declaredId === "e" ? "e1" : "e");
+    return t.blockStatement([
+      t.variableDeclaration("var", [t.variableDeclarator(id)]),
+      t.tryStatement(
+        t.blockStatement(statements),
+        t.catchClause(
+          exceptionId,
+          t.blockStatement([t.expressionStatement(t.assignmentExpression("=", id, t.arrayExpression([exceptionId])))])
+        )
+      ),
+    ]);
   }
 
   _serializeForIn(
@@ -848,22 +873,26 @@ export class ResidualOperationSerializer {
     context?: SerializationContext
   ): BabelNodeStatement {
     invariant(value instanceof Value);
+    let index = 0;
 
     function createStatement(val: Value) {
-      invariant(context !== undefined);
       if (!(val instanceof AbstractValue) || val.kind !== "conditional") {
-        return t.throwStatement(context.serializeValue(val));
+        return t.throwStatement(nodes[index++]);
       }
-      let [cond, trueVal, falseVal] = val.args;
-      let condVal = context.serializeValue(cond);
-      let trueStat, falseStat;
-      if (trueVal instanceof EmptyValue) trueStat = t.blockStatement([]);
-      else trueStat = createStatement(trueVal);
-      if (falseVal instanceof EmptyValue) falseStat = t.blockStatement([]);
-      else falseStat = createStatement(falseVal);
-      return t.ifStatement(condVal, trueStat, falseStat);
+      let [, trueVal, falseVal] = val.args;
+      if (trueVal instanceof EmptyValue && falseVal instanceof EmptyValue) return t.blockStatement([]);
+      let condVal = nodes[index++];
+      if (trueVal instanceof EmptyValue) {
+        return t.ifStatement(t.unaryExpression("!", condVal), createStatement(falseVal));
+      }
+      if (falseVal instanceof EmptyValue) {
+        return t.ifStatement(condVal, createStatement(trueVal));
+      }
+      return t.ifStatement(condVal, createStatement(trueVal), createStatement(falseVal));
     }
-    return createStatement(value);
+    let result = createStatement(value);
+    invariant(index === nodes.length);
+    return result;
   }
 
   _serializeReactSSRTemplateLiteral(
@@ -979,6 +1008,9 @@ export class ResidualOperationSerializer {
     let [generator1, generator2] = generators;
     let block1 = generator1.empty() ? null : serializeBody(generator1, context, valuesToProcess);
     let block2 = generator2.empty() ? null : serializeBody(generator2, context, valuesToProcess);
+    if (block1 && block1.body.length === 0) block1 = null;
+    if (block2 && block2.body.length === 0) block2 = null;
+    if (!block1 && !block2) return t.blockStatement([]);
     if (block1) return t.ifStatement(cond, block1, block2);
     invariant(block2);
     return t.ifStatement(t.unaryExpression("!", cond), block2);
