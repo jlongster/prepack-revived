@@ -42,6 +42,7 @@ import type { BabelNodeCallExpression } from "@babel/types";
 import invariant from "../invariant.js";
 import SuperCall from "./SuperCall.js";
 import { createOperationDescriptor } from "../utils/generator.js";
+import { createEnvironmentCallResult, isEnvironmentDerived } from "../intrinsics/env/models.js";
 
 export default function(
   ast: BabelNodeCallExpression,
@@ -89,16 +90,17 @@ function evaluateReference(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
+  let refBase = ref instanceof Reference ? ref.base : undefined;
   if (
     ref instanceof Reference &&
-    ref.base instanceof AbstractValue &&
+    refBase instanceof AbstractValue &&
     // TODO: what about ref.base conditionals that mightBeObjects?
-    ref.base.mightNotBeObject() &&
-    realm.isInPureScope()
+    refBase.mightNotBeObject() &&
+    (realm.isInPureScope() || (refBase.kind === "conditional" && isEnvironmentDerived(refBase)))
   ) {
-    let base = ref.base;
+    let base = refBase;
     if (!base.mightNotBeNull() || !base.mightNotBeUndefined()) {
-      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
     }
     if (base.kind === "conditional") {
       let [condValue, consequentVal, alternateVal] = base.args;
@@ -168,7 +170,7 @@ function evaluateConditionalReferenceBase(
             );
             return evaluateReference(consequentRef, ast, strictCode, env, realm);
           }
-          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
         },
         null,
         "evaluateConditionalReferenceBase consequent"
@@ -186,7 +188,7 @@ function evaluateConditionalReferenceBase(
             );
             return evaluateReference(alternateRef, ast, strictCode, env, realm);
           }
-          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
         },
         null,
         "evaluateConditionalReferenceBase alternate"
@@ -233,17 +235,31 @@ function generateRuntimeCall(
 ) {
   let args = [func];
   let [thisArg, propName] = ref instanceof Reference ? [ref.base, ref.referencedName] : [];
+  if (thisArg instanceof AbstractObjectValue && thisArg.kind === "explicit conversion to object") {
+    thisArg = thisArg.args[0];
+  }
   if (thisArg instanceof Value) args = [thisArg];
   if (propName !== undefined && typeof propName !== "string") args.push(propName);
-  args = args.concat(ArgumentListEvaluation(realm, strictCode, env, ast.arguments));
+  let evalArgs = ArgumentListEvaluation(realm, strictCode, env, ast.arguments);
+  args = args.concat(evalArgs);
+  let isEnvCall =
+    (func instanceof AbstractValue && !!func.isEnvironmentValue) ||
+    (thisArg instanceof AbstractValue && !!thisArg.isEnvironmentValue);
   for (let arg of args) {
     if (arg !== func) {
+      if (isEnvCall && !realm.isInPureScope()) {
+        continue;
+      }
       // Since we don't know which function we are calling, we assume that any unfrozen object
       // passed as an argument has leaked to the environment as is any other object that is known to be reachable from this object.
       // NB: Note that this is still optimistic, particularly if the environment exposes the same object
       // to Prepack via alternative means, thus creating aliasing that is not tracked by Prepack.
       Leak.value(realm, arg, ast.loc);
     }
+  }
+  if (isEnvCall) {
+    let envThisArg = thisArg instanceof Value ? thisArg : undefined;
+    return createEnvironmentCallResult(realm, func, envThisArg, propName, args, evalArgs);
   }
   let resultType = (func instanceof AbstractObjectValue ? func.functionResultType : undefined) || Value;
   return AbstractValue.createTemporalFromBuildFunction(
@@ -344,7 +360,7 @@ function EvaluateCall(
         return callBothFunctionsAndJoinTheirEffects(leftValue, rightValue, leftValue, ast, strictCode, env, realm);
       }
     }
-    if (!Value.isTypeCompatibleWith(func.getType(), FunctionValue)) {
+    if (!Value.isTypeCompatibleWith(func.getType(), FunctionValue) && !isEnvironmentDerived(func)) {
       if (!realm.isInPureScope()) {
         // If this is not a function, this call might throw which can change the state of the program.
         // If this is called from a pure function we handle it using evaluateWithPossiblyAbruptCompletion.

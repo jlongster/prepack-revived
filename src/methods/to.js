@@ -12,6 +12,7 @@
 import type { Descriptor, CallableObjectValue } from "../types.js";
 import type { Realm } from "../realm.js";
 import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
+import { isEnvironmentDerived } from "../intrinsics/env/models.js";
 import { GetMethod, Get } from "./get.js";
 import { Create } from "../singletons.js";
 import { HasProperty } from "./has.js";
@@ -36,6 +37,7 @@ import {
 } from "../values/index.js";
 import invariant from "../invariant.js";
 import { createOperationDescriptor } from "../utils/generator.js";
+import { smtEnabled, smtIsObject } from "../utils/smt/index.js";
 import { PropertyDescriptor } from "../descriptors.js";
 
 type ElementConvType = {
@@ -441,10 +443,32 @@ export class ToImplementation {
       /*eslint-disable */
       default:
         /*eslint-enable */
-        if (realm.isInPureScope()) {
-          // will be serialized as Object.assign(serialized_arg)
-          obj = AbstractValue.createFromType(realm, ObjectValue, "explicit conversion to object", [arg]);
-          invariant(obj instanceof AbstractObjectValue);
+        if (realm.isInPureScope() || isEnvironmentDerived(arg)) {
+          if (
+            !isEnvironmentDerived(arg) &&
+            arg instanceof AbstractValue &&
+            smtEnabled(realm) &&
+            smtIsObject(realm.pathConditions.getAllConditions(), arg)
+          ) {
+            let narrowed = AbstractValue.createFromBuildFunction(
+              realm,
+              ObjectValue,
+              [arg],
+              createOperationDescriptor("SINGLE_ARG")
+            );
+            invariant(narrowed instanceof AbstractObjectValue);
+            obj = narrowed;
+          } else {
+            // will be serialized as Object.assign(serialized_arg), or unwrapped on direct property access
+            obj = AbstractValue.createFromType(realm, ObjectValue, "explicit conversion to object", [arg]);
+            invariant(obj instanceof AbstractObjectValue);
+            if (isEnvironmentDerived(arg)) {
+              obj.isEnvironmentValue = true;
+              obj.envShapeName = arg.envShapeName;
+              obj.envPath = arg.envPath;
+              obj.envElementType = arg.envElementType;
+            }
+          }
         } else {
           obj = arg.throwIfNotConcreteObject();
         }
@@ -564,6 +588,12 @@ export class ToImplementation {
 
   IsToNumberPure(realm: Realm, val: numberOrValue): boolean {
     if (val instanceof Value) {
+      if (val instanceof AbstractValue && val.kind === "abstractConcreteUnion") {
+        return val.args.every(arg => this.IsToNumberPure(realm, arg));
+      }
+      if (val instanceof AbstractValue && val.kind === "conditional" && isEnvironmentDerived(val)) {
+        return this.IsToNumberPure(realm, val.args[1]) && this.IsToNumberPure(realm, val.args[2]);
+      }
       let type = this.GetToPrimitivePureResultType(realm, val);
       return type !== undefined && type !== SymbolValue && type !== PrimitiveValue && type !== Value;
     }
@@ -748,6 +778,12 @@ export class ToImplementation {
 
   IsToStringPure(realm: Realm, input: string | Value): boolean {
     if (input instanceof Value) {
+      if (input instanceof AbstractValue && input.kind === "abstractConcreteUnion") {
+        return input.args.every(arg => this.IsToStringPure(realm, arg));
+      }
+      if (input instanceof AbstractValue && input.kind === "conditional" && isEnvironmentDerived(input)) {
+        return this.IsToStringPure(realm, input.args[1]) && this.IsToStringPure(realm, input.args[2]);
+      }
       let type = this.GetToPrimitivePureResultType(realm, input);
       return type !== undefined && type !== SymbolValue && type !== PrimitiveValue && type !== Value;
     }

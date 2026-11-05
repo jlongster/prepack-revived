@@ -692,6 +692,9 @@ function mathFunction(name: string, args: Array<IntervalDomain>): IntervalDomain
       return new IntervalDomain(0, 1 - Number.EPSILON / 2, false, false, false);
     case "clz32":
       return IntervalDomain.integers(0, 32);
+    case "random":
+      // ECMA262 20.2.2.27: positive sign, >= +0 and < 1 (largest IEEE-754 binary64 < 1 is 1 - 2^-53).
+      return new IntervalDomain(0, 1 - Math.pow(2, -53), false, false, false);
     default:
       return IntervalDomain.top;
   }

@@ -187,7 +187,11 @@ export class ResidualOperationSerializer {
 
     switch (type) {
       case "IDENTIFIER":
+      case "ENV_GLOBAL":
         babelNode = this._serializeIdentifier(data, nodes);
+        break;
+      case "TYPEOF_GLOBAL":
+        babelNode = this._serializeTypeofGlobal(data, nodes);
         break;
       case "REBUILT_OBJECT":
         babelNode = this._serializeRebuiltObject(data, nodes);
@@ -826,6 +830,11 @@ export class ResidualOperationSerializer {
     return t.identifier(id);
   }
 
+  _serializeTypeofGlobal({ id }: OperationDescriptorData, nodes: Array<BabelNodeExpression>): BabelNodeExpression {
+    invariant(id !== undefined);
+    return t.unaryExpression("typeof", t.identifier(id), true);
+  }
+
   _serializeCoerceToString({  }: OperationDescriptorData, [p]: Array<BabelNodeExpression>): BabelNodeExpression {
     return t.binaryExpression("+", t.stringLiteral(""), p);
   }
@@ -945,10 +954,11 @@ export class ResidualOperationSerializer {
   }
 
   _serializeNewExpression(
-    {  }: OperationDescriptorData,
+    { propRef }: OperationDescriptorData,
     [constructorNode, ...argListNodes]: Array<BabelNodeExpression>
   ): BabelNodeExpression {
-    return t.newExpression(constructorNode, argListNodes);
+    let calleeNode = typeof propRef === "string" ? memberExpressionHelper(constructorNode, propRef) : constructorNode;
+    return t.newExpression(calleeNode, argListNodes);
   }
 
   _serializeEmitCall(

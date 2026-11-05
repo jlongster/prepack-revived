@@ -209,7 +209,10 @@ export class LeakImplementation {
           let whitelistedKind = val.kind && val.kind.startsWith("abstractCounted");
 
           invariant(
-            whitelistedKind !== undefined || val.intrinsicName !== undefined || val.args.length > 0,
+            whitelistedKind !== undefined ||
+              val.isEnvironmentValue === true ||
+              val.intrinsicName !== undefined ||
+              val.args.length > 0,
             "Leaked unknown object requires leakable arguments"
           );
         }

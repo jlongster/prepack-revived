@@ -349,6 +349,13 @@ export class ResidualHeapVisitor {
     if (getNativeErrorConstructorName(this.realm, obj) !== undefined) return;
     let kind = obj.getKind();
     if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
+    if (
+      obj instanceof ECMAScriptSourceFunctionValue &&
+      obj.$FunctionKind === "generator" &&
+      proto === this.realm.intrinsics.Generator
+    ) {
+      return;
+    }
 
     if (!obj.$IsClassPrototype || proto !== this.realm.intrinsics.null) {
       this.visitValue(proto);
@@ -809,7 +816,7 @@ export class ResidualHeapVisitor {
     }
 
     // handle class inheritance
-    if (!(classFunc.$Prototype instanceof NativeFunctionValue)) {
+    if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
       this.visitValue(classFunc.$Prototype);
     }
 

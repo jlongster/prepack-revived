@@ -46,6 +46,7 @@ import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js"
 import { IsArrayIndex } from "./is.js";
 import { IntervalDomain, TypesDomain, ValuesDomain } from "../domains/index.js";
 import { mapCases, MAX_KEY_CASES } from "../utils/cases.js";
+import { resolveGlobalObjectProperty } from "../intrinsics/env/models.js";
 
 // ECMA262 7.3.22
 export function GetFunctionRealm(realm: Realm, obj: ObjectValue): Realm {
@@ -270,7 +271,12 @@ export function OrdinaryGet(
         return AbstractValue.createFromConditionalOp(realm, cond, descValue, parentVal);
       }
       invariant(!desc || descValue instanceof EmptyValue);
-      return parent.$Get(P, Receiver);
+      let protoVal = parent.$Get(P, Receiver);
+      if (protoVal instanceof UndefinedValue && O === realm.$GlobalObject) {
+        let envProp = resolveGlobalObjectProperty(realm, P);
+        if (envProp !== undefined) return envProp;
+      }
+      return protoVal;
     }
 
     // 4. If IsDataDescriptor(desc) is true, return desc.[[Value]].

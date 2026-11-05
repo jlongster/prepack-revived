@@ -85,6 +85,7 @@ export type OperationDescriptorType =
   | "EMIT_CALL"
   | "EMIT_CALL_AND_CAPTURE_RESULT"
   | "EMIT_PROPERTY_ASSIGNMENT"
+  | "ENV_GLOBAL"
   | "FB_MOCKS_BOOTLOADER_LOAD_MODULES"
   | "FB_MOCKS_MAGIC_GLOBAL_FUNCTION"
   | "FOR_IN"
@@ -127,6 +128,7 @@ export type OperationDescriptorType =
   | "SINGLE_ARG"
   | "THROW"
   | "TRY_CATCH"
+  | "TYPEOF_GLOBAL"
   | "UNARY_EXPRESSION"
   | "UNKNOWN_ARRAY_GET_PARTIAL"
   | "UNKNOWN_ARRAY_LENGTH"
@@ -164,7 +166,7 @@ export type OperationDescriptorData = {
   path?: Value, // used by PROPERTY_ASSIGNMENT, CONDITIONAL_PROPERTY_ASSIGNMENT
   propertyGetter?: SupportedGraphQLGetters, // used by ABSTRACT_OBJECT_GET
   propRef?: ReferenceName | AbstractValue, // used by CALL_BAILOUT, and then only if string
-  object?: ObjectValue, // used by DEFINE_PROPERTY
+  object?: ObjectValue | AbstractObjectValue, // used by DEFINE_PROPERTY
   quasis?: Array<BabelNodeTemplateElement>, // used by REACT_SSR_TEMPLATE_LITERAL
   state?: "MISSING" | "PRESENT" | "DEFINED", // used by PROPERTY_INVARIANT
   thisArg?: BaseValue | Value, // used by CALL_BAILOUT
@@ -209,7 +211,7 @@ export type SerializationContext = {|
   ) => BabelNodeStatement,
   initGenerator: Generator => void,
   finalizeGenerator: Generator => void,
-  emitDefinePropertyBody: (ObjectValue, string | SymbolValue, Descriptor) => BabelNodeStatement,
+  emitDefinePropertyBody: (ObjectValue | AbstractObjectValue, string | SymbolValue, Descriptor) => BabelNodeStatement,
   emit: BabelNodeStatement => void,
   processValues: (Set<AbstractValue | ObjectValue>) => void,
   canOmit: Value => boolean,
@@ -369,7 +371,7 @@ export class TemporalOperationEntry extends GeneratorEntry {
               if (originalArg === this.operationDescriptor.data.value) this.operationDescriptor.data.value = visitedArg;
               break;
             case "DEFINE_PROPERTY":
-              invariant(visitedArg instanceof ObjectValue);
+              invariant(visitedArg instanceof ObjectValue || visitedArg instanceof AbstractObjectValue);
               this.operationDescriptor.data.object = visitedArg;
               break;
             default:
@@ -862,8 +864,13 @@ export class Generator {
     });
   }
 
-  emitDefineProperty(object: ObjectValue, key: string, desc: PropertyDescriptor, isDescChanged: boolean = true): void {
-    if (object.refuseSerialization) return;
+  emitDefineProperty(
+    object: ObjectValue | AbstractObjectValue,
+    key: string,
+    desc: PropertyDescriptor,
+    isDescChanged: boolean = true
+  ): void {
+    if (object instanceof ObjectValue && object.refuseSerialization) return;
     if (desc.enumerable && desc.configurable && desc.writable && desc.value && !isDescChanged) {
       let descValue = desc.value;
       invariant(descValue instanceof Value);

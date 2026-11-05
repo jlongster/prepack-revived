@@ -29,6 +29,7 @@ import {
   UndefinedValue,
 } from "../values/index.js";
 import { IsCallable } from "../methods/index.js";
+import { auditRewrite, smtAuditing } from "./smt/index.js";
 
 function knownTypeofString(realm: Realm, val: Value): void | string {
   let type = val.getType();
@@ -74,10 +75,15 @@ export default function simplifyAndRefineAbstractValue(
       throw new FatalError();
     };
     let result = simplify(realm, value, isCondition, 0);
-    if (result !== value) realm.statistics.simplifications++;
+    if (result !== value) {
+      realm.statistics.simplifications++;
+      if (smtAuditing(realm)) {
+        auditRewrite(realm, realm.pathConditions.getAllConditions(), value, result, isCondition);
+      }
+    }
     return result;
   } catch (e) {
-    if (e.name === "Invariant Violation") throw e;
+    if (e.name === "Invariant Violation" || e.name === "SmtAuditError") throw e;
     if (e instanceof FatalError && typeof e.message === "string" && e.message.includes("PP0029")) {
       if (isRootSimplification) {
         return value;
@@ -117,6 +123,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     if (Path.implies(value, depth + 1)) return realm.intrinsics.true;
     if (Path.impliesNot(value, depth + 1)) return realm.intrinsics.false;
   }
+  if (value.intrinsicName !== undefined) return value;
   let loc = value.expressionLocation;
   let op = value.kind;
   switch (op) {
@@ -152,6 +159,10 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         if (!y.mightNotBeFalse()) return op === "||" ? x : realm.intrinsics.false;
       }
       if (op === "||") {
+        // (c && y) || y <=> y when y is guaranteed truthy (!y.mightBeFalse())
+        if (x instanceof AbstractValue && x.kind === "&&" && !y.mightBeFalse() && x.args[1].equals(y)) {
+          return y;
+        }
         if (y instanceof AbstractValue && y.kind === "||") {
           // x || x || y <=> x || y
           if (x.equals(y.args[0])) return y;
@@ -226,7 +237,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
               return AbstractValue.createFromBuildFunction(
                 realm,
                 BooleanValue,
-                [xa],
+                [z],
                 createOperationDescriptor("CANNOT_BECOME_OBJECT"),
                 { kind: "global.__cannotBecomeObject(A)" }
               );
@@ -877,6 +888,19 @@ function simplifyEquality(realm: Realm, equality: AbstractValue, depth: number):
       if (sx !== undefined) return sx;
     }
   }
+  if (op === "===" || op === "!==" || op === "==" || op === "!=") {
+    // String prefix/suffix disjointness: `("prefix" + s) === "other"` is false when `!"other".startsWith("prefix")`
+    // (provided `s` is a known string so `+` is string concatenation with no coercion).
+    if (y instanceof StringValue && x instanceof AbstractValue && x.kind === "+" && x.args.length === 2) {
+      let [xa, xb] = x.args;
+      if (xa instanceof StringValue && xb.getType() === StringValue && !y.value.startsWith(xa.value)) {
+        return op[0] === "!" ? realm.intrinsics.true : realm.intrinsics.false;
+      }
+      if (xb instanceof StringValue && xa.getType() === StringValue && !y.value.endsWith(xb.value)) {
+        return op[0] === "!" ? realm.intrinsics.true : realm.intrinsics.false;
+      }
+    }
+  }
   if (op === "===") {
     let xType = x.getType();
     let yType = y.getType();
@@ -945,6 +969,10 @@ function negate(
 ): Value {
   if (value instanceof ConcreteValue) return ValuesDomain.computeUnary(realm, "!", value);
   invariant(value instanceof AbstractValue);
+  if (depth > 3) {
+    if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
+    return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, isCondition, true);
+  }
   value = simplify(realm, value, true, depth + 1);
   if (!value.mightNotBeTrue()) return realm.intrinsics.false;
   if (!value.mightNotBeFalse()) return realm.intrinsics.true;
@@ -1017,21 +1045,22 @@ function negate(
           break;
       }
       if (invertedLogicalOp !== undefined) {
-        let left = negate(realm, arg0, depth + 1);
-        let right = negate(realm, arg1, depth + 1);
+        let left = negate(realm, arg0, depth + 1, undefined, undefined, isCondition);
+        let right = negate(realm, arg1, depth + 1, undefined, undefined, isCondition);
         return AbstractValue.createFromLogicalOp(
           realm,
           invertedLogicalOp,
           left,
           right,
           loc || value.expressionLocation,
-          true
+          isCondition,
+          depth > 1
         );
       }
     }
   }
   if (unsimplifiedNegation !== undefined) return unsimplifiedNegation;
-  return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, isCondition);
+  return AbstractValue.createFromUnaryOp(realm, "!", value, true, loc || value.expressionLocation, isCondition, true);
 }
 
 function cannotBeNaN(v: Value): boolean {

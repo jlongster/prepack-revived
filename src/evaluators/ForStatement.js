@@ -253,29 +253,31 @@ function ForBodyEvaluationInner(
       // many forked execution paths, and they're non linear, then it might
       // computationally lead to a something that seems like an infinite loop.
       possibleInfiniteLoopIterations++;
-      if (possibleInfiniteLoopIterations > 6) {
+      if (possibleInfiniteLoopIterations > 6 || countSavedCompletionNodes(realm.savedCompletion, 65) > 64) {
         failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
       }
     }
-    if (realm.useAbstractInterpretation && countCompletionNodes(realm.savedCompletion, 257) > 256) {
+    if (realm.useAbstractInterpretation && countSavedCompletionNodes(realm.savedCompletion, 65) > 64) {
       failIfContainsBreakOrReturnOrThrowCompletion(realm.savedCompletion);
     }
   }
   invariant(false);
 
-  function countCompletionNodes(c: void | Completion | Value, limit: number): number {
-    if (!(c instanceof Completion)) return 0;
-    let count = 1;
-    if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
-      count += countCompletionNodes(c.consequent, limit - count);
-      if (count >= limit) return count;
-      count += countCompletionNodes(c.alternate, limit - count);
-      if (count >= limit) return count;
-      if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
-        count += countCompletionNodes(c.composedWith, limit - count);
-      }
+  function countSavedCompletionNodes(
+    c: void | Completion | Value,
+    limit: number,
+    seen: Set<Completion> = new Set()
+  ): number {
+    if (!(c instanceof Completion) || seen.has(c) || seen.size >= limit) return seen.size;
+    seen.add(c);
+    if (c instanceof JoinedNormalAndAbruptCompletions && c.composedWith !== undefined) {
+      countSavedCompletionNodes(c.composedWith, limit, seen);
     }
-    return count;
+    if (c instanceof JoinedAbruptCompletions || c instanceof JoinedNormalAndAbruptCompletions) {
+      countSavedCompletionNodes(c.consequent, limit, seen);
+      countSavedCompletionNodes(c.alternate, limit, seen);
+    }
+    return seen.size;
   }
 
   function failIfContainsBreakOrReturnOrThrowCompletion(c: void | Completion | Value) {

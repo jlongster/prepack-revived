@@ -33,6 +33,7 @@ import { Completion, ReturnCompletion, ThrowCompletion } from "../completions.js
 import { GetMethod, Get } from "./get.js";
 import { HasCompatibleType } from "./has.js";
 import { To } from "../singletons.js";
+import { isEnvironmentDerived } from "../intrinsics/env/models.js";
 import type { BabelNodeSourceLocation, BabelBinaryOperator } from "@babel/types";
 import invariant from "../invariant.js";
 
@@ -78,8 +79,8 @@ export function RequireObjectCoercible(
     throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
   }
   if (arg instanceof AbstractValue && (arg.mightBeNull() || arg.mightBeUndefined())) {
-    if (realm.isInPureScope()) {
-      // In a pure function it is ok to throw if this happens to be null or undefined.
+    if (realm.isInPureScope() || isEnvironmentDerived(arg)) {
+      // In a pure function (or on an open-world environment value) allow runtime coercion/access.
       return arg;
     }
     if (argLoc) {
@@ -138,6 +139,9 @@ export function AbstractRelationalComparison(
       res = AbstractValue.createFromBinaryOp(realm, op, px, py);
     } else {
       res = AbstractValue.createFromBinaryOp(realm, op, py, px);
+    }
+    if (res instanceof BooleanValue && (op === "<=" || op === ">=")) {
+      res = new BooleanValue(realm, !res.value);
     }
     invariant(res instanceof BooleanValue || res instanceof UndefinedValue || res instanceof AbstractValue);
     return res;
@@ -342,7 +346,28 @@ export function SameValueZero(realm: Realm, x: ConcreteValue, y: ConcreteValue):
   return SameValueNonNumber(realm, x, y);
 }
 
+function getConcreteElementsIfFinite(v: Value): void | Array<ConcreteValue> {
+  if (v instanceof ConcreteValue) return [v];
+  if (v instanceof AbstractValue && !v.values.isTop()) return Array.from(v.values.getElements());
+  return undefined;
+}
+
 export function SameValueZeroPartial(realm: Realm, x: Value, y: Value): boolean {
+  if (x === y || x.equals(y)) return true;
+  let xElems = getConcreteElementsIfFinite(x);
+  let yElems = getConcreteElementsIfFinite(y);
+  if (xElems !== undefined && yElems !== undefined && xElems.length * yElems.length <= 64) {
+    let anyTrue = false;
+    let anyFalse = false;
+    for (let xe of xElems) {
+      for (let ye of yElems) {
+        if (SameValueZero(realm, xe, ye)) anyTrue = true;
+        else anyFalse = true;
+      }
+    }
+    if (!anyTrue) return false;
+    if (!anyFalse) return true;
+  }
   return SameValueZero(realm, x.throwIfNotConcrete(), y.throwIfNotConcrete());
 }
 
@@ -376,6 +401,21 @@ export function SameValue(realm: Realm, x: ConcreteValue, y: ConcreteValue): boo
 }
 
 export function SameValuePartial(realm: Realm, x: Value, y: Value): boolean {
+  if (x === y || x.equals(y)) return true;
+  let xElems = getConcreteElementsIfFinite(x);
+  let yElems = getConcreteElementsIfFinite(y);
+  if (xElems !== undefined && yElems !== undefined && xElems.length * yElems.length <= 64) {
+    let anyTrue = false;
+    let anyFalse = false;
+    for (let xe of xElems) {
+      for (let ye of yElems) {
+        if (SameValue(realm, xe, ye)) anyTrue = true;
+        else anyFalse = true;
+      }
+    }
+    if (!anyTrue) return false;
+    if (!anyFalse) return true;
+  }
   return SameValue(realm, x.throwIfNotConcrete(), y.throwIfNotConcrete());
 }
 

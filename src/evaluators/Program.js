@@ -18,7 +18,8 @@ import {
 } from "../completions.js";
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import { Value, EmptyValue } from "../values/index.js";
+import { Value, EmptyValue, ObjectValue, StringValue } from "../values/index.js";
+import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { GlobalEnvironmentRecord } from "../environment.js";
 import { Environment, Functions, Join } from "../singletons.js";
 import IsStrict from "../utils/strict.js";
@@ -268,6 +269,32 @@ export default function(ast: BabelNodeProgram, strictCode: boolean, env: Lexical
     let selector = c =>
       c instanceof ThrowCompletion && c.value !== realm.intrinsics.__bottomValue && !(c.value instanceof EmptyValue);
     if (res instanceof ThrowCompletion && selector(res)) {
+      if (
+        realm.useAbstractInterpretation &&
+        !realm.closedWorld &&
+        res.value instanceof ObjectValue &&
+        (res.value.$IsEngineError === true ||
+          (res.value.$ErrorData !== undefined &&
+            (!(realm.$GlobalObject instanceof ObjectValue) || !realm.$GlobalObject.properties.has("__d"))))
+      ) {
+        let message = "Global initialization unconditionally terminates with exception";
+        if (res.value instanceof ObjectValue) {
+          let errObj = res.value;
+          let errMsg = realm.evaluateWithUndo(() => errObj._SafeGetDataPropertyValue("message"));
+          if (errMsg instanceof StringValue && errMsg.value.length > 0) {
+            message += `: ${errMsg.value}`;
+          }
+        }
+        let diag = new CompilerDiagnostic(
+          message,
+          res.location || res.value.expressionLocation || realm.currentLocation,
+          "PP0023",
+          "FatalError"
+        );
+        if (realm.handleError(diag) === "Fail") {
+          throw new FatalError(message);
+        }
+      }
       generator.emitThrow(res.value);
     } else if (
       (res instanceof JoinedAbruptCompletions || res instanceof JoinedNormalAndAbruptCompletions) &&

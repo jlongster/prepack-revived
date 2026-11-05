@@ -31,6 +31,7 @@ import invariant from "../invariant.js";
 import { IsCallable } from "../methods/index.js";
 import { Environment, Leak, To } from "../singletons.js";
 import { createOperationDescriptor } from "../utils/generator.js";
+import { resolveTypeofGlobal, resolveTypeofEnvironmentValue, isEnvironmentDerived } from "../intrinsics/env/models.js";
 import type { BabelNodeUnaryExpression } from "@babel/types";
 
 function isInstance(proto, Constructor): boolean {
@@ -336,14 +337,19 @@ function evaluateOperation(
 
     // 2. If Type(val) is Reference, then
     if (val instanceof Reference) {
-      // a. If IsUnresolvableReference(val) is true, return "undefined".
+      // a. If IsUnresolvableReference(val) is true, return "undefined" (or residual typeof in open-world mode).
       if (Environment.IsUnresolvableReference(realm, val)) {
-        return new StringValue(realm, "undefined");
+        return resolveTypeofGlobal(realm, val.referencedName.toString(), ast.loc);
       }
     }
 
     // 3. Let val be ? GetValue(val).
     val = Environment.GetValue(realm, val);
+
+    if (val instanceof AbstractValue && isEnvironmentDerived(val)) {
+      let envTypeof = resolveTypeofEnvironmentValue(realm, val);
+      if (envTypeof !== undefined) return envTypeof;
+    }
 
     // 4. Return a String according to Table 35.
     let proto = val.getType().prototype;

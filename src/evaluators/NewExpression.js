@@ -18,7 +18,7 @@ import {
   AbstractValue,
   ECMAScriptSourceFunctionValue,
 } from "../values/index.js";
-import { EnvironmentRecord, type LexicalEnvironment } from "../environment.js";
+import { EnvironmentRecord, Reference, type LexicalEnvironment } from "../environment.js";
 import { JoinedNormalAndAbruptCompletions } from "../completions.js";
 import { isInTryBlock } from "../methods/recursion.js";
 import { isRetainedOnGlobalObject } from "../methods/inlining.js";
@@ -29,6 +29,7 @@ import invariant from "../invariant.js";
 import { FatalError } from "../errors.js";
 import { BabelNodeNewExpression } from "@babel/types";
 import { createOperationDescriptor, Generator, TemporalOperationEntry } from "../utils/generator.js";
+import { constructEnvironmentObject } from "../intrinsics/env/models.js";
 
 export default function(
   ast: BabelNodeNewExpression,
@@ -73,9 +74,9 @@ export default function(
     // If we are in pure scope, attempt to recover from creating the construct if
     // it fails by creating a temporal abstract
     if (realm.isInPureScope()) {
-      return tryToEvaluateConstructOrLeaveAsAbstract(constructor, argsList, strictCode, realm);
+      return tryToEvaluateConstructOrLeaveAsAbstract(constructor, argsList, strictCode, realm, ref);
     } else {
-      return createConstruct(constructor, argsList, realm);
+      return createConstruct(constructor, argsList, realm, ref);
     }
   } finally {
     realm.setNextExecutionContextLocation(previousLoc);
@@ -86,7 +87,8 @@ function tryToEvaluateConstructOrLeaveAsAbstract(
   constructor: Value,
   argsList: Array<Value>,
   strictCode: boolean,
-  realm: Realm
+  realm: Realm,
+  ref?: Value | Reference
 ): ObjectValue | AbstractObjectValue {
   let minEnvId = EnvironmentRecord.nextId;
   let hadSavedAbrupt = false;
@@ -94,7 +96,7 @@ function tryToEvaluateConstructOrLeaveAsAbstract(
   try {
     effects = realm.evaluateForEffects(
       () => {
-        let res = createConstruct(constructor, argsList, realm);
+        let res = createConstruct(constructor, argsList, realm, ref);
         if (realm.savedCompletion !== undefined) hadSavedAbrupt = true;
         return res;
       },
@@ -176,7 +178,12 @@ function emitResidualNewExpression(realm: Realm, constructor: Value, argsList: A
   return abstractValue;
 }
 
-function createConstruct(constructor: Value, argsList: Array<Value>, realm: Realm): ObjectValue | AbstractObjectValue {
+function createConstruct(
+  constructor: Value,
+  argsList: Array<Value>,
+  realm: Realm,
+  ref?: Value | Reference
+): ObjectValue | AbstractObjectValue {
   if (constructor instanceof AbstractValue && constructor.kind === "conditional") {
     // Construct each possible constructor under its condition and join the results. A side that is not
     // a constructor (e.g. undefined, see #2561) becomes a conditional TypeError.
@@ -189,6 +196,29 @@ function createConstruct(constructor: Value, argsList: Array<Value>, realm: Real
     );
     invariant(result instanceof ObjectValue || result instanceof AbstractObjectValue);
     return result;
+  }
+  if (constructor instanceof AbstractValue && constructor.isEnvironmentValue === true) {
+    let envConstructor: AbstractValue = constructor;
+    let baseObj: void | Value;
+    let propName: void | string;
+    if (ref instanceof Reference && ref.base instanceof Value && typeof ref.referencedName === "string") {
+      baseObj =
+        ref.base instanceof AbstractObjectValue && ref.base.kind === "explicit conversion to object"
+          ? ref.base.args[0]
+          : ref.base;
+      propName = ref.referencedName;
+    }
+    if (realm.isInPureScope()) {
+      for (let arg of argsList) Leak.value(realm, arg);
+      let constructed = realm.evaluateWithPossibleThrowCompletion(
+        () => constructEnvironmentObject(realm, envConstructor, argsList, baseObj, propName),
+        TypesDomain.topVal,
+        ValuesDomain.topVal
+      );
+      invariant(constructed instanceof ObjectValue || constructed instanceof AbstractObjectValue);
+      return constructed;
+    }
+    return constructEnvironmentObject(realm, envConstructor, argsList, baseObj, propName);
   }
   // 7. If IsConstructor(constructor) is false, throw a TypeError exception.
   if (IsConstructor(realm, constructor) === false) {

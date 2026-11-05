@@ -304,6 +304,15 @@ export class ResidualFunctions {
   _shouldUseFactoryFunction(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): boolean {
     invariant(instances.length > 0);
     if (instances.length <= 1) return false;
+    for (const instance of instances) {
+      if (
+        this.residualClassMethodInstances.has(instance.functionValue) ||
+        instance.functionValue.$HomeObject !== undefined ||
+        instance.functionValue.$FunctionKind !== "normal"
+      ) {
+        return false;
+      }
+    }
     let hasAnyLeakedIds = false;
     for (const instance of instances)
       for (const scope of instance.scopeInstances.values()) if (scope.leakedIds.length > 0) hasAnyLeakedIds = true;
@@ -441,11 +450,12 @@ export class ResidualFunctions {
   _createFunctionExpression(
     params: Array<BabelNodeLVal>,
     body: BabelNodeBlockStatement,
-    isLexical: boolean
+    isLexical: boolean,
+    isGenerator: boolean = false
   ): BabelNodeFunctionExpression | BabelNodeArrowFunctionExpression {
     // Additional statements might be inserted at the beginning of the body, so we clone it.
     body = ((Object.assign({}, body): any): BabelNodeBlockStatement);
-    return isLexical ? t.arrowFunctionExpression(params, body) : t.functionExpression(null, params, body);
+    return isLexical ? t.arrowFunctionExpression(params, body) : t.functionExpression(null, params, body, isGenerator);
   }
 
   spliceFunctions(
@@ -627,7 +637,7 @@ export class ResidualFunctions {
       } else {
         funcOrClassNode = isLexical
           ? t.arrowFunctionExpression(params, functionBody)
-          : t.functionExpression(null, params, functionBody);
+          : t.functionExpression(null, params, functionBody, functionValue.$FunctionKind === "generator");
       }
       let id = this.locationService.getLocation(funcValue);
       invariant(id !== undefined);
@@ -719,12 +729,13 @@ export class ResidualFunctions {
             }
           } else {
             let isLexical = instance.functionValue.$ThisMode === "lexical";
+            let isGenerator = instance.functionValue.$FunctionKind === "generator";
             funcOrClassNode = new ResidualFunctionInstantiator(
               factoryFunctionInfos,
               this.realm.moduleFactoryFunctionsToRemove,
               this._getIdentifierReplacements(funcBody, residualFunctionBindings),
               this._getCallReplacements(funcBody),
-              this._createFunctionExpression(params, funcBody, isLexical)
+              this._createFunctionExpression(params, funcBody, isLexical, isGenerator)
             ).instantiate();
 
             let scopeInitialization = [];

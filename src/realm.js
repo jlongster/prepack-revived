@@ -65,11 +65,19 @@ import {
   SimpleNormalCompletion,
   ThrowCompletion,
 } from "./completions.js";
-import type { Compatibility, RealmOptions, ReactOutputTypes, InvariantModeTypes } from "./options.js";
+import type {
+  Compatibility,
+  RealmOptions,
+  ReactOutputTypes,
+  InvariantModeTypes,
+  UnknownGlobalsMode,
+  AssumptionFallbackMode,
+} from "./options.js";
 import invariant from "./invariant.js";
 import seedrandom from "seedrandom";
 import { createOperationDescriptor, Generator, type TemporalOperationEntry } from "./utils/generator.js";
 import { PreludeGenerator } from "./utils/PreludeGenerator.js";
+import { resolveSmtMode, type SmtMode } from "./utils/smt/index.js";
 import {
   createPathConditions,
   Environment,
@@ -275,6 +283,8 @@ export class Realm {
     this.abstractValueImpliesMax = opts.abstractValueImpliesMax !== undefined ? opts.abstractValueImpliesMax : 0;
     this.abstractValueImpliesCounter = 0;
     this.inSimplificationPath = false;
+    this.smtMode = resolveSmtMode(opts.smt);
+    this.smtQueries = 0;
 
     this.timeout = opts.timeout;
     if (this.timeout !== undefined) {
@@ -285,6 +295,14 @@ export class Realm {
 
     this.start = Date.now();
     this.compatibility = opts.compatibility !== undefined ? opts.compatibility : "browser";
+    this.hasExplicitCompatibility = !!opts.hasExplicitCompatibility;
+    this.unknownGlobals = opts.closedWorld ? "closed" : opts.unknownGlobals || "open";
+    this.closedWorld = this.unknownGlobals === "closed";
+    this.assumptions = opts.assumptions;
+    this.fallbackMode = opts.fallbackMode || "inline";
+    this.usedAssumptionGuards = new Map();
+    this._envGlobals = new Map();
+    this._typeofGlobalValues = new Map();
     this.remainingCalls = opts.maxStackDepth || 112;
     this.invariantLevel = opts.invariantLevel || 0;
     this.invariantMode = opts.invariantMode || "throw";
@@ -391,6 +409,9 @@ export class Realm {
   impliesCounterOverflowed: boolean;
   inSimplificationPath: boolean;
   _implicationUsedLeaf: boolean;
+  smtMode: SmtMode;
+  smtQueries: number;
+  smtAuditContext: void | string;
 
   modifiedBindings: void | Bindings;
   modifiedProperties: void | PropertyBindings;
@@ -464,6 +485,14 @@ export class Realm {
 
   $GlobalObject: ObjectValue | AbstractObjectValue;
   compatibility: Compatibility;
+  hasExplicitCompatibility: boolean;
+  closedWorld: boolean;
+  unknownGlobals: UnknownGlobalsMode;
+  assumptions: void | { [string]: mixed };
+  fallbackMode: AssumptionFallbackMode;
+  usedAssumptionGuards: Map<string, BabelNode>;
+  _envGlobals: Map<string, AbstractValue>;
+  _typeofGlobalValues: Map<string, AbstractValue>;
 
   $TemplateMap: Array<{ $Strings: Array<string>, $Array: ObjectValue }>;
 
@@ -1845,7 +1874,9 @@ export class Realm {
     if (typeof message === "string") message = new StringValue(this, message);
     invariant(message instanceof StringValue);
     this.nextContextLocation = this.currentLocation;
-    return new ThrowCompletion(Construct(this, type, [message]), this.currentLocation);
+    let errVal = Construct(this, type, [message]);
+    if (errVal instanceof ObjectValue) errVal.$IsEngineError = true;
+    return new ThrowCompletion(errVal, this.currentLocation);
   }
 
   appendGenerator(generator: Generator, leadingComment: string = ""): void {
