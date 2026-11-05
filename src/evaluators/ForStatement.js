@@ -9,7 +9,7 @@
 
 /* @flow */
 
-import type { LexicalEnvironment } from "../environment.js";
+import { EnvironmentRecord, type LexicalEnvironment } from "../environment.js";
 import { Effects, Realm } from "../realm.js";
 import { AbstractValue, NumberValue, Value, EmptyValue, type UndefinedValue } from "../values/index.js";
 import {
@@ -30,6 +30,7 @@ import { UpdateEmpty } from "../methods/index.js";
 import { LoopContinues, InternalGetResultValue } from "./ForOfStatement.js";
 import { Environment, Functions, To } from "../singletons.js";
 import { evaluateSpeculatively, residualizeLoop } from "./residualLoop.js";
+import { prepareLoopRecomputeBeforeApply, finalizeLoopRecomputeAfterApply } from "../methods/recompute.js";
 import invariant from "../invariant.js";
 import type { BabelNodeForStatement } from "@babel/types";
 
@@ -307,6 +308,7 @@ function tryToEvaluateForStatementOrLeaveAsAbstract(
   labelSet: ?Array<string>
 ): Value {
   invariant(!realm.instantRender.enabled);
+  let minEnvId = EnvironmentRecord.nextId;
   let effects = evaluateSpeculatively(realm, () =>
     realm.evaluateForEffects(
       () => evaluateForStatement(ast, strictCode, env, realm, labelSet),
@@ -317,7 +319,9 @@ function tryToEvaluateForStatementOrLeaveAsAbstract(
   if (!(effects instanceof Effects)) {
     return residualizeLoop(realm, ast, strictCode, env, labelSet, effects.failure);
   }
+  let loopToken = prepareLoopRecomputeBeforeApply(realm, ast, env, labelSet, effects, minEnvId);
   realm.applyEffects(effects);
+  finalizeLoopRecomputeAfterApply(realm, loopToken, effects);
   return realm.returnOrThrowCompletion(effects.result);
 }
 

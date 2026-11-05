@@ -34,6 +34,7 @@ import {
   GlobalEnvironmentRecord,
   ObjectEnvironmentRecord,
   leakBinding,
+  type Binding,
   type LexicalEnvironment,
 } from "../environment.js";
 import { cloneDescriptor, PropertyDescriptor } from "../descriptors.js";

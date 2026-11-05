@@ -11,11 +11,9 @@
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-//import { SimpleNormalCompletion } from "../completions.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import {
-  AbstractObjectValue,
   Value,
   BooleanValue,
   ConcreteValue,
@@ -148,6 +146,50 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
   strictCode: boolean,
   realm: Realm
 ): Value {
+  if (ast.operator === "+" || ast.operator === "-" || ast.operator === "~") {
+    let val = Environment.GetValue(realm, expr);
+    const previousErrorHandler = realm.errorHandler;
+    const savedSuppress = realm.suppressDiagnostics;
+    let isPure = true;
+    realm.suppressDiagnostics = true;
+    realm.errorHandler = diagnostic => {
+      isPure = false;
+      return "Recover";
+    };
+    let effects;
+    try {
+      effects = realm.evaluateForEffects(
+        () => func(ast, val, strictCode, realm),
+        undefined,
+        "tryToEvaluateOperationOrLeaveAsAbstract"
+      );
+    } catch (error) {
+      if (error instanceof FatalError) {
+        isPure = false;
+      } else {
+        throw error;
+      }
+    } finally {
+      realm.errorHandler = previousErrorHandler;
+      realm.suppressDiagnostics = savedSuppress;
+    }
+    if (isPure && effects) {
+      realm.applyEffects(effects);
+      return realm.returnOrThrowCompletion(effects.result);
+    }
+    Leak.value(realm, val, ast.argument.loc || ast.loc);
+    return realm.evaluateWithPossibleThrowCompletion(
+      () =>
+        AbstractValue.createTemporalFromBuildFunction(
+          realm,
+          ast.operator === "~" ? IntegralValue : NumberValue,
+          [val],
+          createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix })
+        ),
+      TypesDomain.topVal,
+      ValuesDomain.topVal
+    );
+  }
   let effects;
   let savedHandler = realm.errorHandler;
   let savedSuppress = realm.suppressDiagnostics;
@@ -164,20 +206,6 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
       realm.errorHandler = savedHandler;
       realm.suppressDiagnostics = savedSuppress;
       let value = Environment.GetValue(realm, expr);
-      if (ast.operator === "+" || ast.operator === "-" || ast.operator === "~") {
-        Leak.value(realm, value, ast.argument.loc);
-        return realm.evaluateWithPossibleThrowCompletion(
-          () =>
-            AbstractValue.createTemporalFromBuildFunction(
-              realm,
-              NumberValue,
-              [value],
-              createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix })
-            ),
-          TypesDomain.topVal,
-          ValuesDomain.topVal
-        );
-      }
       return realm.evaluateWithPossibleThrowCompletion(
         () => {
           if (value instanceof AbstractValue) {

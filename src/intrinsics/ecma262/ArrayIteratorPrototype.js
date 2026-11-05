@@ -48,6 +48,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 6. Let index be the value of the [[ArrayIteratorNextIndex]] internal slot of O.
     let nextIdx = O.$ArrayIteratorNextIndex;
+    invariant(nextIdx !== undefined);
     if (nextIdx instanceof AbstractValue) nextIdx = realm.simplifyAndRefineAbstractValue(nextIdx);
     let index = nextIdx.throwIfNotConcreteNumber().value;
 

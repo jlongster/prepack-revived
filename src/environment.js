@@ -353,7 +353,10 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
     }
 
     // 4. Return the value currently bound to N in envRec.
-    if (realm.persistentReadTracker !== undefined && !realm.persistentReadTracker.definitelyWrittenBindings.has(binding)) {
+    if (
+      realm.persistentReadTracker !== undefined &&
+      !realm.persistentReadTracker.definitelyWrittenBindings.has(binding)
+    ) {
       realm.persistentReadTracker.readBindings.add(binding);
     }
     if (

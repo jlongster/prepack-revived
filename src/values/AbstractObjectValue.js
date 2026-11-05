@@ -665,12 +665,13 @@ export default class AbstractObjectValue extends AbstractValue {
         Leak.value(this.$Realm, Receiver);
         // Coercion can only have effects on anything reachable from the key.
         Leak.value(this.$Realm, P);
+        let propKey = P;
         return this.$Realm.evaluateWithPossibleThrowCompletion(
           () =>
             AbstractValue.createTemporalFromBuildFunction(
               this.$Realm,
               Value,
-              [Receiver, P],
+              [Receiver, propKey],
               createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
               { skipInvariant: true }
             ),

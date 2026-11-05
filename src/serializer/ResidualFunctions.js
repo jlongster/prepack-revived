@@ -11,7 +11,7 @@
 
 import { FatalError } from "../errors.js";
 import { Realm } from "../realm.js";
-import { FunctionValue, ECMAScriptSourceFunctionValue, ObjectValue } from "../values/index.js";
+import { FunctionValue, ECMAScriptSourceFunctionValue, ObjectValue, Value } from "../values/index.js";
 import type { SerializerOptions } from "../options.js";
 import * as t from "@babel/types";
 import type {
@@ -45,6 +45,7 @@ import { ResidualFunctionInitializers } from "./ResidualFunctionInitializers.js"
 import { nullExpression } from "../utils/babelhelpers.js";
 import type { LocationService, ClassMethodInstance } from "./types.js";
 import { Referentializer } from "./Referentializer.js";
+import { HeapInspector } from "../utils/HeapInspector.js";
 import { getOrDefault } from "./utils.js";
 
 type ResidualFunctionsResult = {
@@ -66,7 +67,8 @@ export class ResidualFunctions {
     residualClassMethodInstances: Map<FunctionValue, ClassMethodInstance>,
     additionalFunctionValueInfos: Map<FunctionValue, AdditionalFunctionInfo>,
     additionalFunctionValueNestedFunctions: Set<FunctionValue>,
-    referentializer: Referentializer
+    referentializer: Referentializer,
+    embeddedFunctionNames?: Map<FunctionValue, string>
   ) {
     this.realm = realm;
     this.modules = modules;
@@ -85,6 +87,7 @@ export class ResidualFunctions {
     this.residualClassMethodInstances = residualClassMethodInstances;
     this.additionalFunctionValueInfos = additionalFunctionValueInfos;
     this.referentializer = referentializer;
+    this.embeddedFunctionNames = embeddedFunctionNames || new Map();
     for (let instance of residualFunctionInstances.values()) {
       invariant(instance !== undefined);
       if (!additionalFunctionValueInfos.has(instance.functionValue)) this.addFunctionInstance(instance);
@@ -114,6 +117,7 @@ export class ResidualFunctions {
   additionalFunctionValueInfos: Map<FunctionValue, AdditionalFunctionInfo>;
   additionalFunctionValueNestedFunctions: Set<FunctionValue>;
   referentializer: Referentializer;
+  embeddedFunctionNames: Map<FunctionValue, string>;
   additionalFunctionPreludes: Map<FunctionValue, Array<BabelNodeStatement>>;
 
   getStatistics(): SerializerStatistics {
@@ -136,24 +140,192 @@ export class ResidualFunctions {
     if (!this.firstFunctionUsages.has(val)) this.firstFunctionUsages.set(val, bodyReference);
   }
 
-  _shouldUseFactoryFunction(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): boolean {
-    invariant(instances.length > 0);
-    function shouldInlineFunction(): boolean {
-      if (instances[0].scopeInstances.size > 0) return false;
-      let shouldInline = true;
-      if (funcBody.start && funcBody.end) {
-        let bodySize = funcBody.end - funcBody.start;
-        shouldInline = bodySize <= 30;
-      }
-      return shouldInline;
-    }
+  _findSelfBindingName(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): void | string {
+    if (instances.length === 0 || instances[0].functionValue.$ThisMode === "lexical") return undefined;
     let functionInfo = this.residualFunctionInfos.get(funcBody);
     invariant(functionInfo);
-    let { usesArguments } = functionInfo;
+    let selfName;
+    for (let name of functionInfo.unbound.keys()) {
+      let allSelf = true;
+      for (let inst of instances) {
+        let rb = inst.residualFunctionBindings.get(name);
+        if (!rb || rb.modified || rb.value !== inst.functionValue) {
+          allSelf = false;
+          break;
+        }
+      }
+      if (allSelf) {
+        if (selfName !== undefined) return undefined;
+        selfName = name;
+      }
+    }
+    return selfName;
+  }
+
+  _isStaticallyInPrelude(val: FunctionValue): boolean {
+    if (!(val instanceof ECMAScriptSourceFunctionValue)) return false;
+    if (val.isIntrinsic()) return false;
+    if (val.$ThisMode === "lexical") return false;
+    if (this.residualClassMethodInstances.has(val)) return false;
+    if (this.additionalFunctionValueNestedFunctions.has(val)) return false;
+    let inst = this.residualFunctionInstances.get(val);
+    if (inst === undefined || inst.containingAdditionalFunction !== undefined) return false;
+    return true;
+  }
+
+  _isPreludeSafeArg(val: void | Value, inPreludeFunctions?: Set<FunctionValue>): boolean {
+    if (val === undefined) return false;
+    if (HeapInspector.isLeaf(val)) return true;
+    if (val instanceof FunctionValue) {
+      if (inPreludeFunctions !== undefined) return inPreludeFunctions.has(val);
+      return this._isStaticallyInPrelude(val);
+    }
+    return false;
+  }
+
+  _partitionCurriedInstances(
+    funcBody: BabelNodeBlockStatement,
+    instances: Array<FunctionInstance>
+  ): Array<FunctionInstance> {
+    if (instances.length <= 1) return [];
+    if (instances[0].scopeInstances.size > 0) return [];
+    let functionInfo = this.residualFunctionInfos.get(funcBody);
+    invariant(functionInfo);
+    let { unbound, modified, usesThis, usesArguments } = functionInfo;
+    let params = instances[0].functionValue.$FormalParameters;
+    let hasNonIdentifierParam = params !== undefined && params.some(p => p.type !== "Identifier");
+    if (unbound.size === 0 && modified.size === 0 && !usesThis && !usesArguments && !hasNonIdentifierParam) {
+      return [];
+    }
+
+    for (let name of unbound.keys()) {
+      let firstBinding = instances[0].residualFunctionBindings.get(name);
+      if (!firstBinding) return [];
+      if (firstBinding.declarativeEnvironmentRecord === null && firstBinding.value === undefined) continue;
+      if (firstBinding.modified) return [];
+      for (let k = 1; k < instances.length; k++) {
+        let rb = instances[k].residualFunctionBindings.get(name);
+        if (!rb) return [];
+        if (rb.declarativeEnvironmentRecord === null && rb.value === undefined) continue;
+        if (rb.modified) return [];
+      }
+    }
+
+    const canReachViaGroup = (startFv: FunctionValue, targetFv: FunctionValue): boolean => {
+      let stack: Array<FunctionValue> = [startFv];
+      let visited: Set<FunctionValue> = new Set([startFv]);
+      while (stack.length > 0) {
+        let cur = stack.pop();
+        if (!cur) continue;
+        if (cur === targetFv) return true;
+        let curInst = this.residualFunctionInstances.get(cur);
+        if (!curInst || this.additionalFunctionValueInfos.has(cur)) continue;
+        if (!(cur instanceof ECMAScriptSourceFunctionValue)) continue;
+        let curCode = cur.$ECMAScriptCode;
+        let curGroup = curCode ? this.functions.get(curCode) : undefined;
+        if (!curGroup || curGroup.length <= 1) continue;
+        for (let bVal of curInst.residualFunctionBindings.values()) {
+          let nextVal = bVal.value;
+          if (nextVal instanceof FunctionValue && nextVal !== cur && !visited.has(nextVal)) {
+            visited.add(nextVal);
+            stack.push(nextVal);
+          }
+        }
+      }
+      return false;
+    };
+
+    let eligible = [];
+    for (let inst of instances) {
+      let fv = inst.functionValue;
+      if (inst.containingAdditionalFunction !== undefined) continue;
+      if (this.additionalFunctionValueNestedFunctions.has(fv)) continue;
+      if (this.residualClassMethodInstances.has(fv)) continue;
+      if (this.residualFunctionInitializers.hasInitializerStatement(fv)) continue;
+      if (this.embeddedFunctionNames.has(fv)) continue;
+      if (this.functionPrototypes.get(fv) !== undefined) continue;
+      let insertionPoint = inst.insertionPoint;
+      if (insertionPoint === undefined) continue;
+
+      let canGoToPrelude = true;
+      let ok = true;
+      for (let [, rb] of inst.residualFunctionBindings) {
+        if (rb.value === fv) continue;
+        if (rb.declarativeEnvironmentRecord === null && rb.value === undefined) continue;
+        if (rb.referentialized || rb.serializedValue === undefined) {
+          ok = false;
+          break;
+        }
+        if (!this._isPreludeSafeArg(rb.value)) {
+          canGoToPrelude = false;
+        }
+        if (rb.value instanceof FunctionValue && canReachViaGroup(rb.value, fv)) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) continue;
+      if (!canGoToPrelude) {
+        let firstUsage = this.firstFunctionUsages.get(fv);
+        if (firstUsage !== undefined && !firstUsage.isNotEarlierThan(insertionPoint)) continue;
+        let depBeforeOk = true;
+        for (let [, rb] of inst.residualFunctionBindings) {
+          let rbVal = rb.value;
+          if (rbVal instanceof ECMAScriptSourceFunctionValue && rbVal !== fv) {
+            let depInst = this.residualFunctionInstances.get(rbVal);
+            if (depInst !== undefined && !this.additionalFunctionValueInfos.has(rbVal)) {
+              let depCode = rbVal.$ECMAScriptCode;
+              let depGroup = depCode ? this.functions.get(depCode) : undefined;
+              if (depGroup !== undefined && depGroup.length > 1) {
+                let depPoint = depInst.insertionPoint;
+                if (
+                  depPoint === undefined ||
+                  depPoint.body !== insertionPoint.body ||
+                  depPoint.index > insertionPoint.index
+                ) {
+                  depBeforeOk = false;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (!depBeforeOk) continue;
+      }
+      eligible.push(inst);
+    }
+    return eligible.length >= 2 ? eligible : [];
+  }
+
+  _canUseCurriedFactory(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): boolean {
+    return this._partitionCurriedInstances(funcBody, instances).length >= 2;
+  }
+
+  _shouldUseFactoryFunction(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): boolean {
+    invariant(instances.length > 0);
+    if (instances.length <= 1) return false;
     let hasAnyLeakedIds = false;
     for (const instance of instances)
       for (const scope of instance.scopeInstances.values()) if (scope.leakedIds.length > 0) hasAnyLeakedIds = true;
-    return !shouldInlineFunction() && instances.length > 1 && !usesArguments && !hasAnyLeakedIds;
+    if (hasAnyLeakedIds) return false;
+
+    let functionInfo = this.residualFunctionInfos.get(funcBody);
+    invariant(functionInfo);
+    let { usesArguments } = functionInfo;
+    let params = instances[0].functionValue.$FormalParameters;
+    let hasNonIdentifierParam = params !== undefined && params.some(p => p.type !== "Identifier");
+    let canCurry = this._canUseCurriedFactory(funcBody, instances);
+    if ((usesArguments || hasNonIdentifierParam) && !canCurry) return false;
+
+    if (instances[0].scopeInstances.size > 0) return true;
+    if (funcBody.start && funcBody.end) {
+      let bodySize = funcBody.end - funcBody.start;
+      let minSize = canCurry && instances.length >= 4 ? 15 : 30;
+      if (bodySize <= minSize) return false;
+    } else {
+      return false;
+    }
+    return true;
   }
 
   _getIdentifierReplacements(
@@ -223,11 +395,13 @@ export class ResidualFunctions {
       invariant(instances.length > 0);
 
       let factoryId;
-      const suffix = instances[0].functionValue.__originalName || this.realm.debugNames ? "factoryFunction" : "";
+      let suffix = instances[0].functionValue.__originalName || this.realm.debugNames ? "factoryFunction" : "";
+      let isCurried = false;
       if (this._shouldUseFactoryFunction(functionBody, instances)) {
         // Rewritten function should never use factory function.
         invariant(!this._hasRewrittenFunctionInstance(rewrittenAdditionalFunctions, instances));
         factoryId = t.identifier(this.factoryNameGenerator.generate(suffix));
+        isCurried = this._canUseCurriedFactory(functionBody, instances);
       } else {
         // For inline function body case, use the first function as the factory function.
         factoryId = this.locationService.getLocation(instances[0].functionValue);
@@ -241,7 +415,12 @@ export class ResidualFunctions {
       let anyContainingAdditionalFunction = !instances.every(
         instance => instance.containingAdditionalFunction === undefined
       );
-      factoryFunctionInfos.set(functionUniqueTag, { factoryId, functionInfo, anyContainingAdditionalFunction });
+      factoryFunctionInfos.set(functionUniqueTag, {
+        factoryId,
+        functionInfo,
+        anyContainingAdditionalFunction,
+        isCurried,
+      });
     }
     return factoryFunctionInfos;
   }
@@ -314,6 +493,16 @@ export class ResidualFunctions {
         );
       }
     };
+    let preludeCurriedInstances: Map<
+      FunctionInstance,
+      {
+        functionId: BabelNodeIdentifier,
+        funcNode: BabelNodeCallExpression,
+        params: Array<BabelNodeLVal>,
+        funcBody: BabelNodeBlockStatement,
+        sameResidualBindings: Map<string, ResidualFunctionBinding>,
+      }
+    > = new Map();
     let funcNodes: Map<FunctionValue, BabelNodeFunctionExpression> = new Map();
     let defineFunction = (
       instance: FunctionInstance,
@@ -553,6 +742,10 @@ export class ResidualFunctions {
           }
           let id = this.locationService.getLocation(functionValue);
           invariant(id !== undefined);
+          let embeddedName = this.embeddedFunctionNames.get(functionValue);
+          if (embeddedName !== undefined && t.isFunctionExpression(funcOrClassNode)) {
+            ((funcOrClassNode: any): BabelNodeFunctionExpression).id = t.identifier(embeddedName);
+          }
 
           registerFunctionStrictness(funcOrClassNode, functionValue.$Strict);
           invariant(id !== undefined);
@@ -572,15 +765,29 @@ export class ResidualFunctions {
         invariant(factoryInfo);
         const { factoryId } = factoryInfo;
 
+        let curriedInstances = factoryInfo.isCurried ? this._partitionCurriedInstances(funcBody, normalInstances) : [];
+        let useCurried = curriedInstances.length >= 2;
+        if (useCurried && curriedInstances.length < normalInstances.length) {
+          let curriedSet = new Set(curriedInstances);
+          let fallbackInstances = normalInstances.filter(inst => !curriedSet.has(inst));
+          naiveProcessInstances(fallbackInstances);
+          normalInstances = curriedInstances;
+        }
+        let selfName = useCurried ? this._findSelfBindingName(funcBody, normalInstances) : undefined;
         // filter included variables to only include those that are different
         let factoryNames: Array<string> = [];
         let sameResidualBindings = new Map();
         for (let name of unbound.keys()) {
+          if (useCurried && name === selfName) continue;
           let isDifferent = false;
           let lastBinding;
 
           let firstBinding = normalInstances[0].residualFunctionBindings.get(name);
           invariant(firstBinding);
+          if (firstBinding.declarativeEnvironmentRecord === null && firstBinding.value === undefined) {
+            sameResidualBindings.set(name, firstBinding);
+            continue;
+          }
           if (firstBinding.modified) {
             // Must modify for traversal
             sameResidualBindings.set(name, firstBinding);
@@ -611,6 +818,68 @@ export class ResidualFunctions {
         let factoryParams: Array<BabelNodeLVal> = [];
         for (let key of factoryNames) {
           factoryParams.push(t.identifier(key));
+        }
+
+        if (useCurried) {
+          let isLexical = normalInstances[0].functionValue.$ThisMode === "lexical";
+          let innerTemplate = this._createFunctionExpression(params.slice(), funcBody, isLexical);
+          if (selfName !== undefined && t.isFunctionExpression(innerTemplate)) {
+            ((innerTemplate: any): BabelNodeFunctionExpression).id = t.identifier(selfName);
+          }
+          let innerFunc = new ResidualFunctionInstantiator(
+            factoryFunctionInfos,
+            this.realm.moduleFactoryFunctionsToRemove,
+            this._getIdentifierReplacements(funcBody, sameResidualBindings),
+            this._getCallReplacements(funcBody),
+            innerTemplate
+          ).instantiate();
+          let isStrict = normalInstances[0].functionValue.$Strict;
+          registerFunctionStrictness(innerFunc, isStrict);
+          let factoryNode = t.functionExpression(null, factoryParams, t.blockStatement([t.returnStatement(innerFunc)]));
+          registerFunctionStrictness(factoryNode, isStrict);
+          let factoryDeclaration = t.variableDeclaration("var", [t.variableDeclarator(factoryId, factoryNode)]);
+          this.prelude.push(factoryDeclaration);
+
+          for (let instance of normalInstances) {
+            let { functionValue, residualFunctionBindings } = instance;
+            let functionId = this.locationService.getLocation(functionValue);
+            invariant(functionId !== undefined);
+            let allPreludeSafe = true;
+            let flatArgs: Array<any> = factoryNames.map(name => {
+              let residualBinding = residualFunctionBindings.get(name);
+              invariant(residualBinding);
+              if (!this._isPreludeSafeArg(residualBinding.value)) allPreludeSafe = false;
+              let serializedValue = residualBinding.serializedValue;
+              invariant(serializedValue);
+              return serializedValue;
+            });
+            for (let sameRb of sameResidualBindings.values()) {
+              if (sameRb.declarativeEnvironmentRecord === null && sameRb.value === undefined) continue;
+              if (!this._isPreludeSafeArg(sameRb.value)) allPreludeSafe = false;
+            }
+            let funcNode = t.callExpression(factoryId, flatArgs);
+            if (allPreludeSafe && instance.initializationStatements.length === 0) {
+              preludeCurriedInstances.set(instance, {
+                functionId,
+                funcNode,
+                params: params.slice(),
+                funcBody,
+                sameResidualBindings,
+              });
+            } else {
+              let insertionPoint = instance.insertionPoint;
+              let firstUsage = this.firstFunctionUsages.get(functionValue);
+              if (
+                insertionPoint === undefined ||
+                (firstUsage !== undefined && !firstUsage.isNotEarlierThan(insertionPoint))
+              ) {
+                naiveProcessInstances([instance]);
+              } else {
+                defineFunction(instance, functionId, funcNode);
+              }
+            }
+          }
+          continue;
         }
 
         let scopeInitialization = [];
@@ -695,7 +964,12 @@ export class ResidualFunctions {
 
             let childBody = t.blockStatement([t.returnStatement(t.callExpression(callee, callArgs))]);
 
-            funcNode = t.functionExpression(null, params, childBody);
+            let embeddedName = this.embeddedFunctionNames.get(functionValue);
+            funcNode = t.functionExpression(
+              embeddedName !== undefined ? t.identifier(embeddedName) : null,
+              params,
+              childBody
+            );
             registerFunctionStrictness(funcNode, functionValue.$Strict);
           } else {
             funcNode = t.callExpression(
@@ -725,14 +999,124 @@ export class ResidualFunctions {
       );
     }
 
-    for (let instance of this.functionInstances.reverse()) {
-      let functionBody = functionBodies.get(instance);
-      if (functionBody !== undefined) {
-        let insertionPoint = instance.insertionPoint;
-        invariant(insertionPoint instanceof BodyReference);
-        // v8 seems to do something clever with array splicing, so this potentially
-        // expensive operations seems to be actually cheap.
-        insertionPoint.body.entries.splice(insertionPoint.index, 0, ...functionBody);
+    if (preludeCurriedInstances.size > 0) {
+      // Fixed-point check: ensure every FunctionValue referenced by a prelude-curried instance
+      // is actually defined in prelude (either a FunctionExpression in funcNodes or another preludeCurriedInstance).
+      let validInPrelude: Set<FunctionValue> = new Set(funcNodes.keys());
+      for (let inst of preludeCurriedInstances.keys()) validInPrelude.add(inst.functionValue);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (let [inst, info] of Array.from(preludeCurriedInstances.entries())) {
+          let allValid = true;
+          for (let rb of inst.residualFunctionBindings.values()) {
+            if (rb.value === inst.functionValue) continue;
+            if (rb.declarativeEnvironmentRecord === null && rb.value === undefined) continue;
+            if (!this._isPreludeSafeArg(rb.value, validInPrelude)) {
+              allValid = false;
+              break;
+            }
+          }
+          if (!allValid) {
+            preludeCurriedInstances.delete(inst);
+            validInPrelude.delete(inst.functionValue);
+            changed = true;
+            // Fallback: emit as a normal FunctionExpression in prelude so all references remain valid!
+            let { functionValue, residualFunctionBindings, scopeInstances } = inst;
+            let isLexical = functionValue.$ThisMode === "lexical";
+            let clonedNode = new ResidualFunctionInstantiator(
+              factoryFunctionInfos,
+              this.realm.moduleFactoryFunctionsToRemove,
+              this._getIdentifierReplacements(info.funcBody, residualFunctionBindings),
+              this._getCallReplacements(info.funcBody),
+              this._createFunctionExpression(info.params, info.funcBody, isLexical)
+            ).instantiate();
+            invariant(scopeInstances.size === 0);
+            registerFunctionStrictness(clonedNode, functionValue.$Strict);
+            defineFunction(inst, info.functionId, clonedNode);
+            validInPrelude.add(functionValue);
+          }
+        }
+      }
+
+      let visitedPrelude = new Set();
+      const emitPreludeInstance = (inst: FunctionInstance): void => {
+        if (visitedPrelude.has(inst)) return;
+        visitedPrelude.add(inst);
+        for (let rb of inst.residualFunctionBindings.values()) {
+          if (rb.value instanceof FunctionValue && rb.value !== inst.functionValue) {
+            let depInst = this.residualFunctionInstances.get(rb.value);
+            if (depInst !== undefined && preludeCurriedInstances.has(depInst)) {
+              emitPreludeInstance(depInst);
+            }
+          }
+        }
+        let info = preludeCurriedInstances.get(inst);
+        if (info !== undefined) {
+          this.prelude.push(t.variableDeclaration("var", [t.variableDeclarator(info.functionId, info.funcNode)]));
+        }
+      };
+      for (let inst of preludeCurriedInstances.keys()) {
+        emitPreludeInstance(inst);
+      }
+    }
+
+    let orderedBodyInstances = [];
+    let bodyInstanceSet = new Set();
+    for (let instance of this.functionInstances) {
+      if (functionBodies.has(instance)) bodyInstanceSet.add(instance);
+    }
+    let visitedBodyInstances = new Set();
+    const visitBodyInstance = (instance: FunctionInstance): void => {
+      if (visitedBodyInstances.has(instance)) return;
+      visitedBodyInstances.add(instance);
+      let ip = instance.insertionPoint;
+      if (ip instanceof BodyReference) {
+        for (let rb of instance.residualFunctionBindings.values()) {
+          if (rb.value instanceof FunctionValue && rb.value !== instance.functionValue) {
+            let depInst = this.residualFunctionInstances.get(rb.value);
+            if (
+              depInst !== undefined &&
+              bodyInstanceSet.has(depInst) &&
+              depInst.insertionPoint instanceof BodyReference &&
+              depInst.insertionPoint.body === ip.body &&
+              depInst.insertionPoint.index === ip.index
+            ) {
+              visitBodyInstance(depInst);
+            }
+          }
+        }
+      }
+      orderedBodyInstances.push(instance);
+    };
+    for (let instance of this.functionInstances) {
+      if (bodyInstanceSet.has(instance)) visitBodyInstance(instance);
+    }
+    orderedBodyInstances.sort((a, b) => {
+      let ipa = a.insertionPoint;
+      let ipb = b.insertionPoint;
+      invariant(ipa instanceof BodyReference && ipb instanceof BodyReference);
+      if (ipa.body !== ipb.body) return 0;
+      return ipb.index - ipa.index;
+    });
+    // Group by (body, index) so higher indices splice first and within the same index topological order is preserved.
+    let idx = 0;
+    while (idx < orderedBodyInstances.length) {
+      let first = orderedBodyInstances[idx];
+      let ip = first.insertionPoint;
+      invariant(ip instanceof BodyReference);
+      let combined = [];
+      while (idx < orderedBodyInstances.length) {
+        let cur = orderedBodyInstances[idx];
+        let curIp = cur.insertionPoint;
+        invariant(curIp instanceof BodyReference);
+        if (curIp.body !== ip.body || curIp.index !== ip.index) break;
+        let fb = functionBodies.get(cur);
+        if (fb !== undefined) combined.push(...fb);
+        idx++;
+      }
+      if (combined.length > 0) {
+        ip.body.entries.splice(ip.index, 0, ...combined);
       }
     }
 

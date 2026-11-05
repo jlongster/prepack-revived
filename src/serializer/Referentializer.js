@@ -97,7 +97,22 @@ export class Referentializer {
     return [t.variableDeclaration("var", leakedIds.map(id => t.variableDeclarator(id)))];
   }
 
+  _isDirectSingleScope(referentializationScope: ReferentializationScope): boolean {
+    if (this.realm.invariantLevel > 0) return false;
+    let state = this._getReferentializationState(referentializationScope);
+    return state.capturedScopeInstanceIdx === 1;
+  }
+
   createCapturedScopesPrelude(referentializationScope: ReferentializationScope): Array<BabelNodeStatement> {
+    if (this._isDirectSingleScope(referentializationScope)) {
+      const state = this._getReferentializationState(referentializationScope);
+      for (const scopeBinding of state.serializedScopes.values()) {
+        if (scopeBinding.initializationValues.length > 0) {
+          return [t.variableDeclaration("var", [t.variableDeclarator(state.capturedScopesArray)])];
+        }
+      }
+      return [];
+    }
     let accessFunctionDeclaration = this._createCaptureScopeAccessFunction(referentializationScope);
     if (accessFunctionDeclaration === undefined) return [];
     return [accessFunctionDeclaration, this._createCapturedScopesArrayInitialization(referentializationScope)];
@@ -209,8 +224,16 @@ export class Referentializer {
     const capturedScope = scope.capturedScope;
     invariant(capturedScope);
     const state = this._getReferentializationState(scope.referentializationScope);
-    const funcName = state.capturedScopeAccessFunctionId;
     const scopeArray = state.capturedScopesArray;
+    if (this._isDirectSingleScope(scope.referentializationScope)) {
+      const init = t.logicalExpression(
+        "||",
+        scopeArray,
+        t.assignmentExpression("=", scopeArray, t.arrayExpression((scope.initializationValues: any)))
+      );
+      return [t.variableDeclaration("var", [t.variableDeclarator(t.identifier(capturedScope), init)])];
+    }
+    const funcName = state.capturedScopeAccessFunctionId;
     // First get scope array entry and check if it's already initialized.
     // Only if not yet, then call the initialization function.
     const init = t.logicalExpression(
@@ -271,11 +294,17 @@ export class Referentializer {
     // First get scope array entry and check if it's already initialized.
     // Only if not yet, then call the initialization function.
     const scopeName = t.numericLiteral(scope.id);
-    const capturedScopeExpression = t.logicalExpression(
-      "||",
-      t.memberExpression(scopeArray, scopeName, true),
-      t.callExpression(funcName, [scopeName])
-    );
+    const capturedScopeExpression = this._isDirectSingleScope(scope.referentializationScope)
+      ? t.logicalExpression(
+          "||",
+          scopeArray,
+          t.assignmentExpression("=", scopeArray, t.arrayExpression((scope.initializationValues: any)))
+        )
+      : t.logicalExpression(
+          "||",
+          t.memberExpression(scopeArray, scopeName, true),
+          t.callExpression(funcName, [scopeName])
+        );
     residualBinding.serializedUnscopedLocation = t.memberExpression(
       capturedScopeExpression,
       indexExpression,

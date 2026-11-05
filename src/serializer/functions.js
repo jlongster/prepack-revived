@@ -324,16 +324,17 @@ export class Functions {
             let obj = pb.object;
             if (!(obj instanceof ObjectValue) || eff.createdObjects.has(obj)) continue;
             if (obj === globalObj) {
-              if (typeof pb.key === "string" && tr.readGlobalProps.has(pb.key)) {
+              let pbKey = pb.key;
+              if (typeof pbKey === "string" && tr.readGlobalProps.has(pbKey)) {
                 let pbDesc = pb.descriptor;
                 let postVal = postDesc instanceof PropertyDescriptor ? postDesc.value : undefined;
-                let existingType = havocGlobalProps.get(pb.key);
+                let existingType = havocGlobalProps.get(pbKey);
                 if (existingType !== undefined) {
                   if (
                     existingType !== Value &&
                     (!(postVal instanceof Value) || !Value.isTypeCompatibleWith(postVal.getType(), existingType))
                   ) {
-                    havocGlobalProps.set(pb.key, Value);
+                    havocGlobalProps.set(pbKey, Value);
                     added = true;
                   }
                 } else if (pbDesc instanceof PropertyDescriptor && pbDesc.value instanceof Value && pbDesc.writable) {
@@ -341,7 +342,7 @@ export class Functions {
                     postDesc === undefined || (postDesc instanceof PropertyDescriptor && postVal instanceof Value)
                       ? inferCandidateType(pbDesc.value, postVal instanceof Value ? postVal : undefined)
                       : Value;
-                  havocGlobalProps.set(pb.key, candType);
+                  havocGlobalProps.set(pbKey, candType);
                   added = true;
                 } else {
                   cannotHavoc = true;
@@ -353,10 +354,7 @@ export class Functions {
             let readKeys = tr.readObjectKeys.get(obj);
             if (readKeys === undefined) continue;
             let overlaps =
-              pb === obj.unknownProperty ||
-              readKeys.has("*") ||
-              typeof pb.key !== "string" ||
-              readKeys.has(pb.key);
+              pb === obj.unknownProperty || readKeys.has("*") || typeof pb.key !== "string" || readKeys.has(pb.key);
             if (overlaps) {
               if (obj.symbols.size === 0 && obj.mightNotBeFinalObject()) {
                 havocObjects.add(obj);
@@ -374,12 +372,11 @@ export class Functions {
           for (let attempt = 0; attempt < 5 && !cannotHavoc; attempt++) {
             this.realm.optimizedFunctions = new Map();
             let reEvalFailed = false;
-            let reEvalEffects;
-            let reEvalTracker;
+            let reEvalPair: null | [Effects, PersistentReadTracker] = null;
             let savedLiveBindings = realm.liveOuterBindings;
             realm.liveOuterBindings = havocBindings;
             try {
-              [reEvalEffects, reEvalTracker] = evalWithTracker(() => {
+              reEvalPair = evalWithTracker(() => {
                 for (let obj of havocObjects) {
                   obj.leak();
                 }
@@ -387,7 +384,9 @@ export class Functions {
                 invariant(globalObject instanceof ObjectValue);
                 for (let [name, propType] of havocGlobalProps) {
                   let pb = globalObject.properties.get(name);
-                  invariant(pb !== undefined && pb.descriptor instanceof PropertyDescriptor);
+                  invariant(pb !== undefined);
+                  let pbDesc = pb.descriptor;
+                  invariant(pbDesc instanceof PropertyDescriptor);
                   let liveVal = AbstractValue.createTemporalFromBuildFunction(
                     realm,
                     propType,
@@ -395,7 +394,7 @@ export class Functions {
                     createOperationDescriptor("OBJECT_GET_PARTIAL"),
                     { skipInvariant: true, isPure: true }
                   );
-                  let desc = cloneDescriptor(pb.descriptor);
+                  let desc = cloneDescriptor(pbDesc);
                   invariant(desc !== undefined);
                   desc.value = liveVal;
                   realm.recordModifiedProperty(pb);
@@ -409,7 +408,8 @@ export class Functions {
             } finally {
               realm.liveOuterBindings = savedLiveBindings;
             }
-            if (reEvalFailed || reEvalEffects === undefined || reEvalTracker === undefined) break;
+            if (reEvalFailed || reEvalPair === null) break;
+            let [reEvalEffects, reEvalTracker] = reEvalPair;
             // Remove synthetic _isLeaked entries on pre-existing havoced objects so global heap serialization
             // still emits their initial properties, while keeping the live reads/writes in reEvalEffects.generator.
             for (let [pb] of reEvalEffects.modifiedProperties) {

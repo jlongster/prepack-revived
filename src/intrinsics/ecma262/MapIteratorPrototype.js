@@ -37,6 +37,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
 
     // 5. Let index be O.[[MapNextIndex]].
     let nextIdx = O.$MapNextIndex;
+    invariant(nextIdx !== undefined);
     if (nextIdx instanceof AbstractValue) nextIdx = realm.simplifyAndRefineAbstractValue(nextIdx);
     let index = nextIdx.throwIfNotConcreteNumber().value;
 

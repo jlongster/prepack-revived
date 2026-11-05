@@ -535,13 +535,14 @@ export class PropertiesImplementation {
     // On a simple object, neither O nor its prototype chain has setters, so [[Set]] with a
     // primitive Receiver always fails at ECMA262 9.1.9.1 step 4.b after ToPropertyKey(P).
     if (O.isSimpleObject() && !Receiver.mightBeObject()) {
-      if (P.mightBeObject() && realm.isInPureScope()) {
+      let propKey = P;
+      if (propKey.mightBeObject() && realm.isInPureScope()) {
         realm.evaluateWithPossibleThrowCompletion(
           () =>
             AbstractValue.createTemporalFromBuildFunction(
               realm,
               Value,
-              [realm.intrinsics.zero, P],
+              [realm.intrinsics.zero, propKey],
               createOperationDescriptor("OBJECT_GET_PARTIAL"),
               { skipInvariant: true }
             ),

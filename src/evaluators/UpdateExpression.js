@@ -73,7 +73,7 @@ export default function(
       invariant(ast.operator === "++" || ast.operator === "--");
       let newValue = Add(realm, oldValue, delta);
       Properties.PutValue(realm, expr, newValue);
-      return ast.prefix ? newValue : coerced;
+      return ast.prefix === true ? newValue : coerced;
     }
     if (coerced !== undefined) oldExpr = coerced;
   }
@@ -122,5 +122,5 @@ export default function(
     ast.loc
   );
   Properties.PutValue(realm, expr, newAbstractValue);
-  return ast.prefix ? newAbstractValue : oldNumberValue;
+  return ast.prefix === true ? newAbstractValue : oldNumberValue;
 }

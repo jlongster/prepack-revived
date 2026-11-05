@@ -120,7 +120,8 @@ export class PathConditionsImplementation extends PathConditions {
         let [x] = e.args;
         if (this.impliesNot(x, depth + 1)) return this.cacheImplicationSuccess(e);
       }
-      let target = this !== root && realm._implicationUsedLeaf ? root : this;
+      let target =
+        this !== root && realm._implicationUsedLeaf && root instanceof PathConditionsImplementation ? root : this;
       if (depth === 0) {
         if (target._failedImplications === undefined) target._failedImplications = new Set();
         target._failedImplications.add(e);
@@ -137,7 +138,8 @@ export class PathConditionsImplementation extends PathConditions {
   cacheImplicationSuccess(e: AbstractValue): true {
     let realm = e.$Realm;
     let root = realm.pathConditions;
-    let target = this !== root && realm._implicationUsedLeaf ? root : this;
+    let target =
+      this !== root && realm._implicationUsedLeaf && root instanceof PathConditionsImplementation ? root : this;
     if (target._impliedConditions === undefined) target._impliedConditions = new Set();
     target._impliedConditions.add(e);
     return true;
@@ -189,7 +191,8 @@ export class PathConditionsImplementation extends PathConditions {
         let [x] = e.args;
         if (this.implies(x, depth + 1)) return this.cacheNegativeImplicationSuccess(e);
       }
-      let target = this !== root && realm._implicationUsedLeaf ? root : this;
+      let target =
+        this !== root && realm._implicationUsedLeaf && root instanceof PathConditionsImplementation ? root : this;
       if (depth === 0) {
         if (target._failedNegativeImplications === undefined) target._failedNegativeImplications = new Set();
         target._failedNegativeImplications.add(e);
@@ -206,7 +209,8 @@ export class PathConditionsImplementation extends PathConditions {
   cacheNegativeImplicationSuccess(e: AbstractValue): true {
     let realm = e.$Realm;
     let root = realm.pathConditions;
-    let target = this !== root && realm._implicationUsedLeaf ? root : this;
+    let target =
+      this !== root && realm._implicationUsedLeaf && root instanceof PathConditionsImplementation ? root : this;
     if (target._impliedNegatives === undefined) target._impliedNegatives = new Set();
     target._impliedNegatives.add(e);
     return true;

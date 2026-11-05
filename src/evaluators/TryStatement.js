@@ -105,7 +105,8 @@ function joinTryAndCatch(
         env,
         realm,
         blockEffects,
-        firstNewEnvironmentId
+        firstNewEnvironmentId,
+        block
       );
       return realm.returnOrThrowCompletion(UpdateEmpty(realm, result, realm.intrinsics.undefined));
     }
@@ -239,6 +240,74 @@ function canLeakObjectInPureTry(realm: Realm, object: ObjectValue): boolean {
 // caught. Since the exception might be thrown at any point of the block, the handler cannot know the state of
 // bindings and objects modified by the block. These are therefore leaked before the block, so that all
 // modifications are emitted as residual code in order, and the handler reads their actual values.
+function isBindingReferencedOutsideTryBlock(binding: Binding, tryBlock: BabelNodeBlockStatement): boolean {
+  if (binding.mightHaveBeenCaptured || binding.name === "arguments") return true;
+  let envRec: any = binding.environment;
+  let funcObj = envRec && envRec.$FunctionObject;
+  let root = funcObj && funcObj.$ECMAScriptCode;
+  if (!root) return true;
+  let referenced = false;
+  let sawTryBlock = false;
+  let visitInTryClosure = (node: any, inClosure: boolean) => {
+    if (!node || typeof node !== "object" || referenced) return;
+    if (Array.isArray(node)) {
+      for (let el of node) visitInTryClosure(el, inClosure);
+      return;
+    }
+    if (!node.type) return;
+    if (node.type === "WithStatement") {
+      referenced = true;
+      return;
+    }
+    if (node.type === "Identifier") {
+      if (node.name === "eval" || (inClosure && node.name === binding.name)) {
+        referenced = true;
+      }
+      return;
+    }
+    let nextInClosure =
+      inClosure ||
+      node.type === "FunctionExpression" ||
+      node.type === "FunctionDeclaration" ||
+      node.type === "ArrowFunctionExpression" ||
+      node.type === "ObjectMethod" ||
+      node.type === "ClassMethod";
+    for (let key in node) {
+      if (key === "loc" || key === "leadingComments" || key === "trailingComments" || key === "innerComments") continue;
+      visitInTryClosure(node[key], nextInClosure);
+    }
+  };
+  let visit = (node: any) => {
+    if (!node || typeof node !== "object" || referenced) return;
+    if (node === tryBlock) {
+      sawTryBlock = true;
+      visitInTryClosure(tryBlock, false);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (let el of node) visit(el);
+      return;
+    }
+    if (!node.type) return;
+    if (node.type === "WithStatement") {
+      referenced = true;
+      return;
+    }
+    if (node.type === "Identifier") {
+      if (node.name === binding.name || node.name === "eval") {
+        referenced = true;
+      }
+      return;
+    }
+    for (let key in node) {
+      if (key === "loc" || key === "leadingComments" || key === "trailingComments" || key === "innerComments") continue;
+      visit(node[key]);
+    }
+  };
+  visit(root);
+  return !sawTryBlock || referenced;
+}
+
 function emitResidualTryStatement(
   evalBlock: () => Completion | Value,
   handler: ?BabelNodeCatchClause,
@@ -247,11 +316,12 @@ function emitResidualTryStatement(
   env: LexicalEnvironment,
   realm: Realm,
   probeEffects: Effects,
-  firstNewEnvironmentId: number
+  firstNewEnvironmentId: number,
+  tryBlockNode?: ?BabelNodeBlockStatement
 ): Completion | Value {
   let bindings = new Set();
   let objects = new Set();
-  addPreexistingModifiedState(probeEffects, firstNewEnvironmentId, bindings, objects);
+  addPreexistingModifiedState(probeEffects, firstNewEnvironmentId, bindings, objects, tryBlockNode);
   if (bindings.size === 0 && objects.size === 0) {
     return emitResidualTryStatementForBlockEffects(handler, loc, strictCode, env, realm, probeEffects);
   }
@@ -288,7 +358,7 @@ function emitResidualTryStatement(
     }
     if (!allLeaked || leakEffects === undefined) break;
     invariant(blockEffects !== undefined);
-    addPreexistingModifiedState(blockEffects, firstNewEnvironmentId, bindings, objects);
+    addPreexistingModifiedState(blockEffects, firstNewEnvironmentId, bindings, objects, tryBlockNode);
     if (bindings.size + objects.size === stateSize) {
       invariant(leakEffects !== undefined);
       realm.applyEffects(leakEffects);
@@ -311,10 +381,14 @@ function addPreexistingModifiedState(
   effects: Effects,
   firstNewEnvironmentId: number,
   bindings: Set<Binding>,
-  objects: Set<ObjectValue>
+  objects: Set<ObjectValue>,
+  tryBlockNode?: ?BabelNodeBlockStatement
 ): void {
   effects.modifiedBindings.forEach((entry, binding) => {
-    if (binding.environment.id < firstNewEnvironmentId) bindings.add(binding);
+    if (binding.environment.id < firstNewEnvironmentId) {
+      if (tryBlockNode != null && !isBindingReferencedOutsideTryBlock(binding, tryBlockNode)) return;
+      bindings.add(binding);
+    }
   });
   effects.modifiedProperties.forEach((desc, propertyBinding) => {
     if (ObjectValue.refuseSerializationOnPropertyBinding(propertyBinding) && propertyBinding.key !== "_isLeaked")

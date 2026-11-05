@@ -9,6 +9,7 @@
 
 /* @flow strict-local */
 
+import { PropertyDescriptor } from "../descriptors.js";
 import { FatalError } from "../errors.js";
 import type { Realm } from "../realm.js";
 import type { PropertyKeyValue } from "../types.js";
@@ -96,7 +97,9 @@ export function HasOwnProperty(realm: Realm, O: ObjectValue | AbstractObjectValu
     let rawBinding = getRawOwnPropertyBinding(O, P);
     if (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && O.mightNotBeFinalObject()) {
       let rawDesc = rawBinding !== undefined ? rawBinding.descriptor : undefined;
-      if (rawDesc !== undefined && !rawDesc.configurable && !rawDesc.mightHaveBeenDeleted()) return true;
+      if (rawDesc instanceof PropertyDescriptor && rawDesc.configurable === false && !rawDesc.mightHaveBeenDeleted()) {
+        return true;
+      }
       AbstractValue.reportIntrospectionError(O, P);
       throw new FatalError();
     }
@@ -129,7 +132,9 @@ export function OrdinaryHasProperty(realm: Realm, O: ObjectValue, P: PropertyKey
   let rawBinding = getRawOwnPropertyBinding(O, P);
   if (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && O.mightNotBeFinalObject()) {
     let rawDesc = rawBinding !== undefined ? rawBinding.descriptor : undefined;
-    if (rawDesc !== undefined && !rawDesc.configurable && !rawDesc.mightHaveBeenDeleted()) return true;
+    if (rawDesc instanceof PropertyDescriptor && rawDesc.configurable === false && !rawDesc.mightHaveBeenDeleted()) {
+      return true;
+    }
     AbstractValue.reportIntrospectionError(O, P);
     throw new FatalError();
   }

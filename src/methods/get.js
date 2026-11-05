@@ -415,11 +415,13 @@ export function OrdinaryGetPartial(
         !Receiver.mightBeNull() &&
         !Receiver.mightBeUndefined() &&
         !P.mightBeObject();
+      let propKey = P;
+      invariant(propKey instanceof AbstractValue);
       if (isPureWrapperGet) {
         return AbstractValue.createTemporalFromBuildFunction(
           realm,
           Value,
-          [Receiver, P],
+          [Receiver, propKey],
           createOperationDescriptor("OBJECT_GET_PARTIAL"),
           { skipInvariant: true, isPure: true }
         );
@@ -429,7 +431,7 @@ export function OrdinaryGetPartial(
           AbstractValue.createTemporalFromBuildFunction(
             realm,
             Value,
-            [Receiver, P],
+            [Receiver, propKey],
             createOperationDescriptor("OBJECT_GET_PARTIAL"),
             { skipInvariant: true }
           ),

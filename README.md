@@ -7,7 +7,18 @@ For initialization-heavy code, Prepack works best in an environment where JavaSc
 
 See the official [prepack.io](https://prepack.io) website for an introduction and an [interactive REPL playground](https://prepack.io/repl.html).
 
-## Status
+## Prepack Revived
+
+This is an experimental revival of Facebook's archived Prepack. The goal is to see whether the problems that made the original team stop can be solved now, with AI coding agents doing most of the work. It builds and passes its test suites on Node 26.
+
+- [Research: why Prepack was abandoned](docs/revive/RESEARCH.md)
+- [The plan](docs/revive/PLAN.md) and [agent instructions](docs/revive/AGENT-INSTRUCTIONS.md)
+- Design notes per track: [loops](docs/revive/loops.md), [recursion](docs/revive/recursion.md), [joins](docs/revive/joins.md), [ranges](docs/revive/1C-ranges.md), [built-in summaries](docs/revive/1D-builtins.md), [fuzzer](docs/revive/fuzzer.md)
+- Hard-case corpus and scoreboard: [test/serializer/hard](test/serializer/hard/README.md). Build baseline: [BASELINE.md](BASELINE.md)
+
+The default branch holds the merged work. Branches named after tracks (`smt`, `bench`, `round2`, `size`, `env`, …) are work in progress.
+
+## Original status
 
 **We, the Prepack team at Facebook, have temporarily set down work on Prepack including the React compiler project. You won't see many Prepack PRs while we are currently prioritizing some other projects.**
 

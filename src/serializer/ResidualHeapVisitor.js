@@ -52,7 +52,8 @@ import type {
 import { ClosureRefVisitor } from "./visitors.js";
 import { Logger } from "../utils/logger.js";
 import { Modules } from "../utils/modules.js";
-import { HeapInspector } from "../utils/HeapInspector.js";
+import { HeapInspector, getNativeErrorConstructorName } from "../utils/HeapInspector.js";
+import { getVerifiedRecomputeRecipes, type RecomputeRecipe } from "../methods/recompute.js";
 import {
   canIgnoreClassLengthProperty,
   ClassPropertiesToIgnore,
@@ -83,7 +84,8 @@ export class ResidualHeapVisitor {
     realm: Realm,
     logger: Logger,
     modules: Modules,
-    additionalFunctionValuesAndEffects: Map<FunctionValue, AdditionalFunctionEffects>
+    additionalFunctionValuesAndEffects: Map<FunctionValue, AdditionalFunctionEffects>,
+    enableRecompute: boolean = false
   ) {
     invariant(realm.useAbstractInterpretation);
     this.realm = realm;
@@ -113,6 +115,7 @@ export class ResidualHeapVisitor {
     this.additionalGeneratorRoots = new Map();
     this.residualReactElementVisitor = new ResidualReactElementVisitor(this.realm, this);
     this.generatorTree = new GeneratorTree();
+    this.recomputeRecipes = enableRecompute ? getVerifiedRecomputeRecipes(realm) : new Map();
   }
 
   realm: Realm;
@@ -144,6 +147,7 @@ export class ResidualHeapVisitor {
   generatorTree: GeneratorTree;
   globalEnvironmentRecord: GlobalEnvironmentRecord;
   residualReactElementVisitor: ResidualReactElementVisitor;
+  recomputeRecipes: Map<ObjectValue, RecomputeRecipe>;
 
   // Going backwards from the current scope, find either the containing
   // additional function, or if there isn't one, return the global generator.
@@ -342,6 +346,7 @@ export class ResidualHeapVisitor {
   visitObjectPrototype(obj: ObjectValue): void {
     let proto = obj.$Prototype;
 
+    if (getNativeErrorConstructorName(this.realm, obj) !== undefined) return;
     let kind = obj.getKind();
     if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
 
@@ -1086,9 +1091,71 @@ export class ResidualHeapVisitor {
     return val;
   }
 
+  _visitRecomputeTarget(val: ObjectValue, recipe: RecomputeRecipe): void {
+    this._registerAdditionalRoot(val);
+    if (recipe.kind === "call") {
+      this.visitValue(recipe.callee);
+    } else {
+      for (let obj of recipe.readGlobalObjects) this.visitValue(obj);
+    }
+    let checkAlias = () => {
+      if (!this.recomputeRecipes.has(val)) return false;
+      let aliased = this.additionalFunctionValuesAndEffects.has((val: any));
+      if (!aliased && recipe.kind === "call") {
+        for (let pt of recipe.pureTemporals) {
+          if (this.values.has(pt)) {
+            aliased = true;
+            break;
+          }
+        }
+      }
+      if (!aliased) {
+        for (let inner of recipe.createdObjects) {
+          if (inner !== val && this.values.has(inner)) {
+            aliased = true;
+            break;
+          }
+        }
+      }
+      if (aliased) {
+        this.recomputeRecipes.delete(val);
+        if (IsArray(this.realm, val)) this.visitValueArray(val);
+        else if (val instanceof FunctionValue) this.visitValueFunction(val);
+        else this.visitValueObject(val);
+        return true;
+      }
+      this._enqueueWithUnrelatedScope(this.globalGenerator, checkAlias);
+      return false;
+    };
+    this._enqueueWithUnrelatedScope(this.globalGenerator, checkAlias);
+  }
+
   visitValue(val: Value): void {
     invariant(val !== undefined);
     invariant(!(val instanceof ObjectValue && val.refuseSerialization));
+    if (val instanceof ObjectValue && !val.isIntrinsic() && this.recomputeRecipes.has(val)) {
+      let recipe = this.recomputeRecipes.get(val);
+      invariant(recipe !== undefined);
+      if (val instanceof FunctionValue) {
+        let creationGenerator = this.generatorTree.getCreator(val) || this.globalGenerator;
+        this._enqueueWithUnrelatedScope(creationGenerator, () => {
+          invariant(val instanceof ObjectValue);
+          if (this.preProcessValue(val)) this._visitRecomputeTarget(val, recipe);
+          this.postProcessValue(val);
+        });
+        let commonScope = this._getCommonScope();
+        if (commonScope !== creationGenerator && commonScope !== val) {
+          this._enqueueWithUnrelatedScope(commonScope, () => {
+            this.preProcessValue(val);
+            this.postProcessValue(val);
+          });
+        }
+      } else {
+        if (this.preProcessValue(val)) this._visitRecomputeTarget(val, recipe);
+        this.postProcessValue(val);
+      }
+      return;
+    }
     if (val instanceof AbstractValue) {
       if (this.preProcessValue(val)) this.visitAbstractValue(val);
       this.postProcessValue(val);
@@ -1444,6 +1511,7 @@ export class ResidualHeapVisitor {
       globalBindings: this.globalBindings,
       conditionalFeasibility: this.conditionalFeasibility,
       additionalGeneratorRoots: this.additionalGeneratorRoots,
+      recomputeRecipes: this.recomputeRecipes,
     };
   }
 }

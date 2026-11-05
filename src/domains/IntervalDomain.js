@@ -688,6 +688,8 @@ function mathFunction(name: string, args: Array<IntervalDomain>): IntervalDomain
       let a = args[0];
       return new IntervalDomain(Math.sign(a.lo), Math.sign(a.hi), true, a.mayBeNaN, a.mayBeNegZero);
     }
+    case "random":
+      return new IntervalDomain(0, 1 - Number.EPSILON / 2, false, false, false);
     case "clz32":
       return IntervalDomain.integers(0, 32);
     default:
