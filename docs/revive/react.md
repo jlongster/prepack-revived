@@ -118,6 +118,11 @@ identical), plus inputs outside the schema (all fall back, none are rendered wro
 
 (An earlier run under different machine load measured 4.35×/5.45× JIT and 9.7×/11.6× jitless.)
 
+After merging `revive` (correctness round 2, af1617e5): check.js 500/500 byte-identical, generated
+code 83.8 KB (20.6 KB gzip; the merged serializer emits somewhat more code), compile 10.6 s, and
+JIT small 5.46× / large 4.68×, jitless small 9.13× / large 9.80× (hand-written: 7.9× / 6.7× /
+19.0× / 16.7×). Cold start to first HTML: 16.0 ms (baseline 16.2 ms).
+
 Allocation per render: small 14 KB (baseline 137 KB, handwritten 13 KB), large 749 KB (baseline
 6.4 MB, handwritten 606 KB).
 
@@ -131,7 +136,14 @@ Progression on the large JIT page as the work went on: first correct version 1.7
 contexts, escape distribution and pure helpers 2.3× → residual calls for looping helpers →
 map/join loop and concatenation post-pass **4.4–5.3×**.
 
-## Prepack changes (all under `src/`; gates: serializer 3645/3645 full, error-handler 43/43, hard corpus unchanged at 154 PASS / 14 CRASH / 7 WRONG / 0 BLOAT, identical per test to `revive`, plus lint and flow clean)
+## Prepack changes (all under `src/`; gates after merging revive af1617e5: serializer 3678/3678 full, error-handler 43/43, hard corpus 187 PASS / 6 CRASH / 1 WRONG / 0 BLOAT, identical per test to revive's own build, lint and flow clean)
+
+Merge notes: revive fixed the `for-in`/`for-of` continue/break join independently (and more thoroughly),
+so its version of `ForOfStatement.js` was taken. `serializer/functions.js` keeps revive's
+persistent-read tracker (#1750) with net-zero modifications dropped before side effects are
+reported. `AbstractObjectValue` keeps revive's `isPure` flag for abstract gets inside the shaped
+read. `ArrayValue.createTemporalWithWidenedNumericProperty` keeps revive's
+`elementType`/`isPure`/`isDense` parameters, and `argShapes` comes last.
 
 Soundness fixes found on the way (both were silent miscompiles):
 
@@ -139,7 +151,7 @@ Soundness fixes found on the way (both were silent miscompiles):
   wrapper object of an abstract string has no index properties. The result was `undefined`, so
   `s[0] === "\n"` folded to `false`. It now emits `s[i]`. Tests:
   `test/serializer/{abstract,optimized-functions}/AbstractStringIndex.js`.
-- **`src/evaluators/ForOfStatement.js`: a conditional `continue`/`break` in a `for-in`/`for-of`
+- **`src/evaluators/ForOfStatement.js` (superseded by revive's own fix at merge): a conditional `continue`/`break` in a `for-in`/`for-of`
   body was dropped.** The body's saved completions were never joined, unlike in
   `ForBodyEvaluation`, so `for (k in o) { if (o[k] == null) continue; s += k; }` ignored the
   `continue`. Test: `test/serializer/optimized-functions/ForInConditionalContinue.js`.
