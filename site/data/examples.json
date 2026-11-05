@@ -1,0 +1,1054 @@
+{
+ "intro-hello": {
+  "input": "(function () {\n  function hello() { return \"hello\"; }\n  function world() { return \"world\"; }\n  global.s = hello() + \" \" + world();\n})();\n",
+  "inputName": "intro-hello.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js intro-hello.js",
+    "exitCode": 0,
+    "ms": 300,
+    "stdout": "(function () {\n  var _$0 = this;\n  _$0.s = \"hello world\";\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "s",
+    "original": {
+     "ok": true,
+     "value": "hello world"
+    },
+    "orig": {
+     "ok": true,
+     "value": "hello world"
+    }
+   }
+  ]
+ },
+ "intro-partial": {
+  "input": "var config = { debug: false, retries: 3, tags: [\"a\", \"b\"] };\nvar started = Date.now();\nglobal.banner = \"retries=\" + config.retries + (config.debug ? \" DEBUG\" : \"\")\n  + \" tags=\" + config.tags.join(\"+\");\nglobal.uptime = function () { return Date.now() - started; };\n",
+  "inputName": "intro-partial.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js intro-partial.js",
+    "exitCode": 0,
+    "ms": 300,
+    "stdout": "var started, config;\n(function () {\n  var _$1 = this;\n  var _C = function () {\n    return Date.now() - started;\n  };\n  var _3 = [\"a\", \"b\"];\n  var _0 = {\n    debug: false,\n    retries: 3,\n    tags: _3\n  };\n  _$1.config = _0;\n  var _$0 = _$1.Date.now();\n  _$1.started = _$0;\n  _$1.banner = \"retries=3 tags=a+b\";\n  _$1.uptime = _C;\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "banner",
+    "original": {
+     "ok": true,
+     "value": "retries=3 tags=a+b"
+    },
+    "orig": {
+     "ok": true,
+     "value": "retries=3 tags=a+b"
+    }
+   }
+  ]
+ },
+ "loops-1174": {
+  "input": "function sum(n) {\n  var s = 0;\n  for (var i = 0; i < n; i++) {\n    s += i;\n  }\n  return s;\n}\nif (global.__optimize) __optimize(sum);\n",
+  "inputName": "loops-1174.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js loops-1174.js",
+    "exitCode": 1,
+    "ms": 301,
+    "stdout": "var sum;\n(function () {\n  var _$3 = this;\n  var _1 = function (n) {\n    var __get_scope_binding_0 = function (__selector) {\n      var __captured;\n      switch (__selector) {\n        case 0:\n          __captured = [void 0];\n          break;\n      }\n      __scope_0[__selector] = __captured;\n      return __captured;\n    };\n    var __scope_0 = new Array(1);\n    var __leaked_0, __leaked_1;\n    var _5 = function () {\n      var __captured__scope_1 = __scope_0[0] || __get_scope_binding_0(0);\n      for (__captured__scope_1[0] = 0; __captured__scope_1[0] < __leaked_0; __captured__scope_1[0]++) {\n        __leaked_1 += __captured__scope_1[0];\n      }\n    };\n    __leaked_0 = n;\n    __leaked_1 = 0;\n    var _$1 = _5();\n    var _$2 = __leaked_1;\n    return _$2;\n  };\n  _$3.sum = _1;\n}).call(this);\n",
+    "stderr": "In input file loops-1174.js(3:23) FatalError PP0001:  (https://github.com/facebook/prepack/wiki/PP0001)\n    at sum (loops-1174.js:3:23)\nPrepack failed, reporting 1 fatal error.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js loops-1174.js",
+    "exitCode": 0,
+    "ms": 401,
+    "stdout": "var sum;\n(function () {\n  var _$7 = this;\n\n  _$7.sum = function (n) {\n    var __l0, __l1, __l2, __l3;\n\n    var _6 = function (n) {\n      for (; __l2 < n; __l2++) {\n        __l3 += __l2;\n      }\n    };\n\n    __l2 = 0;\n    __l3 = 0;\n\n    _6(n);\n\n    var _$5 = __l2;\n    var _$6 = __l3;\n    return _$6;\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "sum(0), sum(5), sum(10)",
+    "original": {
+     "ok": true,
+     "value": "0,10,45"
+    },
+    "orig": {
+     "ok": true,
+     "value": "0,10,45"
+    },
+    "revived": {
+     "ok": true,
+     "value": "0,10,45"
+    }
+   }
+  ]
+ },
+ "loops-1722": {
+  "input": "var n = global.__abstract ? __abstract(\"number\", \"n0\") : n0;\nvar arr = { 0: \"a\", 1: \"b\" };\nvar i = 2;\ndo {\n  arr[i] = \"x\";\n  i++;\n} while (i < n);\nvar result = arr;\n",
+  "inputName": "loops-1722.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js loops-1722.js",
+    "exitCode": 0,
+    "ms": 318,
+    "stdout": "var result, i, arr, n;\n(function () {\n  var _$2 = this;\n  var __empty = {};\n  var _0 = n0;\n  _$2.n = _0;\n  var _2 = {};\n  _$2.arr = _2;\n  _$2.i = 2;\n  var _J = _$2;\n  _J.i = 2;\n  do {\n    var _7 = 1 + _J.i;\n    _$2.i = _7;\n    var _$0 = _7;\n    var _C = \"\" + _J.i;\n    _2[_C] = \"x\";\n    _J.i = _$0;\n    var _H = _7 < _0;\n    var _$1 = _H;\n  } while (_$1);\n  _$2.result = _2;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js loops-1722.js",
+    "exitCode": 0,
+    "ms": 400,
+    "stdout": "var result, i, arr, n;\n(function () {\n  var _$3 = this;\n\n  _$3.n = n0;\n  var _2 = {};\n  _$3.arr = _2;\n  _$3.i = 2;\n  _2[0] = \"a\";\n  _2[1] = \"b\";\n  delete _2[2];\n  delete _2[3];\n\n  (function () {\n    do {\n      arr[i] = \"x\";\n      i++;\n    } while (i < n);\n  })();\n\n  _$3.result = _2;\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "n0 = 5",
+    "original": {
+     "ok": true,
+     "value": "{\"0\":\"a\",\"1\":\"b\",\"2\":\"x\",\"3\":\"x\",\"4\":\"x\"} i=5"
+    },
+    "orig": {
+     "ok": true,
+     "value": "{\"3\":\"x\",\"4\":\"x\",\"5\":\"x\"} i=5"
+    },
+    "revived": {
+     "ok": true,
+     "value": "{\"0\":\"a\",\"1\":\"b\",\"2\":\"x\",\"3\":\"x\",\"4\":\"x\"} i=5"
+    }
+   }
+  ]
+ },
+ "loops-2055": {
+  "input": "function fn(props, splitPoint) {\n  var text = props.text || \"\";\n  text = text.replace(/\\s*$/, \"\");\n  if (splitPoint !== null) {\n    while (text[splitPoint - 1] === \"\\n\") {\n      splitPoint--;\n    }\n  }\n  return splitPoint;\n}\nif (global.__optimize) __optimize(fn);\n",
+  "inputName": "loops-2055.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js loops-2055.js",
+    "exitCode": 1,
+    "ms": 324,
+    "stdout": "var fn;\n(function () {\n  var _$8 = this;\n  var _1 = function (props, splitPoint) {\n    var __leaked_0, __leaked_1;\n    var _C = function () {\n      for (; __leaked_1[__leaked_0 - 1] === \"\\n\";) {\n        __leaked_0--;\n      }\n    };\n    var _$0 = props.text;\n    if (_$0) {\n      var _3 = /\\s*$/;\n      var _$2 = _$0.replace(_3, \"\");\n    }\n    var _5 = splitPoint !== null;\n    var _8 = _$0 ? _$2 : \"\";\n    if (_5) {\n      __leaked_0 = splitPoint;\n      __leaked_1 = _8;\n      var _$6 = _C();\n    } else {\n      __leaked_0 = splitPoint;\n      __leaked_1 = _8;\n    }\n    var _$7 = __leaked_0;\n    return _$7;\n  };\n  _$8.fn = _1;\n}).call(this);\n",
+    "stderr": "In input file loops-2055.js(5:37) FatalError PP0001:  (https://github.com/facebook/prepack/wiki/PP0001)\n    at fn (loops-2055.js:5:37)\nPrepack failed, reporting 1 fatal error.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js loops-2055.js",
+    "exitCode": 0,
+    "ms": 440,
+    "stdout": "var fn;\n(function () {\n  var _$D = this;\n\n  _$D.fn = function (props, splitPoint) {\n    var __l0, __l1;\n\n    var _G = function (text) {\n      for (; text[__l1 - 1] === \"\\n\";) {\n        __l1--;\n      }\n    };\n\n    var _$0 = props.text;\n    var _$1 = props.text;\n\n    if (_$0) {\n      var _$2 = _$0.replace(/\\s*$/, \"\");\n    }\n\n    var _8 = splitPoint !== null;\n\n    if (_8) {\n      __l1 = splitPoint;\n\n      _G(_$0 ? _$2 : \"\");\n\n      var _$C = __l1;\n    }\n\n    return _8 ? _$C : splitPoint;\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "fn({text:\"ab\\n\\ncd\"}, 4), fn({}, null), fn({text:\"a\\n\\n\\nb\"}, 4)",
+    "original": {
+     "ok": true,
+     "value": "[ 2, null, 1 ]"
+    },
+    "orig": {
+     "ok": true,
+     "value": "[ 2, null, 1 ]"
+    },
+    "revived": {
+     "ok": true,
+     "value": "[ 2, null, 1 ]"
+    }
+   }
+  ]
+ },
+ "recursion-fib": {
+  "input": "function fib(n) {\n  return n <= 1 ? n : fib(n - 1) + fib(n - 2);\n}\nfunction f(n) {\n  return \"fib=\" + fib(n);\n}\nif (global.__optimize) __optimize(f);\n",
+  "inputName": "recursion-fib.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js recursion-fib.js",
+    "exitCode": null,
+    "timedOut": true,
+    "ms": 60330,
+    "stdout": "",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js recursion-fib.js",
+    "exitCode": 0,
+    "ms": 418,
+    "stdout": "var fib, f;\n(function () {\n  var _$K = this;\n\n  var _3 = function (n) {\n    var _$I = _2(n);\n\n    var _$J = \"fib=\" + _$I;\n\n    return _$J;\n  };\n\n  var _2 = function (n) {\n    return n <= 1 ? n : fib(n - 1) + fib(n - 2);\n  };\n\n  _$K.fib = _2;\n  _$K.f = _3;\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "f(7), f(12)",
+    "original": {
+     "ok": true,
+     "value": "fib=13,fib=144"
+    },
+    "orig": null,
+    "revived": {
+     "ok": true,
+     "value": "fib=13,fib=144"
+    }
+   }
+  ]
+ },
+ "recursion-fact": {
+  "input": "var k = global.__abstract ? __abstract(\"number\", \"k0\") : k0;\nfunction fact(n) {\n  return n <= 1 ? 1 : n * fact(n - 1);\n}\nvar r = k > 3 ? fact(k) : -1;\n",
+  "inputName": "recursion-fact.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js recursion-fact.js",
+    "exitCode": 1,
+    "ms": 342,
+    "stdout": "",
+    "stderr": "In input file recursion-fact.js(3:36) FatalError PP0045: Maximum stack depth exceeded (https://github.com/facebook/prepack/wiki/PP0045)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at fact (recursion-fact.js:3:27)\n    at recursion-fact.js:5:17\nPrepack failed, reporting 1 fatal error.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js recursion-fact.js",
+    "exitCode": 0,
+    "ms": 415,
+    "stdout": "var fact, r, k;\n(function () {\n  var _$4 = this;\n\n  var _9 = function (n) {\n    return n <= 1 ? 1 : n * fact(n - 1);\n  };\n\n  _$4.fact = _9;\n  var _1 = k0;\n  _$4.k = _1;\n\n  var _3 = _1 > 3;\n\n  if (_3) {\n    var _$3 = _9(_1);\n  }\n\n  _$4.r = _3 ? _$3 : -1;\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "k0 = 6",
+    "original": {
+     "ok": true,
+     "value": "720"
+    },
+    "orig": null,
+    "revived": {
+     "ok": true,
+     "value": "720"
+    }
+   }
+  ]
+ },
+ "joins-2354": {
+  "input": "(function() {\n  \"use strict\";\n  function main(a1, a2, a3) {\n    if (a1) {\n      if (a2) {\n        return false;\n      }\n    }\n    if (!a3) {\n      return false;\n    }\n    return true;\n  }\n  if (global.__optimize) __optimize(main);\n  global.main = main;\n})();\n",
+  "inputName": "joins-2354.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js joins-2354.js",
+    "exitCode": 0,
+    "ms": 316,
+    "stdout": "(function () {\n  \"use strict\";\n\n  var _$0 = this;\n  var _1 = function (a1, a2, a3) {\n    var _7 = !a2;\n    var _5 = a1 && _7;\n    var _9 = !a1;\n    var _4 = _5 || _9;\n    var _3 = _4 && a3;\n    var _2 = _4 ? _3 : false;\n    return _2;\n  };\n  _$0.main = _1;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js joins-2354.js",
+    "exitCode": 0,
+    "ms": 435,
+    "stdout": "(function () {\n  \"use strict\";\n\n  var _$0 = this;\n\n  _$0.main = function (a1, a2, a3) {\n    return a1 && !a2 || !a1 ? !!a3 : false;\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "main(false, false, false)",
+    "original": {
+     "ok": true,
+     "value": "false"
+    },
+    "orig": {
+     "ok": true,
+     "value": "false"
+    },
+    "revived": {
+     "ok": true,
+     "value": "false"
+    }
+   },
+   {
+    "label": "main(0, \"\", NaN)",
+    "original": {
+     "ok": true,
+     "value": "false"
+    },
+    "orig": {
+     "ok": true,
+     "value": "NaN"
+    },
+    "revived": {
+     "ok": true,
+     "value": "false"
+    }
+   }
+  ]
+ },
+ "joins-2355": {
+  "input": "(function() {\n  \"use strict\";\n  function main(a1) {\n    if (a1) {\n      return true;\n    }\n    return false;\n  }\n  if (global.__optimize) __optimize(main);\n  global.main = main;\n})();\n",
+  "inputName": "joins-2355.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js joins-2355.js",
+    "exitCode": 0,
+    "ms": 340,
+    "stdout": "(function () {\n  \"use strict\";\n\n  var _$0 = this;\n  var _1 = function (a1) {\n    return a1;\n  };\n  _$0.main = _1;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js joins-2355.js",
+    "exitCode": 0,
+    "ms": 401,
+    "stdout": "(function () {\n  \"use strict\";\n\n  var _$0 = this;\n\n  _$0.main = function (a1) {\n    return !!a1;\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "[1, 0, \"\", \"x\", null, NaN].map(main)",
+    "original": {
+     "ok": true,
+     "value": "[ true, false, false, true, false, false ]"
+    },
+    "orig": {
+     "ok": true,
+     "value": "[ 1, 0, '', 'x', null, NaN ]"
+    },
+    "revived": {
+     "ok": true,
+     "value": "[ true, false, false, true, false, false ]"
+    }
+   }
+  ]
+ },
+ "joins-labeled": {
+  "input": "function f(a, b) {\n  var r = \"start\";\n  block: {\n    if (a) break block;\n    r += \"-1\";\n    if (b) break block;\n    r += \"-2\";\n  }\n  return r;\n}\nif (global.__optimize) __optimize(f);\n",
+  "inputName": "joins-labeled.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js joins-labeled.js",
+    "exitCode": 0,
+    "ms": 321,
+    "stdout": "var f;\n(function () {\n  var _$0 = this;\n  var _1 = function (a, b) {\n    return \"start-1-2\";\n  };\n  _$0.f = _1;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js joins-labeled.js",
+    "exitCode": 0,
+    "ms": 432,
+    "stdout": "var f;\n(function () {\n  var _$0 = this;\n\n  _$0.f = function (a, b) {\n    return !a ? !b ? \"start-1-2\" : \"start-1\" : \"start\";\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "f(true, true), f(false, true), f(false, false)",
+    "original": {
+     "ok": true,
+     "value": "start,start-1,start-1-2"
+    },
+    "orig": {
+     "ok": true,
+     "value": "start-1-2,start-1-2,start-1-2"
+    },
+    "revived": {
+     "ok": true,
+     "value": "start,start-1,start-1-2"
+    }
+   }
+  ]
+ },
+ "joins-switch-1378": {
+  "input": "function weight(v) {\n  var w = 0;\n  switch (v) {\n    case 1:\n      w += 1;\n    case 2:\n      w += 10;\n      break;\n    case 3:\n      return \"three\";\n    case 4:\n    case 5:\n      w += 100;\n    default:\n      w += 1000;\n  }\n  return w;\n}\nif (global.__optimize) __optimize(weight);\n",
+  "inputName": "joins-switch-1378.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js joins-switch-1378.js",
+    "exitCode": 1,
+    "ms": 300,
+    "stdout": "",
+    "stderr": "In input file joins-switch-1378.js(4:10) FatalError PP0001: This operation is not yet supported on abstract value   (https://github.com/facebook/prepack/wiki/PP0001)\n    at weight (joins-switch-1378.js:4:10)\nPrepack failed, reporting 1 fatal error.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js joins-switch-1378.js",
+    "exitCode": 0,
+    "ms": 647,
+    "stdout": "var weight;\n(function () {\n  var _$0 = this;\n\n  _$0.weight = function (v) {\n    var _J = 1 === v;\n\n    var _H = 2 === v;\n\n    return _J || 1 !== v && (_H || 2 !== v && 3 !== v) ? _J ? 11 : _H ? 10 : 4 === v ? 1100 : 5 === v ? 1100 : 1000 : \"three\";\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "[0, 1, 2, 3, 4, 5, \"1\"].map(weight)",
+    "original": {
+     "ok": true,
+     "value": "[ 1000, 11, 10, 'three', 1100, 1100, 1000 ]"
+    },
+    "orig": null,
+    "revived": {
+     "ok": true,
+     "value": "[ 1000, 11, 10, 'three', 1100, 1100, 1000 ]"
+    }
+   }
+  ]
+ },
+ "joins-try-2120": {
+  "input": "function f(g) {\n  try {\n    return g();\n  } catch (e) {\n    return 42;\n  }\n}\nif (global.__optimize) __optimize(f);\n",
+  "inputName": "joins-try-2120.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js joins-try-2120.js",
+    "exitCode": 1,
+    "ms": 310,
+    "stdout": "var f;\n(function () {\n  var _$1 = this;\n  var _1 = function (g) {\n    var _$0 = g();\n    return _$0;\n  };\n  _$1.f = _1;\n}).call(this);\n",
+    "stderr": "In input file joins-try-2120.js(3:12) RecoverableError PP0021: Possible throw inside try/catch is not yet supported (https://github.com/facebook/prepack/wiki/PP0021)\n    at f (joins-try-2120.js:3:12)\nPrepack failed, reporting 1 recoverable error.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js joins-try-2120.js",
+    "exitCode": 0,
+    "ms": 387,
+    "stdout": "var f;\n(function () {\n  var _$3 = this;\n\n  _$3.f = function (g) {\n    {\n      var _$1;\n\n      try {\n        var _$0 = g();\n      } catch (e) {\n        _$1 = [e];\n      }\n    }\n\n    var _3 = void 0 !== _$1;\n\n    return _3 ? 42 : _$0;\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "f(() => 1), f(() => { throw 0 })",
+    "original": {
+     "ok": true,
+     "value": "1,42"
+    },
+    "orig": {
+     "ok": false,
+     "value": "Error: x"
+    },
+    "revived": {
+     "ok": true,
+     "value": "1,42"
+    }
+   }
+  ]
+ },
+ "ranges-1066": {
+  "input": "var a = [];\nvar x = global.__abstract ? __abstract(\"boolean\", \"x0\") : x0;\n(function() {\n  if (x) a.push(42);\n  a.push(23);\n})();\n",
+  "inputName": "ranges-1066.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js ranges-1066.js",
+    "exitCode": 1,
+    "ms": 289,
+    "stdout": "",
+    "stderr": "In input file ranges-1066.js(5:10) FatalError PP0001: This operation is not yet supported on abstract value x0  (https://github.com/facebook/prepack/wiki/PP0001)\n    at push (native)\n    at ranges-1066.js:5:3\n    at ranges-1066.js:3:1\nPrepack failed, reporting 1 fatal error.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js ranges-1066.js",
+    "exitCode": 0,
+    "ms": 441,
+    "stdout": "var x, a;\n(function () {\n  var _$0 = this;\n\n  var _5 = x0;\n  var _0 = [!_5 ? 23 : 42];\n  if (_5) _0[1] = 23;\n  _$0.a = _0;\n  _$0.x = _5;\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "x0 = true",
+    "original": {
+     "ok": true,
+     "value": "42,23 | length 2"
+    },
+    "orig": null,
+    "revived": {
+     "ok": true,
+     "value": "42,23 | length 2"
+    }
+   },
+   {
+    "label": "x0 = false",
+    "original": {
+     "ok": true,
+     "value": "23 | length 1"
+    },
+    "orig": null,
+    "revived": {
+     "ok": true,
+     "value": "23 | length 1"
+    }
+   }
+  ]
+ },
+ "builtins-2319": {
+  "input": "function classify(s, n) {\n  var re = /^[a-z]+$/;\n  var meta = { kind: \"other\", size: 0 };\n  if (re.test(s)) meta.kind = \"word\";\n  meta.size = parseInt(n, 10) + Math.abs(-2);\n  return meta.kind + \":\" + meta.size + \":\" + [10, 12, 14].indexOf(meta.size);\n}\nif (global.__optimize) __optimize(classify);\n",
+  "inputName": "builtins-2319.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js builtins-2319.js",
+    "exitCode": 1,
+    "ms": 327,
+    "stdout": "var classify;\n(function () {\n  var _$9 = this;\n  var _$A = _$9.parseInt;\n  var _1 = function (s, n) {\n    var _2 = /^[a-z]+$/;\n    var _$0 = _2.test(s);\n    var _F = _$A;\n    var _$1 = _F(n, 10);\n    var _$2 = _$1 + 2;\n    var _N = _$0 ? \"word\" : \"other\";\n    var _M = _N + \":\";\n    var _$3 = _M + _$2;\n    var _6 = [10, 12, 14];\n    _6[0] = 10;\n    _6[1] = 12;\n    _6[2] = 14;\n    var _$4 = _6.indexOf(_$2);\n    var _I = _$3 + \":\";\n    var _$5 = _I + _$4;\n    return _$5;\n  };\n  _$9.classify = _1;\n}).call(this);\n",
+    "stderr": "In input file builtins-2319.js(4:15) FatalError PP0001:  (https://github.com/facebook/prepack/wiki/PP0001)\n    at test (native)\n    at classify (builtins-2319.js:4:7)\nIn input file builtins-2319.js(5:27) FatalError PP0001:  (https://github.com/facebook/prepack/wiki/PP0001)\n    at parseInt (native)\n    at classify (builtins-2319.js:5:15)\nIn input file builtins-2319.js(6:67) FatalError PP0001:  (https://github.com/facebook/prepack/wiki/PP0001)\n    at indexOf (native)\n    at classify (builtins-2319.js:6:46)\nPrepack failed, reporting 3 fatal errors.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js builtins-2319.js",
+    "exitCode": 0,
+    "ms": 681,
+    "stdout": "var classify;\n(function () {\n  var _$2 = this;\n\n  _$2.classify = function (s, n) {\n    var _$0 = /^[a-z]+$/.test(s);\n\n    var _$1 = _$2.parseInt(n, 10);\n\n    var _C = 2 + _$1;\n\n    return (_$0 ? \"word:\" : \"other:\") + _C + \":\" + (10 === _C ? 0 : 12 === _C ? 1 : 14 === _C ? 2 : -1);\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "classify(\"abc\", \"10\"), classify(\"A1\", \"12px\")",
+    "original": {
+     "ok": true,
+     "value": "word:12:1,other:14:2"
+    },
+    "orig": {
+     "ok": true,
+     "value": "word:12:1,other:14:2"
+    },
+    "revived": {
+     "ok": true,
+     "value": "word:12:1,other:14:2"
+    }
+   }
+  ]
+ },
+ "havoc-1750": {
+  "input": "var cache = {};\nfunction getEntry(arg) {\n  cache[arg] = cache[arg] || { n: 0, key: arg };\n  cache[arg].n++;\n  return cache[arg].key + cache[arg].n;\n}\nif (global.__optimize) __optimize(getEntry);\n",
+  "inputName": "havoc-1750.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js havoc-1750.js",
+    "exitCode": 0,
+    "ms": 325,
+    "stdout": "var getEntry, cache;\n(function () {\n  var _$O = this;\n  var _$P = _$O.Object;\n  var _$Q = _$P.prototype;\n  var _3 = function (arg) {\n    var _$0 = \"\" + arg;\n    var _m = _$Q;\n    var _$1 = _m[_$0];\n    var _$2 = \"\" + arg;\n    var _$4 = \"\" + arg;\n    var _$5 = \"\" + arg;\n    var _$7 = _1[_$5];\n    var _5 = _$4 === _$5;\n    if (_5) {\n      if (_$1) {\n        var _$8 = _$1.n;\n      }\n    } else {\n      var _$9 = _$7.n;\n    }\n    var _A = _$1 ? _$8 : 0;\n    var _9 = _5 ? _A : _$9;\n    var _$A = _9 + 1;\n    var _E = {};\n    _E.n = 0;\n    _E.key = arg;\n    var _I = _$1 || _E;\n    var _H = _5 ? _I : _$7;\n    _H.n = _$A;\n    var _$B = \"\" + arg;\n    var _$D = _1[_$B];\n    var _M = _$4 === _$B;\n    if (_M) {\n      if (_$1) {\n        var _$E = _$1.key;\n      } else {\n        var _$F = _E.key;\n      }\n    } else {\n      var _$G = _$D.key;\n    }\n    var _$H = \"\" + arg;\n    var _$J = _1[_$H];\n    var _O = _$4 === _$H;\n    if (_O) {\n      if (_$1) {\n        var _$K = _$1.n;\n      } else {\n        var _$L = _E.n;\n      }\n    } else {\n      var _$M = _$J.n;\n    }\n    var _T = _$1 ? _$E : _$F;\n    var _S = _M ? _T : _$G;\n    var _Y = _$1 ? _$K : _$L;\n    var _X = _O ? _Y : _$M;\n    var _$N = _S + _X;\n    _1[_$4] = _I;\n    return _$N;\n  };\n  var _1 = {};\n  _$O.getEntry = _3;\n  _$O.cache = _1;\n}).call(this);\n",
+    "stderr": "In input file havoc-1750.js(1:13) Warning PP1007: side-effects from mutating a property  at location havoc-1750.js[1:12] (https://github.com/facebook/prepack/wiki/PP1007)\n    \nPrepack succeeded, reporting 1 warning.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js havoc-1750.js",
+    "exitCode": 0,
+    "ms": 398,
+    "stdout": "var getEntry, cache;\n(function () {\n  var _$Y = this;\n\n  var _1 = {};\n\n  _$Y.getEntry = function (arg) {\n    var _$O = _1[arg];\n    var _$P = _1[arg];\n    var _5 = {};\n    _5.n = 0;\n    _5.key = arg;\n\n    var _9 = _$O || _5;\n\n    _1[arg] = _9;\n    var _$Q = _1[arg];\n    var _$R = _$Q.n;\n\n    var _$S = +_$R;\n\n    var _E = 1 + _$S;\n\n    _$Q.n = _E;\n    var _$T = _1[arg];\n    var _$U = _$T.key;\n    var _$V = _1[arg];\n    var _$W = _$V.n;\n\n    var _$X = _$U + _$W;\n\n    return _$X;\n  };\n\n  _$Y.cache = _1;\n}).call(this);\n",
+    "stderr": "In input file havoc-1750.js(1:13) Warning PP1007: side-effects from mutating a property  at location havoc-1750.js[1:12] (https://github.com/facebook/prepack/wiki/PP1007)\n    \nPrepack succeeded, reporting 1 warning.\n"
+   }
+  },
+  "probes": [
+   {
+    "label": "getEntry(\"a\") ×2, getEntry(\"b\"), getEntry(\"a\")",
+    "original": {
+     "ok": true,
+     "value": "a1,a2,b1,a3"
+    },
+    "orig": {
+     "ok": true,
+     "value": "a1,a1,b1,a1"
+    },
+    "revived": {
+     "ok": true,
+     "value": "a1,a2,b1,a3"
+    }
+   }
+  ]
+ },
+ "paths-negation": {
+  "input": "(function() {\n  \"use strict\";\n  function main(a) {\n    return !(a == null ? 0 : a);\n  }\n  if (global.__optimize) __optimize(main);\n  global.main = main;\n})();\n",
+  "inputName": "paths-negation.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js paths-negation.js",
+    "exitCode": 0,
+    "ms": 313,
+    "stdout": "(function () {\n  \"use strict\";\n\n  var _$0 = this;\n  var _1 = function (a) {\n    var _2 = a == null;\n    return _2;\n  };\n  _$0.main = _1;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js paths-negation.js",
+    "exitCode": 0,
+    "ms": 396,
+    "stdout": "(function () {\n  \"use strict\";\n\n  var _$0 = this;\n\n  _$0.main = function (a) {\n    return !(a == null ? 0 : a);\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "[0, \"\", false, NaN, null, 1].map(main)",
+    "original": {
+     "ok": true,
+     "value": "[ true, true, true, true, true, false ]"
+    },
+    "orig": {
+     "ok": true,
+     "value": "[ false, false, false, false, true, false ]"
+    },
+    "revived": {
+     "ok": true,
+     "value": "[ true, true, true, true, true, false ]"
+    }
+   }
+  ]
+ },
+ "env-window": {
+  "input": "var root = typeof window !== \"undefined\" ? window : global;\nvar api = {\n  hasFetch: typeof root.fetch === \"function\",\n  name: \"api\",\n};\n",
+  "inputName": "env-window.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js env-window.js",
+    "exitCode": 0,
+    "ms": 316,
+    "stdout": "var api, root;\n(function () {\n  var _$0 = this;\n  var _5 = _$0;\n  _$0.root = _5;\n  var _1 = {\n    hasFetch: false,\n    name: \"api\"\n  };\n  _$0.api = _1;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js env-window.js",
+    "exitCode": 0,
+    "ms": 376,
+    "stdout": "var api, root;\n(function () {\n  var _$2 = this;\n\n  var _7 = _$2;\n  _$2.root = _7;\n  var _$0 = _7.fetch;\n\n  var _$1 = typeof _$0;\n\n  _$2.api = {\n    hasFetch: \"function\" === _$1,\n    name: \"api\"\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "in a browser (window === this, fetch defined)",
+    "original": {
+     "ok": true,
+     "value": "{ hasFetch: true, name: 'api' }"
+    },
+    "orig": {
+     "ok": true,
+     "value": "{ hasFetch: false, name: 'api' }"
+    },
+    "revived": {
+     "ok": true,
+     "value": "{ hasFetch: true, name: 'api' }"
+    }
+   }
+  ]
+ },
+ "env-process": {
+  "input": "var isProd = process.env.NODE_ENV === \"production\";\nvar config = {\n  minify: isProd,\n  logLevel: process.env.DEBUG === \"1\" ? \"debug\" : isProd ? \"error\" : \"info\",\n};\n",
+  "inputName": "env-process.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js env-process.js",
+    "exitCode": 0,
+    "ms": 300,
+    "stdout": "var config, isProd;\n(function () {\n  var $$0 = {\n    enumerable: false,\n    configurable: true,\n    writable: true\n  };\n  var _$0 = this;\n  var _$1 = _$0.ReferenceError;\n  var _$2 = _$1.prototype;\n  var _$3 = _$0.Object;\n  var _$4 = _$3.defineProperty;\n  var __constructor = function () {};\n  var _3 = _$2;\n  var _0 = (__constructor.prototype = _3, new __constructor());\n  $$0.value = \"process is not defined\", _$4(_0, \"message\", $$0);\n  $$0.value = \"ReferenceError: process is not defined\\n    at env-process.js:1:14\", _$4(_0, \"stack\", $$0);\n  throw _0;\n}).call(this);\n",
+    "stderr": "In input file env-process.js(1:14) Warning PP0023: Program may terminate with exception: process is not defined\n  ReferenceError: process is not defined\n    at env-process.js:1:14 (https://github.com/facebook/prepack/wiki/PP0023)\n    \nPrepack succeeded, reporting 1 warning.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js env-process.js",
+    "exitCode": 0,
+    "ms": 464,
+    "stdout": "var config, isProd;\n(function () {\n  var _$4 = this;\n\n  var _$0 = process.env;\n  var _$1 = _$0.NODE_ENV;\n\n  var _0 = \"production\" === _$1;\n\n  _$4.isProd = _0;\n  var _$2 = process.env;\n  var _$3 = _$2.DEBUG;\n  _$4.config = {\n    minify: _0,\n    logLevel: _$3 === \"1\" ? \"debug\" : _0 ? \"error\" : \"info\"\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "in Node with NODE_ENV=production, DEBUG=1",
+    "original": {
+     "ok": true,
+     "value": "{ minify: true, logLevel: 'debug' }"
+    },
+    "orig": {
+     "ok": false,
+     "value": "ReferenceError: process is not defined"
+    },
+    "revived": {
+     "ok": true,
+     "value": "{ minify: true, logLevel: 'debug' }"
+    }
+   }
+  ]
+ },
+ "env-guard": {
+  "input": "var mode = process.env.NODE_ENV === \"production\" ? \"prod\" : \"dev\";\nvar newYear = new Date(2020, 0, 1).getTime();\nvar offset = new Date(2020, 6, 1).getTimezoneOffset();\n",
+  "inputName": "env-guard.js",
+  "tools": {
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js env-guard.js --assume process.env.NODE_ENV=\"production\" --assume timezoneOffset=0",
+    "exitCode": 0,
+    "ms": 325,
+    "stdout": "var offset, newYear, mode;\n\nif (typeof process !== \"undefined\" && process != null && process.env != null && process.env.NODE_ENV === \"production\" && new Date(0).getTimezoneOffset() === 0 && new Date(1593561600000).getTimezoneOffset() === 0 && new Date(1577836800000).getTimezoneOffset() === 0 && new Date(1593561600000).getTimezoneOffset() === 0) {\n  (function () {\n    var _$1 = this;\n\n    _$1.mode = \"prod\";\n    _$1.newYear = 1577836800000;\n    _$1.offset = 0;\n  }).call(this);\n} else {\n  var mode = process.env.NODE_ENV === \"production\" ? \"prod\" : \"dev\";\n  var newYear = new Date(2020, 0, 1).getTime();\n  var offset = new Date(2020, 6, 1).getTimezoneOffset();\n}\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "NODE_ENV=production, TZ=UTC",
+    "original": {
+     "ok": true,
+     "value": "prod,1577836800000,0"
+    },
+    "revived": {
+     "ok": true,
+     "value": "prod,1577836800000,0"
+    }
+   },
+   {
+    "label": "NODE_ENV=development, TZ=Asia/Kolkata",
+    "original": {
+     "ok": true,
+     "value": "dev,1577817000000,-330"
+    },
+    "revived": {
+     "ok": true,
+     "value": "dev,1577817000000,-330"
+    }
+   }
+  ]
+ },
+ "size-table": {
+  "input": "var table = [];\nfor (var i = 0; i < 1000; i++) {\n  table.push((i * i) % 7);\n}\n",
+  "inputName": "size-table.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js size-table.js",
+    "exitCode": 0,
+    "ms": 479,
+    "stdout": "var i, table;\n(function () {\n  var _$0 = this;\n  var _0 = [0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4, 1, 0, 1, 4, 2, 2, 4];\n  _$0.table = _0;\n  _$0.i = 0;\n  _$0.i = 1;\n  _$0.i = 2;\n  _$0.i = 3;\n  _$0.i = 4;\n  _$0.i = 5;\n  _$0.i = 6;\n  _$0.i = 7;\n  _$0.i = 8;\n  _$0.i = 9;\n  _$0.i = 10;\n  _$0.i = 11;\n  _$0.i = 12;\n  _$0.i = 13;\n  _$0.i = 14;\n  _$0.i = 15;\n  _$0.i = 16;\n  _$0.i = 17;\n  _$0.i = 18;\n  _$0.i = 19;\n  _$0.i = 20;\n  _$0.i = 21;\n  _$0.i = 22;\n  _$0.i = 23;\n  _$0.i = 24;\n  _$0.i = 25;\n  _$0.i = 26;\n  _$0.i = 27;\n  _$0.i = 28;\n  _$0.i = 29;\n  _$0.i = 30;\n  _$0.i = 31;\n  _$0.i = 32;\n  _$0.i = 33;\n  _$0.i = 34;\n  _$0.i = 35;\n  _$0.i = 36;\n  _$0.i = 37;\n  _$0.i = 38;\n  _$0.i = 39;\n  _$0.i = 40;\n  _$0.i = 41;\n  _$0.i = 42;\n  _$0.i = 43;\n  _$0.i = 44;\n  _$0.i = 45;\n  _$0.i = 46;\n  _$0.i = 47;\n  _$0.i = 48;\n  _$0.i = 49;\n  _$0.i = 50;\n  _$0.i = 51;\n  _$0.i = 52;\n  _$0.i = 53;\n  _$0.i = 54;\n  _$0.i = 55;\n  _$0.i = 56;\n  _$0.i = 57;\n  _$0.i = 58;\n  _$0.i = 59;\n  _$0.i = 60;\n  _$0.i = 61;\n  _$0.i = 62;\n  _$0.i = 63;\n  _$0.i = 64;\n  _$0.i = 65;\n  _$0.i = 66;\n  _$0.i = 67;\n  _$0.i = 68;\n  _$0.i = 69;\n  _$0.i = 70;\n  _$0.i = 71;\n  _$0.i = 72;\n  _$0.i = 73;\n  _$0.i = 74;\n  _$0.i = 75;\n  _$0.i = 76;\n  _$0.i = 77;\n  _$0.i = 78;\n  _$0.i = 79;\n  _$0.i = 80;\n  _$0.i = 81;\n  _$0.i = 82;\n  _$0.i = 83;\n  _$0.i = 84;\n  _$0.i = 85;\n  _$0.i = 86;\n  _$0.i = 87;\n  _$0.i = 88;\n  _$0.i = 89;\n  _$0.i = 90;\n  _$0.i = 91;\n  _$0.i = 92;\n  _$0.i = 93;\n  _$0.i = 94;\n  _$0.i = 95;\n  _$0.i = 96;\n  _$0.i = 97;\n  _$0.i = 98;\n  _$0.i = 99;\n  _$0.i = 100;\n  _$0.i = 101;\n  _$0.i = 102;\n  _$0.i = 103;\n  _$0.i = 104;\n  _$0.i = 105;\n  _$0.i = 106;\n  _$0.i = 107;\n  _$0.i = 108;\n  _$0.i = 109;\n  _$0.i = 110;\n  _$0.i = 111;\n  _$0.i = 112;\n  _$0.i = 113;\n  _$0.i = 114;\n  _$0.i = 115;\n  _$0.i = 116;\n  _$0.i = 117;\n  _$0.i = 118;\n  _$0.i = 119;\n  _$0.i = 120;\n  _$0.i = 121;\n  _$0.i = 122;\n  _$0.i = 123;\n  _$0.i = 124;\n  _$0.i = 125;\n  _$0.i = 126;\n  _$0.i = 127;\n  _$0.i = 128;\n  _$0.i = 129;\n  _$0.i = 130;\n  _$0.i = 131;\n  _$0.i = 132;\n  _$0.i = 133;\n  _$0.i = 134;\n  _$0.i = 135;\n  _$0.i = 136;\n  _$0.i = 137;\n  _$0.i = 138;\n  _$0.i = 139;\n  _$0.i = 140;\n  _$0.i = 141;\n  _$0.i = 142;\n  _$0.i = 143;\n  _$0.i = 144;\n  _$0.i = 145;\n  _$0.i = 146;\n  _$0.i = 147;\n  _$0.i = 148;\n  _$0.i = 149;\n  _$0.i = 150;\n  _$0.i = 151;\n  _$0.i = 152;\n  _$0.i = 153;\n  _$0.i = 154;\n  _$0.i = 155;\n  _$0.i = 156;\n  _$0.i = 157;\n  _$0.i = 158;\n  _$0.i = 159;\n  _$0.i = 160;\n  _$0.i = 161;\n  _$0.i = 162;\n  _$0.i = 163;\n  _$0.i = 164;\n  _$0.i = 165;\n  _$0.i = 166;\n  _$0.i = 167;\n  _$0.i = 168;\n  _$0.i = 169;\n  _$0.i = 170;\n  _$0.i = 171;\n  _$0.i = 172;\n  _$0.i = 173;\n  _$0.i = 174;\n  _$0.i = 175;\n  _$0.i = 176;\n  _$0.i = 177;\n  _$0.i = 178;\n  _$0.i = 179;\n  _$0.i = 180;\n  _$0.i = 181;\n  _$0.i = 182;\n  _$0.i = 183;\n  _$0.i = 184;\n  _$0.i = 185;\n  _$0.i = 186;\n  _$0.i = 187;\n  _$0.i = 188;\n  _$0.i = 189;\n  _$0.i = 190;\n  _$0.i = 191;\n  _$0.i = 192;\n  _$0.i = 193;\n  _$0.i = 194;\n  _$0.i = 195;\n  _$0.i = 196;\n  _$0.i = 197;\n  _$0.i = 198;\n  _$0.i = 199;\n  _$0.i = 200;\n  _$0.i = 201;\n  _$0.i = 202;\n  _$0.i = 203;\n  _$0.i = 204;\n  _$0.i = 205;\n  _$0.i = 206;\n  _$0.i = 207;\n  _$0.i = 208;\n  _$0.i = 209;\n  _$0.i = 210;\n  _$0.i = 211;\n  _$0.i = 212;\n  _$0.i = 213;\n  _$0.i = 214;\n  _$0.i = 215;\n  _$0.i = 216;\n  _$0.i = 217;\n  _$0.i = 218;\n  _$0.i = 219;\n  _$0.i = 220;\n  _$0.i = 221;\n  _$0.i = 222;\n  _$0.i = 223;\n  _$0.i = 224;\n  _$0.i = 225;\n  _$0.i = 226;\n  _$0.i = 227;\n  _$0.i = 228;\n  _$0.i = 229;\n  _$0.i = 230;\n  _$0.i = 231;\n  _$0.i = 232;\n  _$0.i = 233;\n  _$0.i = 234;\n  _$0.i = 235;\n  _$0.i = 236;\n  _$0.i = 237;\n  _$0.i = 238;\n  _$0.i = 239;\n  _$0.i = 240;\n  _$0.i = 241;\n  _$0.i = 242;\n  _$0.i = 243;\n  _$0.i = 244;\n  _$0.i = 245;\n  _$0.i = 246;\n  _$0.i = 247;\n  _$0.i = 248;\n  _$0.i = 249;\n  _$0.i = 250;\n  _$0.i = 251;\n  _$0.i = 252;\n  _$0.i = 253;\n  _$0.i = 254;\n  _$0.i = 255;\n  _$0.i = 256;\n  _$0.i = 257;\n  _$0.i = 258;\n  _$0.i = 259;\n  _$0.i = 260;\n  _$0.i = 261;\n  _$0.i = 262;\n  _$0.i = 263;\n  _$0.i = 264;\n  _$0.i = 265;\n  _$0.i = 266;\n  _$0.i = 267;\n  _$0.i = 268;\n  _$0.i = 269;\n  _$0.i = 270;\n  _$0.i = 271;\n  _$0.i = 272;\n  _$0.i = 273;\n  _$0.i = 274;\n  _$0.i = 275;\n  _$0.i = 276;\n  _$0.i = 277;\n  _$0.i = 278;\n  _$0.i = 279;\n  _$0.i = 280;\n  _$0.i = 281;\n  _$0.i = 282;\n  _$0.i = 283;\n  _$0.i = 284;\n  _$0.i = 285;\n  _$0.i = 286;\n  _$0.i = 287;\n  _$0.i = 288;\n  _$0.i = 289;\n  _$0.i = 290;\n  _$0.i = 291;\n  _$0.i = 292;\n  _$0.i = 293;\n  _$0.i = 294;\n  _$0.i = 295;\n  _$0.i = 296;\n  _$0.i = 297;\n  _$0.i = 298;\n  _$0.i = 299;\n  _$0.i = 300;\n  _$0.i = 301;\n  _$0.i = 302;\n  _$0.i = 303;\n  _$0.i = 304;\n  _$0.i = 305;\n  _$0.i = 306;\n  _$0.i = 307;\n  _$0.i = 308;\n  _$0.i = 309;\n  _$0.i = 310;\n  _$0.i = 311;\n  _$0.i = 312;\n  _$0.i = 313;\n  _$0.i = 314;\n  _$0.i = 315;\n  _$0.i = 316;\n  _$0.i = 317;\n  _$0.i = 318;\n  _$0.i = 319;\n  _$0.i = 320;\n  _$0.i = 321;\n  _$0.i = 322;\n  _$0.i = 323;\n  _$0.i = 324;\n  _$0.i = 325;\n  _$0.i = 326;\n  _$0.i = 327;\n  _$0.i = 328;\n  _$0.i = 329;\n  _$0.i = 330;\n  _$0.i = 331;\n  _$0.i = 332;\n  _$0.i = 333;\n  _$0.i = 334;\n  _$0.i = 335;\n  _$0.i = 336;\n  _$0.i = 337;\n  _$0.i = 338;\n  _$0.i = 339;\n  _$0.i = 340;\n  _$0.i = 341;\n  _$0.i = 342;\n  _$0.i = 343;\n  _$0.i = 344;\n  _$0.i = 345;\n  _$0.i = 346;\n  _$0.i = 347;\n  _$0.i = 348;\n  _$0.i = 349;\n  _$0.i = 350;\n  _$0.i = 351;\n  _$0.i = 352;\n  _$0.i = 353;\n  _$0.i = 354;\n  _$0.i = 355;\n  _$0.i = 356;\n  _$0.i = 357;\n  _$0.i = 358;\n  _$0.i = 359;\n  _$0.i = 360;\n  _$0.i = 361;\n  _$0.i = 362;\n  _$0.i = 363;\n  _$0.i = 364;\n  _$0.i = 365;\n  _$0.i = 366;\n  _$0.i = 367;\n  _$0.i = 368;\n  _$0.i = 369;\n  _$0.i = 370;\n  _$0.i = 371;\n  _$0.i = 372;\n  _$0.i = 373;\n  _$0.i = 374;\n  _$0.i = 375;\n  _$0.i = 376;\n  _$0.i = 377;\n  _$0.i = 378;\n  _$0.i = 379;\n  _$0.i = 380;\n  _$0.i = 381;\n  _$0.i = 382;\n  _$0.i = 383;\n  _$0.i = 384;\n  _$0.i = 385;\n  _$0.i = 386;\n  _$0.i = 387;\n  _$0.i = 388;\n  _$0.i = 389;\n  _$0.i = 390;\n  _$0.i = 391;\n  _$0.i = 392;\n  _$0.i = 393;\n  _$0.i = 394;\n  _$0.i = 395;\n  _$0.i = 396;\n  _$0.i = 397;\n  _$0.i = 398;\n  _$0.i = 399;\n  _$0.i = 400;\n  _$0.i = 401;\n  _$0.i = 402;\n  _$0.i = 403;\n  _$0.i = 404;\n  _$0.i = 405;\n  _$0.i = 406;\n  _$0.i = 407;\n  _$0.i = 408;\n  _$0.i = 409;\n  _$0.i = 410;\n  _$0.i = 411;\n  _$0.i = 412;\n  _$0.i = 413;\n  _$0.i = 414;\n  _$0.i = 415;\n  _$0.i = 416;\n  _$0.i = 417;\n  _$0.i = 418;\n  _$0.i = 419;\n  _$0.i = 420;\n  _$0.i = 421;\n  _$0.i = 422;\n  _$0.i = 423;\n  _$0.i = 424;\n  _$0.i = 425;\n  _$0.i = 426;\n  _$0.i = 427;\n  _$0.i = 428;\n  _$0.i = 429;\n  _$0.i = 430;\n  _$0.i = 431;\n  _$0.i = 432;\n  _$0.i = 433;\n  _$0.i = 434;\n  _$0.i = 435;\n  _$0.i = 436;\n  _$0.i = 437;\n  _$0.i = 438;\n  _$0.i = 439;\n  _$0.i = 440;\n  _$0.i = 441;\n  _$0.i = 442;\n  _$0.i = 443;\n  _$0.i = 444;\n  _$0.i = 445;\n  _$0.i = 446;\n  _$0.i = 447;\n  _$0.i = 448;\n  _$0.i = 449;\n  _$0.i = 450;\n  _$0.i = 451;\n  _$0.i = 452;\n  _$0.i = 453;\n  _$0.i = 454;\n  _$0.i = 455;\n  _$0.i = 456;\n  _$0.i = 457;\n  _$0.i = 458;\n  _$0.i = 459;\n  _$0.i = 460;\n  _$0.i = 461;\n  _$0.i = 462;\n  _$0.i = 463;\n  _$0.i = 464;\n  _$0.i = 465;\n  _$0.i = 466;\n  _$0.i = 467;\n  _$0.i = 468;\n  _$0.i = 469;\n  _$0.i = 470;\n  _$0.i = 471;\n  _$0.i = 472;\n  _$0.i = 473;\n  _$0.i = 474;\n  _$0.i = 475;\n  _$0.i = 476;\n  _$0.i = 477;\n  _$0.i = 478;\n  _$0.i = 479;\n  _$0.i = 480;\n  _$0.i = 481;\n  _$0.i = 482;\n  _$0.i = 483;\n  _$0.i = 484;\n  _$0.i = 485;\n  _$0.i = 486;\n  _$0.i = 487;\n  _$0.i = 488;\n  _$0.i = 489;\n  _$0.i = 490;\n  _$0.i = 491;\n  _$0.i = 492;\n  _$0.i = 493;\n  _$0.i = 494;\n  _$0.i = 495;\n  _$0.i = 496;\n  _$0.i = 497;\n  _$0.i = 498;\n  _$0.i = 499;\n  _$0.i = 500;\n  _$0.i = 501;\n  _$0.i = 502;\n  _$0.i = 503;\n  _$0.i = 504;\n  _$0.i = 505;\n  _$0.i = 506;\n  _$0.i = 507;\n  _$0.i = 508;\n  _$0.i = 509;\n  _$0.i = 510;\n  _$0.i = 511;\n  _$0.i = 512;\n  _$0.i = 513;\n  _$0.i = 514;\n  _$0.i = 515;\n  _$0.i = 516;\n  _$0.i = 517;\n  _$0.i = 518;\n  _$0.i = 519;\n  _$0.i = 520;\n  _$0.i = 521;\n  _$0.i = 522;\n  _$0.i = 523;\n  _$0.i = 524;\n  _$0.i = 525;\n  _$0.i = 526;\n  _$0.i = 527;\n  _$0.i = 528;\n  _$0.i = 529;\n  _$0.i = 530;\n  _$0.i = 531;\n  _$0.i = 532;\n  _$0.i = 533;\n  _$0.i = 534;\n  _$0.i = 535;\n  _$0.i = 536;\n  _$0.i = 537;\n  _$0.i = 538;\n  _$0.i = 539;\n  _$0.i = 540;\n  _$0.i = 541;\n  _$0.i = 542;\n  _$0.i = 543;\n  _$0.i = 544;\n  _$0.i = 545;\n  _$0.i = 546;\n  _$0.i = 547;\n  _$0.i = 548;\n  _$0.i = 549;\n  _$0.i = 550;\n  _$0.i = 551;\n  _$0.i = 552;\n  _$0.i = 553;\n  _$0.i = 554;\n  _$0.i = 555;\n  _$0.i = 556;\n  _$0.i = 557;\n  _$0.i = 558;\n  _$0.i = 559;\n  _$0.i = 560;\n  _$0.i = 561;\n  _$0.i = 562;\n  _$0.i = 563;\n  _$0.i = 564;\n  _$0.i = 565;\n  _$0.i = 566;\n  _$0.i = 567;\n  _$0.i = 568;\n  _$0.i = 569;\n  _$0.i = 570;\n  _$0.i = 571;\n  _$0.i = 572;\n  _$0.i = 573;\n  _$0.i = 574;\n  _$0.i = 575;\n  _$0.i = 576;\n  _$0.i = 577;\n  _$0.i = 578;\n  _$0.i = 579;\n  _$0.i = 580;\n  _$0.i = 581;\n  _$0.i = 582;\n  _$0.i = 583;\n  _$0.i = 584;\n  _$0.i = 585;\n  _$0.i = 586;\n  _$0.i = 587;\n  _$0.i = 588;\n  _$0.i = 589;\n  _$0.i = 590;\n  _$0.i = 591;\n  _$0.i = 592;\n  _$0.i = 593;\n  _$0.i = 594;\n  _$0.i = 595;\n  _$0.i = 596;\n  _$0.i = 597;\n  _$0.i = 598;\n  _$0.i = 599;\n  _$0.i = 600;\n  _$0.i = 601;\n  _$0.i = 602;\n  _$0.i = 603;\n  _$0.i = 604;\n  _$0.i = 605;\n  _$0.i = 606;\n  _$0.i = 607;\n  _$0.i = 608;\n  _$0.i = 609;\n  _$0.i = 610;\n  _$0.i = 611;\n  _$0.i = 612;\n  _$0.i = 613;\n  _$0.i = 614;\n  _$0.i = 615;\n  _$0.i = 616;\n  _$0.i = 617;\n  _$0.i = 618;\n  _$0.i = 619;\n  _$0.i = 620;\n  _$0.i = 621;\n  _$0.i = 622;\n  _$0.i = 623;\n  _$0.i = 624;\n  _$0.i = 625;\n  _$0.i = 626;\n  _$0.i = 627;\n  _$0.i = 628;\n  _$0.i = 629;\n  _$0.i = 630;\n  _$0.i = 631;\n  _$0.i = 632;\n  _$0.i = 633;\n  _$0.i = 634;\n  _$0.i = 635;\n  _$0.i = 636;\n  _$0.i = 637;\n  _$0.i = 638;\n  _$0.i = 639;\n  _$0.i = 640;\n  _$0.i = 641;\n  _$0.i = 642;\n  _$0.i = 643;\n  _$0.i = 644;\n  _$0.i = 645;\n  _$0.i = 646;\n  _$0.i = 647;\n  _$0.i = 648;\n  _$0.i = 649;\n  _$0.i = 650;\n  _$0.i = 651;\n  _$0.i = 652;\n  _$0.i = 653;\n  _$0.i = 654;\n  _$0.i = 655;\n  _$0.i = 656;\n  _$0.i = 657;\n  _$0.i = 658;\n  _$0.i = 659;\n  _$0.i = 660;\n  _$0.i = 661;\n  _$0.i = 662;\n  _$0.i = 663;\n  _$0.i = 664;\n  _$0.i = 665;\n  _$0.i = 666;\n  _$0.i = 667;\n  _$0.i = 668;\n  _$0.i = 669;\n  _$0.i = 670;\n  _$0.i = 671;\n  _$0.i = 672;\n  _$0.i = 673;\n  _$0.i = 674;\n  _$0.i = 675;\n  _$0.i = 676;\n  _$0.i = 677;\n  _$0.i = 678;\n  _$0.i = 679;\n  _$0.i = 680;\n  _$0.i = 681;\n  _$0.i = 682;\n  _$0.i = 683;\n  _$0.i = 684;\n  _$0.i = 685;\n  _$0.i = 686;\n  _$0.i = 687;\n  _$0.i = 688;\n  _$0.i = 689;\n  _$0.i = 690;\n  _$0.i = 691;\n  _$0.i = 692;\n  _$0.i = 693;\n  _$0.i = 694;\n  _$0.i = 695;\n  _$0.i = 696;\n  _$0.i = 697;\n  _$0.i = 698;\n  _$0.i = 699;\n  _$0.i = 700;\n  _$0.i = 701;\n  _$0.i = 702;\n  _$0.i = 703;\n  _$0.i = 704;\n  _$0.i = 705;\n  _$0.i = 706;\n  _$0.i = 707;\n  _$0.i = 708;\n  _$0.i = 709;\n  _$0.i = 710;\n  _$0.i = 711;\n  _$0.i = 712;\n  _$0.i = 713;\n  _$0.i = 714;\n  _$0.i = 715;\n  _$0.i = 716;\n  _$0.i = 717;\n  _$0.i = 718;\n  _$0.i = 719;\n  _$0.i = 720;\n  _$0.i = 721;\n  _$0.i = 722;\n  _$0.i = 723;\n  _$0.i = 724;\n  _$0.i = 725;\n  _$0.i = 726;\n  _$0.i = 727;\n  _$0.i = 728;\n  _$0.i = 729;\n  _$0.i = 730;\n  _$0.i = 731;\n  _$0.i = 732;\n  _$0.i = 733;\n  _$0.i = 734;\n  _$0.i = 735;\n  _$0.i = 736;\n  _$0.i = 737;\n  _$0.i = 738;\n  _$0.i = 739;\n  _$0.i = 740;\n  _$0.i = 741;\n  _$0.i = 742;\n  _$0.i = 743;\n  _$0.i = 744;\n  _$0.i = 745;\n  _$0.i = 746;\n  _$0.i = 747;\n  _$0.i = 748;\n  _$0.i = 749;\n  _$0.i = 750;\n  _$0.i = 751;\n  _$0.i = 752;\n  _$0.i = 753;\n  _$0.i = 754;\n  _$0.i = 755;\n  _$0.i = 756;\n  _$0.i = 757;\n  _$0.i = 758;\n  _$0.i = 759;\n  _$0.i = 760;\n  _$0.i = 761;\n  _$0.i = 762;\n  _$0.i = 763;\n  _$0.i = 764;\n  _$0.i = 765;\n  _$0.i = 766;\n  _$0.i = 767;\n  _$0.i = 768;\n  _$0.i = 769;\n  _$0.i = 770;\n  _$0.i = 771;\n  _$0.i = 772;\n  _$0.i = 773;\n  _$0.i = 774;\n  _$0.i = 775;\n  _$0.i = 776;\n  _$0.i = 777;\n  _$0.i = 778;\n  _$0.i = 779;\n  _$0.i = 780;\n  _$0.i = 781;\n  _$0.i = 782;\n  _$0.i = 783;\n  _$0.i = 784;\n  _$0.i = 785;\n  _$0.i = 786;\n  _$0.i = 787;\n  _$0.i = 788;\n  _$0.i = 789;\n  _$0.i = 790;\n  _$0.i = 791;\n  _$0.i = 792;\n  _$0.i = 793;\n  _$0.i = 794;\n  _$0.i = 795;\n  _$0.i = 796;\n  _$0.i = 797;\n  _$0.i = 798;\n  _$0.i = 799;\n  _$0.i = 800;\n  _$0.i = 801;\n  _$0.i = 802;\n  _$0.i = 803;\n  _$0.i = 804;\n  _$0.i = 805;\n  _$0.i = 806;\n  _$0.i = 807;\n  _$0.i = 808;\n  _$0.i = 809;\n  _$0.i = 810;\n  _$0.i = 811;\n  _$0.i = 812;\n  _$0.i = 813;\n  _$0.i = 814;\n  _$0.i = 815;\n  _$0.i = 816;\n  _$0.i = 817;\n  _$0.i = 818;\n  _$0.i = 819;\n  _$0.i = 820;\n  _$0.i = 821;\n  _$0.i = 822;\n  _$0.i = 823;\n  _$0.i = 824;\n  _$0.i = 825;\n  _$0.i = 826;\n  _$0.i = 827;\n  _$0.i = 828;\n  _$0.i = 829;\n  _$0.i = 830;\n  _$0.i = 831;\n  _$0.i = 832;\n  _$0.i = 833;\n  _$0.i = 834;\n  _$0.i = 835;\n  _$0.i = 836;\n  _$0.i = 837;\n  _$0.i = 838;\n  _$0.i = 839;\n  _$0.i = 840;\n  _$0.i = 841;\n  _$0.i = 842;\n  _$0.i = 843;\n  _$0.i = 844;\n  _$0.i = 845;\n  _$0.i = 846;\n  _$0.i = 847;\n  _$0.i = 848;\n  _$0.i = 849;\n  _$0.i = 850;\n  _$0.i = 851;\n  _$0.i = 852;\n  _$0.i = 853;\n  _$0.i = 854;\n  _$0.i = 855;\n  _$0.i = 856;\n  _$0.i = 857;\n  _$0.i = 858;\n  _$0.i = 859;\n  _$0.i = 860;\n  _$0.i = 861;\n  _$0.i = 862;\n  _$0.i = 863;\n  _$0.i = 864;\n  _$0.i = 865;\n  _$0.i = 866;\n  _$0.i = 867;\n  _$0.i = 868;\n  _$0.i = 869;\n  _$0.i = 870;\n  _$0.i = 871;\n  _$0.i = 872;\n  _$0.i = 873;\n  _$0.i = 874;\n  _$0.i = 875;\n  _$0.i = 876;\n  _$0.i = 877;\n  _$0.i = 878;\n  _$0.i = 879;\n  _$0.i = 880;\n  _$0.i = 881;\n  _$0.i = 882;\n  _$0.i = 883;\n  _$0.i = 884;\n  _$0.i = 885;\n  _$0.i = 886;\n  _$0.i = 887;\n  _$0.i = 888;\n  _$0.i = 889;\n  _$0.i = 890;\n  _$0.i = 891;\n  _$0.i = 892;\n  _$0.i = 893;\n  _$0.i = 894;\n  _$0.i = 895;\n  _$0.i = 896;\n  _$0.i = 897;\n  _$0.i = 898;\n  _$0.i = 899;\n  _$0.i = 900;\n  _$0.i = 901;\n  _$0.i = 902;\n  _$0.i = 903;\n  _$0.i = 904;\n  _$0.i = 905;\n  _$0.i = 906;\n  _$0.i = 907;\n  _$0.i = 908;\n  _$0.i = 909;\n  _$0.i = 910;\n  _$0.i = 911;\n  _$0.i = 912;\n  _$0.i = 913;\n  _$0.i = 914;\n  _$0.i = 915;\n  _$0.i = 916;\n  _$0.i = 917;\n  _$0.i = 918;\n  _$0.i = 919;\n  _$0.i = 920;\n  _$0.i = 921;\n  _$0.i = 922;\n  _$0.i = 923;\n  _$0.i = 924;\n  _$0.i = 925;\n  _$0.i = 926;\n  _$0.i = 927;\n  _$0.i = 928;\n  _$0.i = 929;\n  _$0.i = 930;\n  _$0.i = 931;\n  _$0.i = 932;\n  _$0.i = 933;\n  _$0.i = 934;\n  _$0.i = 935;\n  _$0.i = 936;\n  _$0.i = 937;\n  _$0.i = 938;\n  _$0.i = 939;\n  _$0.i = 940;\n  _$0.i = 941;\n  _$0.i = 942;\n  _$0.i = 943;\n  _$0.i = 944;\n  _$0.i = 945;\n  _$0.i = 946;\n  _$0.i = 947;\n  _$0.i = 948;\n  _$0.i = 949;\n  _$0.i = 950;\n  _$0.i = 951;\n  _$0.i = 952;\n  _$0.i = 953;\n  _$0.i = 954;\n  _$0.i = 955;\n  _$0.i = 956;\n  _$0.i = 957;\n  _$0.i = 958;\n  _$0.i = 959;\n  _$0.i = 960;\n  _$0.i = 961;\n  _$0.i = 962;\n  _$0.i = 963;\n  _$0.i = 964;\n  _$0.i = 965;\n  _$0.i = 966;\n  _$0.i = 967;\n  _$0.i = 968;\n  _$0.i = 969;\n  _$0.i = 970;\n  _$0.i = 971;\n  _$0.i = 972;\n  _$0.i = 973;\n  _$0.i = 974;\n  _$0.i = 975;\n  _$0.i = 976;\n  _$0.i = 977;\n  _$0.i = 978;\n  _$0.i = 979;\n  _$0.i = 980;\n  _$0.i = 981;\n  _$0.i = 982;\n  _$0.i = 983;\n  _$0.i = 984;\n  _$0.i = 985;\n  _$0.i = 986;\n  _$0.i = 987;\n  _$0.i = 988;\n  _$0.i = 989;\n  _$0.i = 990;\n  _$0.i = 991;\n  _$0.i = 992;\n  _$0.i = 993;\n  _$0.i = 994;\n  _$0.i = 995;\n  _$0.i = 996;\n  _$0.i = 997;\n  _$0.i = 998;\n  _$0.i = 999;\n  _$0.i = 1000;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js size-table.js",
+    "exitCode": 0,
+    "ms": 440,
+    "stdout": "var i, table;\n(function () {\n  var _$0 = this;\n\n  _$0.table = [];\n\n  for (i = 0; i < 1000; i++) {\n    table.push(i * i % 7);\n  }\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "table.length, sum",
+    "original": {
+     "ok": true,
+     "value": "1000 entries, sum 2001"
+    },
+    "orig": {
+     "ok": true,
+     "value": "1000 entries, sum 2001"
+    },
+    "revived": {
+     "ok": true,
+     "value": "1000 entries, sum 2001"
+    }
+   }
+  ]
+ },
+ "size-error": {
+  "input": "var INVALID = new TypeError(\"Invalid config\");\nglobal.check = function (c) {\n  if (!c) throw INVALID;\n  return c;\n};\n",
+  "inputName": "size-error.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js size-error.js",
+    "exitCode": 0,
+    "ms": 319,
+    "stdout": "var INVALID;\n(function () {\n  var $$0 = {\n    enumerable: false,\n    configurable: true,\n    writable: true\n  };\n  var _$0 = this;\n  var _$1 = _$0.TypeError;\n  var _$2 = _$1.prototype;\n  var _$3 = _$0.Object;\n  var _$4 = _$3.defineProperty;\n  var _6 = function (c) {\n    if (!c) throw INVALID;\n    return c;\n  };\n  var __constructor = function () {};\n  var _5 = _$2;\n  var _0 = (__constructor.prototype = _5, new __constructor());\n  $$0.value = \"Invalid config\", _$4(_0, \"message\", $$0);\n  $$0.value = \"TypeError: Invalid config\\n    at size-error.js:1:15\", _$4(_0, \"stack\", $$0);\n  _$0.INVALID = _0;\n  _$0.check = _6;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js size-error.js",
+    "exitCode": 0,
+    "ms": 352,
+    "stdout": "var INVALID;\n(function () {\n  var _$0 = this;\n\n  var _$1 = _$0.TypeError;\n  _$0.INVALID = new _$1(\"Invalid config\");\n\n  _$0.check = function (c) {\n    if (!c) throw INVALID;\n    return c;\n  };\n}).call(this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "what check() throws",
+    "original": {
+     "ok": true,
+     "value": "[object Error] Invalid config instanceof TypeError: true"
+    },
+    "orig": {
+     "ok": true,
+     "value": "[object Object] Invalid config instanceof TypeError: true"
+    },
+    "revived": {
+     "ok": true,
+     "value": "[object Error] Invalid config instanceof TypeError: true"
+    }
+   }
+  ]
+ },
+ "hyb-closures": {
+  "input": "var counter = (function () {\n  var count = 0;\n  var log = [];\n  function bump(by) { count += by; log.push(by); return count; }\n  return {\n    inc: function () { return bump(1); },\n    add: function (n) { return bump(n); },\n    history: function () { return log.join(\",\"); },\n  };\n})();\ncounter.add(40);\ncounter.inc();\n",
+  "inputName": "hyb-closures.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js hyb-closures.js",
+    "exitCode": 0,
+    "ms": 322,
+    "stdout": "var counter;\n(function () {\n  var __get_scope_binding_0 = function (__selector) {\n    var __captured;\n    switch (__selector) {\n      case 0:\n        __captured = [41];\n        break;\n    }\n    __scope_0[__selector] = __captured;\n    return __captured;\n  };\n  var __scope_0 = new Array(1);\n  var _$0 = this;\n  var _8 = function (by) {\n    var __captured__scope_1 = __scope_0[0] || __get_scope_binding_0(0);\n    __captured__scope_1[0] += by;\n    _5.push(by);\n    return __captured__scope_1[0];\n  };\n  var _2 = function () {\n    return _8(1);\n  };\n  var _3 = function (n) {\n    return _8(n);\n  };\n  var _4 = function () {\n    return _5.join(\",\");\n  };\n  var _5 = [40, 1];\n  var _0 = {\n    inc: _2,\n    add: _3,\n    history: _4\n  };\n  _$0.counter = _0;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js hyb-closures.js",
+    "exitCode": 0,
+    "ms": 365,
+    "stdout": "var counter;\n(function () {\n  var __scope_0;\n\n  var _$0 = this;\n\n  var _8 = function (by) {\n    var __captured__scope_1 = __scope_0 || (__scope_0 = [41]);\n\n    __captured__scope_1[0] += by;\n\n    _5.push(by);\n\n    return __captured__scope_1[0];\n  };\n\n  var _5 = [40, 1];\n  _$0.counter = {\n    inc: function () {\n      return _8(1);\n    },\n    add: function (n) {\n      return _8(n);\n    },\n    history: function () {\n      return _5.join(\",\");\n    }\n  };\n}).call(this);\n",
+    "stderr": ""
+   },
+   "hybrid": {
+    "label": "Hybrid",
+    "command": "hybrid.js hyb-closures.js",
+    "exitCode": 0,
+    "ms": 435,
+    "stdout": "(function(__h$g) {\n  var __h$0 = (function(__h$p) {\n    var __h$o = new Array(3);\n    var count = 41;\n    var log = __h$p[0];\n    { const inc = (\nfunction () { return bump(1); }\n); __h$o[0] = inc; }\n    function bump(by) { count += by; log.push(by); return count; }\n    { const add = (\nfunction (n) { return bump(n); }\n); __h$o[1] = add; }\n    { const history = (\nfunction () { return log.join(\",\"); }\n); __h$o[2] = history; }\n    return __h$o;\n  })([[40, 1]]);\n  var __h$1 = { inc: __h$0[0], add: __h$0[1], history: __h$0[2] };\n  Object.defineProperty(__h$g, \"counter\", { value: __h$1, writable: true, enumerable: true, configurable: false });\n})(typeof globalThis !== \"undefined\" ? globalThis : this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "counter.inc(), counter.history()",
+    "original": {
+     "ok": true,
+     "value": "42 / 40,1,1"
+    },
+    "orig": {
+     "ok": true,
+     "value": "42 / 40,1,1"
+    },
+    "revived": {
+     "ok": true,
+     "value": "42 / 40,1,1"
+    },
+    "hybrid": {
+     "ok": true,
+     "value": "42 / 40,1,1"
+    }
+   }
+  ]
+ },
+ "hyb-class": {
+  "input": "const KEYWORDS = new Set([\"let\", \"const\", \"if\"]);\nclass Lexer {\n  #pos = 0;\n  constructor(src) { this.src = src; }\n  #peek() { return this.src[this.#pos]; }\n  static isKeyword(w) { return KEYWORDS.has(w); }\n  word() {\n    let w = \"\";\n    while (this.#pos < this.src.length && /\\w/.test(this.#peek())) w += this.src[this.#pos++];\n    return w;\n  }\n  get position() { return this.#pos; }\n}\nglobalThis.lex = (s) => {\n  const l = new Lexer(s);\n  const w = l.word();\n  return (Lexer.isKeyword(w) ? \"kw:\" : \"id:\") + w + \"@\" + l.position;\n};\n",
+  "inputName": "hyb-class.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js hyb-class.js",
+    "exitCode": 0,
+    "ms": 332,
+    "stdout": "let KEYWORDS;\n(function () {\n  var $$0 = {\n    enumerable: false,\n    configurable: true,\n    writable: true\n  };\n  var _$0 = this;\n  var _$1 = _$0.ReferenceError;\n  var _$2 = _$1.prototype;\n  var _$3 = _$0.Object;\n  var _$4 = _$3.defineProperty;\n  var _$5 = _$0.Set;\n  var __constructor = function () {};\n  var _4 = class {\n    constructor(src) {\n      this.src = src;\n    }\n    static isKeyword(w) {\n      return KEYWORDS.has(w);\n    }\n    word() {\n      let w = \"\";\n      while (this.#pos < this.src.length && /\\w/.test(this.#peek())) w += this.src[this.#pos++];\n      return w;\n    }\n    get position() {\n      return this.#pos;\n    }\n  };\n  _4.prototype.position = void 0;\n  _$0.Lexer = _4;\n  var _7 = _$2;\n  var _1 = (__constructor.prototype = _7, new __constructor());\n  $$0.value = \"globalThis is not defined\", _$4(_1, \"message\", $$0);\n  $$0.value = \"ReferenceError: globalThis is not defined\\n    at hyb-class.js:14:1\", _$4(_1, \"stack\", $$0);\n  throw _1;\n  var _B = new _$5([\"let\", \"const\", \"if\"]);\n  KEYWORDS = _B;\n}).call(this);\n",
+    "stderr": "In input file hyb-class.js(14:1) Warning PP0023: Program may terminate with exception: globalThis is not defined\n  ReferenceError: globalThis is not defined\n    at hyb-class.js:14:1 (https://github.com/facebook/prepack/wiki/PP0023)\n    \nPrepack succeeded, reporting 1 warning.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js hyb-class.js",
+    "exitCode": 0,
+    "ms": 395,
+    "stdout": "let KEYWORDS;\n(function () {\n  var _$0 = this;\n\n  var _$1 = _$0.Set;\n\n  var _2 = class {\n    constructor(src) {\n      this.src = src;\n    }\n\n    #pos = 0;\n\n    #peek() {\n      return this.src[this.#pos];\n    }\n\n    static isKeyword(w) {\n      return KEYWORDS.has(w);\n    }\n\n    word() {\n      let w = \"\";\n\n      while (this.#pos < this.src.length && /\\w/.test(this.#peek())) w += this.src[this.#pos++];\n\n      return w;\n    }\n\n    get position() {\n      return this.#pos;\n    }\n\n  };\n\n  _$0.Lexer = _2;\n\n  _$0.lex = s => {\n    const l = new Lexer(s);\n    const w = l.word();\n    return (Lexer.isKeyword(w) ? \"kw:\" : \"id:\") + w + \"@\" + l.position;\n  };\n\n  KEYWORDS = new _$1([\"let\", \"const\", \"if\"]);\n}).call(this);\n",
+    "stderr": ""
+   },
+   "hybrid": {
+    "label": "Hybrid",
+    "command": "hybrid.js hyb-class.js",
+    "exitCode": 0,
+    "ms": 504,
+    "stdout": "(function(__h$g) {\n  var __h$0 = (function(__h$p) {\n    var __h$o = new Array(3);\n    const KEYWORDS = __h$p[0];\n    let Lexer;\n    __h$o[0] = (0,\n(s) => {\n  const l = new Lexer(s);\n  const w = l.word();\n  return (Lexer.isKeyword(w) ? \"kw:\" : \"id:\") + w + \"@\" + l.position;\n}\n);\n    __h$o[1] = (\nclass Lexer {\n  #pos = 0;\n  constructor(src) { this.src = src; }\n  #peek() { return this.src[this.#pos]; }\n  static isKeyword(w) { return KEYWORDS.has(w); }\n  word() {\n    let w = \"\";\n    while (this.#pos < this.src.length && /\\w/.test(this.#peek())) w += this.src[this.#pos++];\n    return w;\n  }\n  get position() { return this.#pos; }\n}\n);\n    Lexer = __h$o[1];\n    __h$o[2] = __h$o[1].prototype;\n    return __h$o;\n  })([new Set([\"let\", \"const\", \"if\"])]);\n  var __h$1 = __h$0[1], __h$2 = __h$0[2];\n  __h$g.lex = __h$0[0];\n})(typeof globalThis !== \"undefined\" ? globalThis : this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "lex(\"let x\"), lex(\"abc\")",
+    "original": {
+     "ok": true,
+     "value": "kw:let@3,id:abc@3"
+    },
+    "orig": {
+     "ok": false,
+     "value": "SyntaxError: Private field '#pos' must be declared in an enclosing class"
+    },
+    "revived": {
+     "ok": true,
+     "value": "kw:let@3,id:abc@3"
+    },
+    "hybrid": {
+     "ok": true,
+     "value": "kw:let@3,id:abc@3"
+    }
+   }
+  ]
+ },
+ "hyb-tables": {
+  "input": "var T0 = (function () {\n  var t = new Int32Array(256);\n  for (var n = 0; n < 256; n++) {\n    var c = n;\n    for (var k = 0; k < 8; k++) c = c & 1 ? -306674912 ^ (c >>> 1) : c >>> 1;\n    t[n] = c;\n  }\n  return t;\n})();\nvar TT = (function () {\n  var table = new Int32Array(1024);\n  for (var n = 0; n < 256; n++) table[n] = T0[n];\n  for (n = 0; n < 256; n++) {\n    var v = T0[n];\n    for (var c = 256 + n; c < 1024; c += 256) v = table[c] = (v >>> 8) ^ T0[v & 0xff];\n  }\n  var out = [];\n  for (n = 1; n < 4; n++) out[n - 1] = table.subarray(n * 256, n * 256 + 256);\n  return out;\n})();\nglobalThis.crc = function (s) {\n  var c = -1;\n  for (var i = 0; i < s.length; i++) c = (c >>> 8) ^ T0[(c ^ s.charCodeAt(i)) & 0xff];\n  return ~c >>> 0;\n};\nglobalThis.views = TT;\n",
+  "inputName": "hyb-tables.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js hyb-tables.js",
+    "exitCode": 0,
+    "ms": 377,
+    "stdout": "var TT, T0;\n(function () {\n  var $$0 = {\n    enumerable: false,\n    configurable: true,\n    writable: true\n  };\n  var _$0 = this;\n  var _$1 = _$0.Uint8Array;\n  var _$2 = _$0.Int32Array;\n  var _$3 = _$0.ReferenceError;\n  var _$4 = _$3.prototype;\n  var _$5 = _$0.Object;\n  var _$6 = _$5.defineProperty;\n  var __constructor = function () {};\n  var _1 = new _$1([0, 0, 0, 0, 150, 48, 7, 119, 44, 97, 14, 238, 186, 81, 9, 153, 25, 196, 109, 7, 143, 244, 106, 112, 53, 165, 99, 233, 163, 149, 100, 158, 50, 136, 219, 14, 164, 184, 220, 121, 30, 233, 213, 224, 136, 217, 210, 151, 43, 76, 182, 9, 189, 124, 177, 126, 7, 45, 184, 231, 145, 29, 191, 144, 100, 16, 183, 29, 242, 32, 176, 106, 72, 113, 185, 243, 222, 65, 190, 132, 125, 212, 218, 26, 235, 228, 221, 109, 81, 181, 212, 244, 199, 133, 211, 131, 86, 152, 108, 19, 192, 168, 107, 100, 122, 249, 98, 253, 236, 201, 101, 138, 79, 92, 1, 20, 217, 108, 6, 99, 99, 61, 15, 250, 245, 13, 8, 141, 200, 32, 110, 59, 94, 16, 105, 76, 228, 65, 96, 213, 114, 113, 103, 162, 209, 228, 3, 60, 71, 212, 4, 75, 253, 133, 13, 210, 107, 181, 10, 165, 250, 168, 181, 53, 108, 152, 178, 66, 214, 201, 187, 219, 64, 249, 188, 172, 227, 108, 216, 50, 117, 92, 223, 69, 207, 13, 214, 220, 89, 61, 209, 171, 172, 48, 217, 38, 58, 0, 222, 81, 128, 81, 215, 200, 22, 97, 208, 191, 181, 244, 180, 33, 35, 196, 179, 86, 153, 149, 186, 207, 15, 165, 189, 184, 158, 184, 2, 40, 8, 136, 5, 95, 178, 217, 12, 198, 36, 233, 11, 177, 135, 124, 111, 47, 17, 76, 104, 88, 171, 29, 97, 193, 61, 45, 102, 182, 144, 65, 220, 118, 6, 113, 219, 1, 188, 32, 210, 152, 42, 16, 213, 239, 137, 133, 177, 113, 31, 181, 182, 6, 165, 228, 191, 159, 51, 212, 184, 232, 162, 201, 7, 120, 52, 249, 0, 15, 142, 168, 9, 150, 24, 152, 14, 225, 187, 13, 106, 127, 45, 61, 109, 8, 151, 108, 100, 145, 1, 92, 99, 230, 244, 81, 107, 107, 98, 97, 108, 28, 216, 48, 101, 133, 78, 0, 98, 242, 237, 149, 6, 108, 123, 165, 1, 27, 193, 244, 8, 130, 87, 196, 15, 245, 198, 217, 176, 101, 80, 233, 183, 18, 234, 184, 190, 139, 124, 136, 185, 252, 223, 29, 221, 98, 73, 45, 218, 21, 243, 124, 211, 140, 101, 76, 212, 251, 88, 97, 178, 77, 206, 81, 181, 58, 116, 0, 188, 163, 226, 48, 187, 212, 65, 165, 223, 74, 215, 149, 216, 61, 109, 196, 209, 164, 251, 244, 214, 211, 106, 233, 105, 67, 252, 217, 110, 52, 70, 136, 103, 173, 208, 184, 96, 218, 115, 45, 4, 68, 229, 29, 3, 51, 95, 76, 10, 170, 201, 124, 13, 221, 60, 113, 5, 80, 170, 65, 2, 39, 16, 16, 11, 190, 134, 32, 12, 201, 37, 181, 104, 87, 179, 133, 111, 32, 9, 212, 102, 185, 159, 228, 97, 206, 14, 249, 222, 94, 152, 201, 217, 41, 34, 152, 208, 176, 180, 168, 215, 199, 23, 61, 179, 89, 129, 13, 180, 46, 59, 92, 189, 183, 173, 108, 186, 192, 32, 131, 184, 237, 182, 179, 191, 154, 12, 226, 182, 3, 154, 210, 177, 116, 57, 71, 213, 234, 175, 119, 210, 157, 21, 38, 219, 4, 131, 22, 220, 115, 18, 11, 99, 227, 132, 59, 100, 148, 62, 106, 109, 13, 168, 90, 106, 122, 11, 207, 14, 228, 157, 255, 9, 147, 39, 174, 0, 10, 177, 158, 7, 125, 68, 147, 15, 240, 210, 163, 8, 135, 104, 242, 1, 30, 254, 194, 6, 105, 93, 87, 98, 247, 203, 103, 101, 128, 113, 54, 108, 25, 231, 6, 107, 110, 118, 27, 212, 254, 224, 43, 211, 137, 90, 122, 218, 16, 204, 74, 221, 103, 111, 223, 185, 249, 249, 239, 190, 142, 67, 190, 183, 23, 213, 142, 176, 96, 232, 163, 214, 214, 126, 147, 209, 161, 196, 194, 216, 56, 82, 242, 223, 79, 241, 103, 187, 209, 103, 87, 188, 166, 221, 6, 181, 63, 75, 54, 178, 72, 218, 43, 13, 216, 76, 27, 10, 175, 246, 74, 3, 54, 96, 122, 4, 65, 195, 239, 96, 223, 85, 223, 103, 168, 239, 142, 110, 49, 121, 190, 105, 70, 140, 179, 97, 203, 26, 131, 102, 188, 160, 210, 111, 37, 54, 226, 104, 82, 149, 119, 12, 204, 3, 71, 11, 187, 185, 22, 2, 34, 47, 38, 5, 85, 190, 59, 186, 197, 40, 11, 189, 178, 146, 90, 180, 43, 4, 106, 179, 92, 167, 255, 215, 194, 49, 207, 208, 181, 139, 158, 217, 44, 29, 174, 222, 91, 176, 194, 100, 155, 38, 242, 99, 236, 156, 163, 106, 117, 10, 147, 109, 2, 169, 6, 9, 156, 63, 54, 14, 235, 133, 103, 7, 114, 19, 87, 0, 5, 130, 74, 191, 149, 20, 122, 184, 226, 174, 43, 177, 123, 56, 27, 182, 12, 155, 142, 210, 146, 13, 190, 213, 229, 183, 239, 220, 124, 33, 223, 219, 11, 212, 210, 211, 134, 66, 226, 212, 241, 248, 179, 221, 104, 110, 131, 218, 31, 205, 22, 190, 129, 91, 38, 185, 246, 225, 119, 176, 111, 119, 71, 183, 24, 230, 90, 8, 136, 112, 106, 15, 255, 202, 59, 6, 102, 92, 11, 1, 17, 255, 158, 101, 143, 105, 174, 98, 248, 211, 255, 107, 97, 69, 207, 108, 22, 120, 226, 10, 160, 238, 210, 13, 215, 84, 131, 4, 78, 194, 179, 3, 57, 97, 38, 103, 167, 247, 22, 96, 208, 77, 71, 105, 73, 219, 119, 110, 62, 74, 106, 209, 174, 220, 90, 214, 217, 102, 11, 223, 64, 240, 59, 216, 55, 83, 174, 188, 169, 197, 158, 187, 222, 127, 207, 178, 71, 233, 255, 181, 48, 28, 242, 189, 189, 138, 194, 186, 202, 48, 147, 179, 83, 166, 163, 180, 36, 5, 54, 208, 186, 147, 6, 215, 205, 41, 87, 222, 84, 191, 103, 217, 35, 46, 122, 102, 179, 184, 74, 97, 196, 2, 27, 104, 93, 148, 43, 111, 42, 55, 190, 11, 180, 161, 142, 12, 195, 27, 223, 5, 90, 141, 239, 2, 45]).buffer;\n  var _0 = new _$2(_1);\n  _$0.T0 = _0;\n  var _5 = new _$1([0, 0, 0, 0, 150, 48, 7, 119, 44, 97, 14, 238, 186, 81, 9, 153, 25, 196, 109, 7, 143, 244, 106, 112, 53, 165, 99, 233, 163, 149, 100, 158, 50, 136, 219, 14, 164, 184, 220, 121, 30, 233, 213, 224, 136, 217, 210, 151, 43, 76, 182, 9, 189, 124, 177, 126, 7, 45, 184, 231, 145, 29, 191, 144, 100, 16, 183, 29, 242, 32, 176, 106, 72, 113, 185, 243, 222, 65, 190, 132, 125, 212, 218, 26, 235, 228, 221, 109, 81, 181, 212, 244, 199, 133, 211, 131, 86, 152, 108, 19, 192, 168, 107, 100, 122, 249, 98, 253, 236, 201, 101, 138, 79, 92, 1, 20, 217, 108, 6, 99, 99, 61, 15, 250, 245, 13, 8, 141, 200, 32, 110, 59, 94, 16, 105, 76, 228, 65, 96, 213, 114, 113, 103, 162, 209, 228, 3, 60, 71, 212, 4, 75, 253, 133, 13, 210, 107, 181, 10, 165, 250, 168, 181, 53, 108, 152, 178, 66, 214, 201, 187, 219, 64, 249, 188, 172, 227, 108, 216, 50, 117, 92, 223, 69, 207, 13, 214, 220, 89, 61, 209, 171, 172, 48, 217, 38, 58, 0, 222, 81, 128, 81, 215, 200, 22, 97, 208, 191, 181, 244, 180, 33, 35, 196, 179, 86, 153, 149, 186, 207, 15, 165, 189, 184, 158, 184, 2, 40, 8, 136, 5, 95, 178, 217, 12, 198, 36, 233, 11, 177, 135, 124, 111, 47, 17, 76, 104, 88, 171, 29, 97, 193, 61, 45, 102, 182, 144, 65, 220, 118, 6, 113, 219, 1, 188, 32, 210, 152, 42, 16, 213, 239, 137, 133, 177, 113, 31, 181, 182, 6, 165, 228, 191, 159, 51, 212, 184, 232, 162, 201, 7, 120, 52, 249, 0, 15, 142, 168, 9, 150, 24, 152, 14, 225, 187, 13, 106, 127, 45, 61, 109, 8, 151, 108, 100, 145, 1, 92, 99, 230, 244, 81, 107, 107, 98, 97, 108, 28, 216, 48, 101, 133, 78, 0, 98, 242, 237, 149, 6, 108, 123, 165, 1, 27, 193, 244, 8, 130, 87, 196, 15, 245, 198, 217, 176, 101, 80, 233, 183, 18, 234, 184, 190, 139, 124, 136, 185, 252, 223, 29, 221, 98, 73, 45, 218, 21, 243, 124, 211, 140, 101, 76, 212, 251, 88, 97, 178, 77, 206, 81, 181, 58, 116, 0, 188, 163, 226, 48, 187, 212, 65, 165, 223, 74, 215, 149, 216, 61, 109, 196, 209, 164, 251, 244, 214, 211, 106, 233, 105, 67, 252, 217, 110, 52, 70, 136, 103, 173, 208, 184, 96, 218, 115, 45, 4, 68, 229, 29, 3, 51, 95, 76, 10, 170, 201, 124, 13, 221, 60, 113, 5, 80, 170, 65, 2, 39, 16, 16, 11, 190, 134, 32, 12, 201, 37, 181, 104, 87, 179, 133, 111, 32, 9, 212, 102, 185, 159, 228, 97, 206, 14, 249, 222, 94, 152, 201, 217, 41, 34, 152, 208, 176, 180, 168, 215, 199, 23, 61, 179, 89, 129, 13, 180, 46, 59, 92, 189, 183, 173, 108, 186, 192, 32, 131, 184, 237, 182, 179, 191, 154, 12, 226, 182, 3, 154, 210, 177, 116, 57, 71, 213, 234, 175, 119, 210, 157, 21, 38, 219, 4, 131, 22, 220, 115, 18, 11, 99, 227, 132, 59, 100, 148, 62, 106, 109, 13, 168, 90, 106, 122, 11, 207, 14, 228, 157, 255, 9, 147, 39, 174, 0, 10, 177, 158, 7, 125, 68, 147, 15, 240, 210, 163, 8, 135, 104, 242, 1, 30, 254, 194, 6, 105, 93, 87, 98, 247, 203, 103, 101, 128, 113, 54, 108, 25, 231, 6, 107, 110, 118, 27, 212, 254, 224, 43, 211, 137, 90, 122, 218, 16, 204, 74, 221, 103, 111, 223, 185, 249, 249, 239, 190, 142, 67, 190, 183, 23, 213, 142, 176, 96, 232, 163, 214, 214, 126, 147, 209, 161, 196, 194, 216, 56, 82, 242, 223, 79, 241, 103, 187, 209, 103, 87, 188, 166, 221, 6, 181, 63, 75, 54, 178, 72, 218, 43, 13, 216, 76, 27, 10, 175, 246, 74, 3, 54, 96, 122, 4, 65, 195, 239, 96, 223, 85, 223, 103, 168, 239, 142, 110, 49, 121, 190, 105, 70, 140, 179, 97, 203, 26, 131, 102, 188, 160, 210, 111, 37, 54, 226, 104, 82, 149, 119, 12, 204, 3, 71, 11, 187, 185, 22, 2, 34, 47, 38, 5, 85, 190, 59, 186, 197, 40, 11, 189, 178, 146, 90, 180, 43, 4, 106, 179, 92, 167, 255, 215, 194, 49, 207, 208, 181, 139, 158, 217, 44, 29, 174, 222, 91, 176, 194, 100, 155, 38, 242, 99, 236, 156, 163, 106, 117, 10, 147, 109, 2, 169, 6, 9, 156, 63, 54, 14, 235, 133, 103, 7, 114, 19, 87, 0, 5, 130, 74, 191, 149, 20, 122, 184, 226, 174, 43, 177, 123, 56, 27, 182, 12, 155, 142, 210, 146, 13, 190, 213, 229, 183, 239, 220, 124, 33, 223, 219, 11, 212, 210, 211, 134, 66, 226, 212, 241, 248, 179, 221, 104, 110, 131, 218, 31, 205, 22, 190, 129, 91, 38, 185, 246, 225, 119, 176, 111, 119, 71, 183, 24, 230, 90, 8, 136, 112, 106, 15, 255, 202, 59, 6, 102, 92, 11, 1, 17, 255, 158, 101, 143, 105, 174, 98, 248, 211, 255, 107, 97, 69, 207, 108, 22, 120, 226, 10, 160, 238, 210, 13, 215, 84, 131, 4, 78, 194, 179, 3, 57, 97, 38, 103, 167, 247, 22, 96, 208, 77, 71, 105, 73, 219, 119, 110, 62, 74, 106, 209, 174, 220, 90, 214, 217, 102, 11, 223, 64, 240, 59, 216, 55, 83, 174, 188, 169, 197, 158, 187, 222, 127, 207, 178, 71, 233, 255, 181, 48, 28, 242, 189, 189, 138, 194, 186, 202, 48, 147, 179, 83, 166, 163, 180, 36, 5, 54, 208, 186, 147, 6, 215, 205, 41, 87, 222, 84, 191, 103, 217, 35, 46, 122, 102, 179, 184, 74, 97, 196, 2, 27, 104, 93, 148, 43, 111, 42, 55, 190, 11, 180, 161, 142, 12, 195, 27, 223, 5, 90, 141, 239, 2, 45, 0, 0, 0, 0, 65, 49, 27, 25, 130, 98, 54, 50, 195, 83, 45, 43, 4, 197, 108, 100, 69, 244, 119, 125, 134, 167, 90, 86, 199, 150, 65, 79, 8, 138, 217, 200, 73, 187, 194, 209, 138, 232, 239, 250, 203, 217, 244, 227, 12, 79, 181, 172, 77, 126, 174, 181, 142, 45, 131, 158, 207, 28, 152, 135, 81, 18, 194, 74, 16, 35, 217, 83, 211, 112, 244, 120, 146, 65, 239, 97, 85, 215, 174, 46, 20, 230, 181, 55, 215, 181, 152, 28, 150, 132, 131, 5, 89, 152, 27, 130, 24, 169, 0, 155, 219, 250, 45, 176, 154, 203, 54, 169, 93, 93, 119, 230, 28, 108, 108, 255, 223, 63, 65, 212, 158, 14, 90, 205, 162, 36, 132, 149, 227, 21, 159, 140, 32, 70, 178, 167, 97, 119, 169, 190, 166, 225, 232, 241, 231, 208, 243, 232, 36, 131, 222, 195, 101, 178, 197, 218, 170, 174, 93, 93, 235, 159, 70, 68, 40, 204, 107, 111, 105, 253, 112, 118, 174, 107, 49, 57, 239, 90, 42, 32, 44, 9, 7, 11, 109, 56, 28, 18, 243, 54, 70, 223, 178, 7, 93, 198, 113, 84, 112, 237, 48, 101, 107, 244, 247, 243, 42, 187, 182, 194, 49, 162, 117, 145, 28, 137, 52, 160, 7, 144, 251, 188, 159, 23, 186, 141, 132, 14, 121, 222, 169, 37, 56, 239, 178, 60, 255, 121, 243, 115, 190, 72, 232, 106, 125, 27, 197, 65, 60, 42, 222, 88, 5, 79, 121, 240, 68, 126, 98, 233, 135, 45, 79, 194, 198, 28, 84, 219, 1, 138, 21, 148, 64, 187, 14, 141, 131, 232, 35, 166, 194, 217, 56, 191, 13, 197, 160, 56, 76, 244, 187, 33, 143, 167, 150, 10, 206, 150, 141, 19, 9, 0, 204, 92, 72, 49, 215, 69, 139, 98, 250, 110, 202, 83, 225, 119, 84, 93, 187, 186, 21, 108, 160, 163, 214, 63, 141, 136, 151, 14, 150, 145, 80, 152, 215, 222, 17, 169, 204, 199, 210, 250, 225, 236, 147, 203, 250, 245, 92, 215, 98, 114, 29, 230, 121, 107, 222, 181, 84, 64, 159, 132, 79, 89, 88, 18, 14, 22, 25, 35, 21, 15, 218, 112, 56, 36, 155, 65, 35, 61, 167, 107, 253, 101, 230, 90, 230, 124, 37, 9, 203, 87, 100, 56, 208, 78, 163, 174, 145, 1, 226, 159, 138, 24, 33, 204, 167, 51, 96, 253, 188, 42, 175, 225, 36, 173, 238, 208, 63, 180, 45, 131, 18, 159, 108, 178, 9, 134, 171, 36, 72, 201, 234, 21, 83, 208, 41, 70, 126, 251, 104, 119, 101, 226, 246, 121, 63, 47, 183, 72, 36, 54, 116, 27, 9, 29, 53, 42, 18, 4, 242, 188, 83, 75, 179, 141, 72, 82, 112, 222, 101, 121, 49, 239, 126, 96, 254, 243, 230, 231, 191, 194, 253, 254, 124, 145, 208, 213, 61, 160, 203, 204, 250, 54, 138, 131, 187, 7, 145, 154, 120, 84, 188, 177, 57, 101, 167, 168, 75, 152, 131, 59, 10, 169, 152, 34, 201, 250, 181, 9, 136, 203, 174, 16, 79, 93, 239, 95, 14, 108, 244, 70, 205, 63, 217, 109, 140, 14, 194, 116, 67, 18, 90, 243, 2, 35, 65, 234, 193, 112, 108, 193, 128, 65, 119, 216, 71, 215, 54, 151, 6, 230, 45, 142, 197, 181, 0, 165, 132, 132, 27, 188, 26, 138, 65, 113, 91, 187, 90, 104, 152, 232, 119, 67, 217, 217, 108, 90, 30, 79, 45, 21, 95, 126, 54, 12, 156, 45, 27, 39, 221, 28, 0, 62, 18, 0, 152, 185, 83, 49, 131, 160, 144, 98, 174, 139, 209, 83, 181, 146, 22, 197, 244, 221, 87, 244, 239, 196, 148, 167, 194, 239, 213, 150, 217, 246, 233, 188, 7, 174, 168, 141, 28, 183, 107, 222, 49, 156, 42, 239, 42, 133, 237, 121, 107, 202, 172, 72, 112, 211, 111, 27, 93, 248, 46, 42, 70, 225, 225, 54, 222, 102, 160, 7, 197, 127, 99, 84, 232, 84, 34, 101, 243, 77, 229, 243, 178, 2, 164, 194, 169, 27, 103, 145, 132, 48, 38, 160, 159, 41, 184, 174, 197, 228, 249, 159, 222, 253, 58, 204, 243, 214, 123, 253, 232, 207, 188, 107, 169, 128, 253, 90, 178, 153, 62, 9, 159, 178, 127, 56, 132, 171, 176, 36, 28, 44, 241, 21, 7, 53, 50, 70, 42, 30, 115, 119, 49, 7, 180, 225, 112, 72, 245, 208, 107, 81, 54, 131, 70, 122, 119, 178, 93, 99, 78, 215, 250, 203, 15, 230, 225, 210, 204, 181, 204, 249, 141, 132, 215, 224, 74, 18, 150, 175, 11, 35, 141, 182, 200, 112, 160, 157, 137, 65, 187, 132, 70, 93, 35, 3, 7, 108, 56, 26, 196, 63, 21, 49, 133, 14, 14, 40, 66, 152, 79, 103, 3, 169, 84, 126, 192, 250, 121, 85, 129, 203, 98, 76, 31, 197, 56, 129, 94, 244, 35, 152, 157, 167, 14, 179, 220, 150, 21, 170, 27, 0, 84, 229, 90, 49, 79, 252, 153, 98, 98, 215, 216, 83, 121, 206, 23, 79, 225, 73, 86, 126, 250, 80, 149, 45, 215, 123, 212, 28, 204, 98, 19, 138, 141, 45, 82, 187, 150, 52, 145, 232, 187, 31, 208, 217, 160, 6, 236, 243, 126, 94, 173, 194, 101, 71, 110, 145, 72, 108, 47, 160, 83, 117, 232, 54, 18, 58, 169, 7, 9, 35, 106, 84, 36, 8, 43, 101, 63, 17, 228, 121, 167, 150, 165, 72, 188, 143, 102, 27, 145, 164, 39, 42, 138, 189, 224, 188, 203, 242, 161, 141, 208, 235, 98, 222, 253, 192, 35, 239, 230, 217, 189, 225, 188, 20, 252, 208, 167, 13, 63, 131, 138, 38, 126, 178, 145, 63, 185, 36, 208, 112, 248, 21, 203, 105, 59, 70, 230, 66, 122, 119, 253, 91, 181, 107, 101, 220, 244, 90, 126, 197, 55, 9, 83, 238, 118, 56, 72, 247, 177, 174, 9, 184, 240, 159, 18, 161, 51, 204, 63, 138, 114, 253, 36, 147, 0, 0, 0, 0, 55, 106, 194, 1, 110, 212, 132, 3, 89, 190, 70, 2, 220, 168, 9, 7, 235, 194, 203, 6, 178, 124, 141, 4, 133, 22, 79, 5, 184, 81, 19, 14, 143, 59, 209, 15, 214, 133, 151, 13, 225, 239, 85, 12, 100, 249, 26, 9, 83, 147, 216, 8, 10, 45, 158, 10, 61, 71, 92, 11, 112, 163, 38, 28, 71, 201, 228, 29, 30, 119, 162, 31, 41, 29, 96, 30, 172, 11, 47, 27, 155, 97, 237, 26, 194, 223, 171, 24, 245, 181, 105, 25, 200, 242, 53, 18, 255, 152, 247, 19, 166, 38, 177, 17, 145, 76, 115, 16, 20, 90, 60, 21, 35, 48, 254, 20, 122, 142, 184, 22, 77, 228, 122, 23, 224, 70, 77, 56, 215, 44, 143, 57, 142, 146, 201, 59, 185, 248, 11, 58, 60, 238, 68, 63, 11, 132, 134, 62, 82, 58, 192, 60, 101, 80, 2, 61, 88, 23, 94, 54, 111, 125, 156, 55, 54, 195, 218, 53, 1, 169, 24, 52, 132, 191, 87, 49, 179, 213, 149, 48, 234, 107, 211, 50, 221, 1, 17, 51, 144, 229, 107, 36, 167, 143, 169, 37, 254, 49, 239, 39, 201, 91, 45, 38, 76, 77, 98, 35, 123, 39, 160, 34, 34, 153, 230, 32, 21, 243, 36, 33, 40, 180, 120, 42, 31, 222, 186, 43, 70, 96, 252, 41, 113, 10, 62, 40, 244, 28, 113, 45, 195, 118, 179, 44, 154, 200, 245, 46, 173, 162, 55, 47, 192, 141, 154, 112, 247, 231, 88, 113, 174, 89, 30, 115, 153, 51, 220, 114, 28, 37, 147, 119, 43, 79, 81, 118, 114, 241, 23, 116, 69, 155, 213, 117, 120, 220, 137, 126, 79, 182, 75, 127, 22, 8, 13, 125, 33, 98, 207, 124, 164, 116, 128, 121, 147, 30, 66, 120, 202, 160, 4, 122, 253, 202, 198, 123, 176, 46, 188, 108, 135, 68, 126, 109, 222, 250, 56, 111, 233, 144, 250, 110, 108, 134, 181, 107, 91, 236, 119, 106, 2, 82, 49, 104, 53, 56, 243, 105, 8, 127, 175, 98, 63, 21, 109, 99, 102, 171, 43, 97, 81, 193, 233, 96, 212, 215, 166, 101, 227, 189, 100, 100, 186, 3, 34, 102, 141, 105, 224, 103, 32, 203, 215, 72, 23, 161, 21, 73, 78, 31, 83, 75, 121, 117, 145, 74, 252, 99, 222, 79, 203, 9, 28, 78, 146, 183, 90, 76, 165, 221, 152, 77, 152, 154, 196, 70, 175, 240, 6, 71, 246, 78, 64, 69, 193, 36, 130, 68, 68, 50, 205, 65, 115, 88, 15, 64, 42, 230, 73, 66, 29, 140, 139, 67, 80, 104, 241, 84, 103, 2, 51, 85, 62, 188, 117, 87, 9, 214, 183, 86, 140, 192, 248, 83, 187, 170, 58, 82, 226, 20, 124, 80, 213, 126, 190, 81, 232, 57, 226, 90, 223, 83, 32, 91, 134, 237, 102, 89, 177, 135, 164, 88, 52, 145, 235, 93, 3, 251, 41, 92, 90, 69, 111, 94, 109, 47, 173, 95, 128, 27, 53, 225, 183, 113, 247, 224, 238, 207, 177, 226, 217, 165, 115, 227, 92, 179, 60, 230, 107, 217, 254, 231, 50, 103, 184, 229, 5, 13, 122, 228, 56, 74, 38, 239, 15, 32, 228, 238, 86, 158, 162, 236, 97, 244, 96, 237, 228, 226, 47, 232, 211, 136, 237, 233, 138, 54, 171, 235, 189, 92, 105, 234, 240, 184, 19, 253, 199, 210, 209, 252, 158, 108, 151, 254, 169, 6, 85, 255, 44, 16, 26, 250, 27, 122, 216, 251, 66, 196, 158, 249, 117, 174, 92, 248, 72, 233, 0, 243, 127, 131, 194, 242, 38, 61, 132, 240, 17, 87, 70, 241, 148, 65, 9, 244, 163, 43, 203, 245, 250, 149, 141, 247, 205, 255, 79, 246, 96, 93, 120, 217, 87, 55, 186, 216, 14, 137, 252, 218, 57, 227, 62, 219, 188, 245, 113, 222, 139, 159, 179, 223, 210, 33, 245, 221, 229, 75, 55, 220, 216, 12, 107, 215, 239, 102, 169, 214, 182, 216, 239, 212, 129, 178, 45, 213, 4, 164, 98, 208, 51, 206, 160, 209, 106, 112, 230, 211, 93, 26, 36, 210, 16, 254, 94, 197, 39, 148, 156, 196, 126, 42, 218, 198, 73, 64, 24, 199, 204, 86, 87, 194, 251, 60, 149, 195, 162, 130, 211, 193, 149, 232, 17, 192, 168, 175, 77, 203, 159, 197, 143, 202, 198, 123, 201, 200, 241, 17, 11, 201, 116, 7, 68, 204, 67, 109, 134, 205, 26, 211, 192, 207, 45, 185, 2, 206, 64, 150, 175, 145, 119, 252, 109, 144, 46, 66, 43, 146, 25, 40, 233, 147, 156, 62, 166, 150, 171, 84, 100, 151, 242, 234, 34, 149, 197, 128, 224, 148, 248, 199, 188, 159, 207, 173, 126, 158, 150, 19, 56, 156, 161, 121, 250, 157, 36, 111, 181, 152, 19, 5, 119, 153, 74, 187, 49, 155, 125, 209, 243, 154, 48, 53, 137, 141, 7, 95, 75, 140, 94, 225, 13, 142, 105, 139, 207, 143, 236, 157, 128, 138, 219, 247, 66, 139, 130, 73, 4, 137, 181, 35, 198, 136, 136, 100, 154, 131, 191, 14, 88, 130, 230, 176, 30, 128, 209, 218, 220, 129, 84, 204, 147, 132, 99, 166, 81, 133, 58, 24, 23, 135, 13, 114, 213, 134, 160, 208, 226, 169, 151, 186, 32, 168, 206, 4, 102, 170, 249, 110, 164, 171, 124, 120, 235, 174, 75, 18, 41, 175, 18, 172, 111, 173, 37, 198, 173, 172, 24, 129, 241, 167, 47, 235, 51, 166, 118, 85, 117, 164, 65, 63, 183, 165, 196, 41, 248, 160, 243, 67, 58, 161, 170, 253, 124, 163, 157, 151, 190, 162, 208, 115, 196, 181, 231, 25, 6, 180, 190, 167, 64, 182, 137, 205, 130, 183, 12, 219, 205, 178, 59, 177, 15, 179, 98, 15, 73, 177, 85, 101, 139, 176, 104, 34, 215, 187, 95, 72, 21, 186, 6, 246, 83, 184, 49, 156, 145, 185, 180, 138, 222, 188, 131, 224, 28, 189, 218, 94, 90, 191, 237, 52, 152, 190, 0, 0, 0, 0, 101, 103, 188, 184, 139, 200, 9, 170, 238, 175, 181, 18, 87, 151, 98, 143, 50, 240, 222, 55, 220, 95, 107, 37, 185, 56, 215, 157, 239, 40, 180, 197, 138, 79, 8, 125, 100, 224, 189, 111, 1, 135, 1, 215, 184, 191, 214, 74, 221, 216, 106, 242, 51, 119, 223, 224, 86, 16, 99, 88, 159, 87, 25, 80, 250, 48, 165, 232, 20, 159, 16, 250, 113, 248, 172, 66, 200, 192, 123, 223, 173, 167, 199, 103, 67, 8, 114, 117, 38, 111, 206, 205, 112, 127, 173, 149, 21, 24, 17, 45, 251, 183, 164, 63, 158, 208, 24, 135, 39, 232, 207, 26, 66, 143, 115, 162, 172, 32, 198, 176, 201, 71, 122, 8, 62, 175, 50, 160, 91, 200, 142, 24, 181, 103, 59, 10, 208, 0, 135, 178, 105, 56, 80, 47, 12, 95, 236, 151, 226, 240, 89, 133, 135, 151, 229, 61, 209, 135, 134, 101, 180, 224, 58, 221, 90, 79, 143, 207, 63, 40, 51, 119, 134, 16, 228, 234, 227, 119, 88, 82, 13, 216, 237, 64, 104, 191, 81, 248, 161, 248, 43, 240, 196, 159, 151, 72, 42, 48, 34, 90, 79, 87, 158, 226, 246, 111, 73, 127, 147, 8, 245, 199, 125, 167, 64, 213, 24, 192, 252, 109, 78, 208, 159, 53, 43, 183, 35, 141, 197, 24, 150, 159, 160, 127, 42, 39, 25, 71, 253, 186, 124, 32, 65, 2, 146, 143, 244, 16, 247, 232, 72, 168, 61, 88, 20, 155, 88, 63, 168, 35, 182, 144, 29, 49, 211, 247, 161, 137, 106, 207, 118, 20, 15, 168, 202, 172, 225, 7, 127, 190, 132, 96, 195, 6, 210, 112, 160, 94, 183, 23, 28, 230, 89, 184, 169, 244, 60, 223, 21, 76, 133, 231, 194, 209, 224, 128, 126, 105, 14, 47, 203, 123, 107, 72, 119, 195, 162, 15, 13, 203, 199, 104, 177, 115, 41, 199, 4, 97, 76, 160, 184, 217, 245, 152, 111, 68, 144, 255, 211, 252, 126, 80, 102, 238, 27, 55, 218, 86, 77, 39, 185, 14, 40, 64, 5, 182, 198, 239, 176, 164, 163, 136, 12, 28, 26, 176, 219, 129, 127, 215, 103, 57, 145, 120, 210, 43, 244, 31, 110, 147, 3, 247, 38, 59, 102, 144, 154, 131, 136, 63, 47, 145, 237, 88, 147, 41, 84, 96, 68, 180, 49, 7, 248, 12, 223, 168, 77, 30, 186, 207, 241, 166, 236, 223, 146, 254, 137, 184, 46, 70, 103, 23, 155, 84, 2, 112, 39, 236, 187, 72, 240, 113, 222, 47, 76, 201, 48, 128, 249, 219, 85, 231, 69, 99, 156, 160, 63, 107, 249, 199, 131, 211, 23, 104, 54, 193, 114, 15, 138, 121, 203, 55, 93, 228, 174, 80, 225, 92, 64, 255, 84, 78, 37, 152, 232, 246, 115, 136, 139, 174, 22, 239, 55, 22, 248, 64, 130, 4, 157, 39, 62, 188, 36, 31, 233, 33, 65, 120, 85, 153, 175, 215, 224, 139, 202, 176, 92, 51, 59, 182, 89, 237, 94, 209, 229, 85, 176, 126, 80, 71, 213, 25, 236, 255, 108, 33, 59, 98, 9, 70, 135, 218, 231, 233, 50, 200, 130, 142, 142, 112, 212, 158, 237, 40, 177, 249, 81, 144, 95, 86, 228, 130, 58, 49, 88, 58, 131, 9, 143, 167, 230, 110, 51, 31, 8, 193, 134, 13, 109, 166, 58, 181, 164, 225, 64, 189, 193, 134, 252, 5, 47, 41, 73, 23, 74, 78, 245, 175, 243, 118, 34, 50, 150, 17, 158, 138, 120, 190, 43, 152, 29, 217, 151, 32, 75, 201, 244, 120, 46, 174, 72, 192, 192, 1, 253, 210, 165, 102, 65, 106, 28, 94, 150, 247, 121, 57, 42, 79, 151, 150, 159, 93, 242, 241, 35, 229, 5, 25, 107, 77, 96, 126, 215, 245, 142, 209, 98, 231, 235, 182, 222, 95, 82, 142, 9, 194, 55, 233, 181, 122, 217, 70, 0, 104, 188, 33, 188, 208, 234, 49, 223, 136, 143, 86, 99, 48, 97, 249, 214, 34, 4, 158, 106, 154, 189, 166, 189, 7, 216, 193, 1, 191, 54, 110, 180, 173, 83, 9, 8, 21, 154, 78, 114, 29, 255, 41, 206, 165, 17, 134, 123, 183, 116, 225, 199, 15, 205, 217, 16, 146, 168, 190, 172, 42, 70, 17, 25, 56, 35, 118, 165, 128, 117, 102, 198, 216, 16, 1, 122, 96, 254, 174, 207, 114, 155, 201, 115, 202, 34, 241, 164, 87, 71, 150, 24, 239, 169, 57, 173, 253, 204, 94, 17, 69, 6, 238, 77, 118, 99, 137, 241, 206, 141, 38, 68, 220, 232, 65, 248, 100, 81, 121, 47, 249, 52, 30, 147, 65, 218, 177, 38, 83, 191, 214, 154, 235, 233, 198, 249, 179, 140, 161, 69, 11, 98, 14, 240, 25, 7, 105, 76, 161, 190, 81, 155, 60, 219, 54, 39, 132, 53, 153, 146, 150, 80, 254, 46, 46, 153, 185, 84, 38, 252, 222, 232, 158, 18, 113, 93, 140, 119, 22, 225, 52, 206, 46, 54, 169, 171, 73, 138, 17, 69, 230, 63, 3, 32, 129, 131, 187, 118, 145, 224, 227, 19, 246, 92, 91, 253, 89, 233, 73, 152, 62, 85, 241, 33, 6, 130, 108, 68, 97, 62, 212, 170, 206, 139, 198, 207, 169, 55, 126, 56, 65, 127, 214, 93, 38, 195, 110, 179, 137, 118, 124, 214, 238, 202, 196, 111, 214, 29, 89, 10, 177, 161, 225, 228, 30, 20, 243, 129, 121, 168, 75, 215, 105, 203, 19, 178, 14, 119, 171, 92, 161, 194, 185, 57, 198, 126, 1, 128, 254, 169, 156, 229, 153, 21, 36, 11, 54, 160, 54, 110, 81, 28, 142, 167, 22, 102, 134, 194, 113, 218, 62, 44, 222, 111, 44, 73, 185, 211, 148, 240, 129, 4, 9, 149, 230, 184, 177, 123, 73, 13, 163, 30, 46, 177, 27, 72, 62, 210, 67, 45, 89, 110, 251, 195, 246, 219, 233, 166, 145, 103, 81, 31, 169, 176, 204, 122, 206, 12, 116, 148, 97, 185, 102, 241, 6, 5, 222]).buffer;\n  var _4 = new _$2(_5);\n  var _6 = new _$2(_5);\n  var _7 = new _$2(_5);\n  var _3 = [_4, _6, _7];\n  _$0.TT = _3;\n  var _C = _$4;\n  var _9 = (__constructor.prototype = _C, new __constructor());\n  $$0.value = \"globalThis is not defined\", _$6(_9, \"message\", $$0);\n  $$0.value = \"ReferenceError: globalThis is not defined\\n    at hyb-tables.js:21:1\", _$6(_9, \"stack\", $$0);\n  throw _9;\n}).call(this);\n",
+    "stderr": "In input file hyb-tables.js(21:1) Warning PP0023: Program may terminate with exception: globalThis is not defined\n  ReferenceError: globalThis is not defined\n    at hyb-tables.js:21:1 (https://github.com/facebook/prepack/wiki/PP0023)\n    \nPrepack succeeded, reporting 1 warning.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js hyb-tables.js",
+    "exitCode": 0,
+    "ms": 424,
+    "stdout": "var TT, T0;\n(function () {\n  var _$0 = this;\n\n  var _$1 = _$0.Uint32Array;\n  var _$2 = _$0.Int32Array;\n  _$0.T0 = new _$2(new _$1([0, 1996959894, 3993919788, 2567524794, 124634137, 1886057615, 3915621685, 2657392035, 249268274, 2044508324, 3772115230, 2547177864, 162941995, 2125561021, 3887607047, 2428444049, 498536548, 1789927666, 4089016648, 2227061214, 450548861, 1843258603, 4107580753, 2211677639, 325883990, 1684777152, 4251122042, 2321926636, 335633487, 1661365465, 4195302755, 2366115317, 997073096, 1281953886, 3579855332, 2724688242, 1006888145, 1258607687, 3524101629, 2768942443, 901097722, 1119000684, 3686517206, 2898065728, 853044451, 1172266101, 3705015759, 2882616665, 651767980, 1373503546, 3369554304, 3218104598, 565507253, 1454621731, 3485111705, 3099436303, 671266974, 1594198024, 3322730930, 2970347812, 795835527, 1483230225, 3244367275, 3060149565, 1994146192, 31158534, 2563907772, 4023717930, 1907459465, 112637215, 2680153253, 3904427059, 2013776290, 251722036, 2517215374, 3775830040, 2137656763, 141376813, 2439277719, 3865271297, 1802195444, 476864866, 2238001368, 4066508878, 1812370925, 453092731, 2181625025, 4111451223, 1706088902, 314042704, 2344532202, 4240017532, 1658658271, 366619977, 2362670323, 4224994405, 1303535960, 984961486, 2747007092, 3569037538, 1256170817, 1037604311, 2765210733, 3554079995, 1131014506, 879679996, 2909243462, 3663771856, 1141124467, 855842277, 2852801631, 3708648649, 1342533948, 654459306, 3188396048, 3373015174, 1466479909, 544179635, 3110523913, 3462522015, 1591671054, 702138776, 2966460450, 3352799412, 1504918807, 783551873, 3082640443, 3233442989, 3988292384, 2596254646, 62317068, 1957810842, 3939845945, 2647816111, 81470997, 1943803523, 3814918930, 2489596804, 225274430, 2053790376, 3826175755, 2466906013, 167816743, 2097651377, 4027552580, 2265490386, 503444072, 1762050814, 4150417245, 2154129355, 426522225, 1852507879, 4275313526, 2312317920, 282753626, 1742555852, 4189708143, 2394877945, 397917763, 1622183637, 3604390888, 2714866558, 953729732, 1340076626, 3518719985, 2797360999, 1068828381, 1219638859, 3624741850, 2936675148, 906185462, 1090812512, 3747672003, 2825379669, 829329135, 1181335161, 3412177804, 3160834842, 628085408, 1382605366, 3423369109, 3138078467, 570562233, 1426400815, 3317316542, 2998733608, 733239954, 1555261956, 3268935591, 3050360625, 752459403, 1541320221, 2607071920, 3965973030, 1969922972, 40735498, 2617837225, 3943577151, 1913087877, 83908371, 2512341634, 3803740692, 2075208622, 213261112, 2463272603, 3855990285, 2094854071, 198958881, 2262029012, 4057260610, 1759359992, 534414190, 2176718541, 4139329115, 1873836001, 414664567, 2282248934, 4279200368, 1711684554, 285281116, 2405801727, 4167216745, 1634467795, 376229701, 2685067896, 3608007406, 1308918612, 956543938, 2808555105, 3495958263, 1231636301, 1047427035, 2932959818, 3654703836, 1088359270, 936918000, 2847714899, 3736837829, 1202900863, 817233897, 3183342108, 3401237130, 1404277552, 615818150, 3134207493, 3453421203, 1423857449, 601450431, 3009837614, 3294710456, 1567103746, 711928724, 3020668471, 3272380065, 1510334235, 755167117]).buffer);\n  var _5 = new _$1([0, 1996959894, 3993919788, 2567524794, 124634137, 1886057615, 3915621685, 2657392035, 249268274, 2044508324, 3772115230, 2547177864, 162941995, 2125561021, 3887607047, 2428444049, 498536548, 1789927666, 4089016648, 2227061214, 450548861, 1843258603, 4107580753, 2211677639, 325883990, 1684777152, 4251122042, 2321926636, 335633487, 1661365465, 4195302755, 2366115317, 997073096, 1281953886, 3579855332, 2724688242, 1006888145, 1258607687, 3524101629, 2768942443, 901097722, 1119000684, 3686517206, 2898065728, 853044451, 1172266101, 3705015759, 2882616665, 651767980, 1373503546, 3369554304, 3218104598, 565507253, 1454621731, 3485111705, 3099436303, 671266974, 1594198024, 3322730930, 2970347812, 795835527, 1483230225, 3244367275, 3060149565, 1994146192, 31158534, 2563907772, 4023717930, 1907459465, 112637215, 2680153253, 3904427059, 2013776290, 251722036, 2517215374, 3775830040, 2137656763, 141376813, 2439277719, 3865271297, 1802195444, 476864866, 2238001368, 4066508878, 1812370925, 453092731, 2181625025, 4111451223, 1706088902, 314042704, 2344532202, 4240017532, 1658658271, 366619977, 2362670323, 4224994405, 1303535960, 984961486, 2747007092, 3569037538, 1256170817, 1037604311, 2765210733, 3554079995, 1131014506, 879679996, 2909243462, 3663771856, 1141124467, 855842277, 2852801631, 3708648649, 1342533948, 654459306, 3188396048, 3373015174, 1466479909, 544179635, 3110523913, 3462522015, 1591671054, 702138776, 2966460450, 3352799412, 1504918807, 783551873, 3082640443, 3233442989, 3988292384, 2596254646, 62317068, 1957810842, 3939845945, 2647816111, 81470997, 1943803523, 3814918930, 2489596804, 225274430, 2053790376, 3826175755, 2466906013, 167816743, 2097651377, 4027552580, 2265490386, 503444072, 1762050814, 4150417245, 2154129355, 426522225, 1852507879, 4275313526, 2312317920, 282753626, 1742555852, 4189708143, 2394877945, 397917763, 1622183637, 3604390888, 2714866558, 953729732, 1340076626, 3518719985, 2797360999, 1068828381, 1219638859, 3624741850, 2936675148, 906185462, 1090812512, 3747672003, 2825379669, 829329135, 1181335161, 3412177804, 3160834842, 628085408, 1382605366, 3423369109, 3138078467, 570562233, 1426400815, 3317316542, 2998733608, 733239954, 1555261956, 3268935591, 3050360625, 752459403, 1541320221, 2607071920, 3965973030, 1969922972, 40735498, 2617837225, 3943577151, 1913087877, 83908371, 2512341634, 3803740692, 2075208622, 213261112, 2463272603, 3855990285, 2094854071, 198958881, 2262029012, 4057260610, 1759359992, 534414190, 2176718541, 4139329115, 1873836001, 414664567, 2282248934, 4279200368, 1711684554, 285281116, 2405801727, 4167216745, 1634467795, 376229701, 2685067896, 3608007406, 1308918612, 956543938, 2808555105, 3495958263, 1231636301, 1047427035, 2932959818, 3654703836, 1088359270, 936918000, 2847714899, 3736837829, 1202900863, 817233897, 3183342108, 3401237130, 1404277552, 615818150, 3134207493, 3453421203, 1423857449, 601450431, 3009837614, 3294710456, 1567103746, 711928724, 3020668471, 3272380065, 1510334235, 755167117, 0, 421212481, 842424962, 724390851, 1684849924, 2105013317, 1448781702, 1329698503, 3369699848, 3519200073, 4210026634, 3824474571, 2897563404, 3048111693, 2659397006, 2274893007, 1254232657, 1406739216, 2029285587, 1643069842, 783210325, 934667796, 479770071, 92505238, 2182846553, 2600511768, 2955803355, 2838940570, 3866582365, 4285295644, 3561045983, 3445231262, 2508465314, 2359236067, 2813478432, 3198777185, 4058571174, 3908292839, 3286139684, 3670389349, 1566420650, 1145479147, 1869335592, 1987116393, 959540142, 539646703, 185010476, 303839341, 3745920755, 3327985586, 3983561841, 4100678960, 3140154359, 2721170102, 2300350837, 2416418868, 396344571, 243568058, 631889529, 1018359608, 1945336319, 1793607870, 1103436669, 1490954812, 4034481925, 3915546180, 3259968903, 3679722694, 2484439553, 2366552896, 2787371139, 3208174018, 950060301, 565965900, 177645455, 328046286, 1556873225, 1171730760, 1861902987, 2011255754, 3132841300, 2745199637, 2290958294, 2442530455, 3738671184, 3352078609, 3974232786, 4126854035, 1919080284, 1803150877, 1079293406, 1498383519, 370020952, 253043481, 607678682, 1025720731, 1711106983, 2095471334, 1472923941, 1322268772, 26324643, 411738082, 866634785, 717028704, 2904875439, 3024081134, 2668790573, 2248782444, 3376948395, 3495106026, 4219356713, 3798300520, 792689142, 908347575, 487136116, 68299317, 1263779058, 1380486579, 2036719216, 1618931505, 3890672638, 4278043327, 3587215740, 3435896893, 2206873338, 2593195963, 2981909624, 2829542713, 998479947, 580430090, 162921161, 279890824, 1609522511, 1190423566, 1842954189, 1958874764, 4082766403, 3930137346, 3245109441, 3631694208, 2536953671, 2385372678, 2768287173, 3155920004, 1900120602, 1750776667, 1131931800, 1517083097, 355290910, 204897887, 656092572, 1040194781, 3113746450, 2692952403, 2343461520, 2461357009, 3723805974, 3304059991, 4022511508, 4141455061, 2919742697, 3072101800, 2620513899, 2234183466, 3396041197, 3547351212, 4166851439, 3779471918, 1725839073, 2143618976, 1424512099, 1307796770, 45282277, 464110244, 813994343, 698327078, 3838160568, 4259225593, 3606301754, 3488152955, 2158586812, 2578602749, 2996767038, 2877569151, 740041904, 889656817, 506086962, 120682355, 1215357364, 1366020341, 2051441462, 1667084919, 3422213966, 3538019855, 4190942668, 3772220557, 2945847882, 3062702859, 2644537544, 2226864521, 52649286, 439905287, 823476164, 672009861, 1733269570, 2119477507, 1434057408, 1281543041, 2167981343, 2552493150, 3004082077, 2853541596, 3847487515, 4233048410, 3613549209, 3464057816, 1239502615, 1358593622, 2077699477, 1657543892, 764250643, 882293586, 532408465, 111204816, 1585378284, 1197851309, 1816695150, 1968414767, 974272232, 587794345, 136598634, 289367339, 2527558116, 2411481253, 2760973158, 3179948583, 4073438432, 3956313505, 3237863010, 3655790371, 347922877, 229101820, 646611775, 1066513022, 1892689081, 1774917112, 1122387515, 1543337850, 3697634229, 3313392372, 3998419255, 4148705398, 3087642289, 2702352368, 2319436851, 2468674930, 0, 29518391, 59036782, 38190681, 118073564, 114017003, 76381362, 89069189, 236147128, 265370511, 228034006, 206958561, 152762724, 148411219, 178138378, 190596925, 472294256, 501532999, 530741022, 509615401, 456068012, 451764635, 413917122, 426358261, 305525448, 334993663, 296822438, 275991697, 356276756, 352202787, 381193850, 393929805, 944588512, 965684439, 1003065998, 973863097, 1061482044, 1049003019, 1019230802, 1023561829, 912136024, 933002607, 903529270, 874031361, 827834244, 815125939, 852716522, 856752605, 611050896, 631869351, 669987326, 640506825, 593644876, 580921211, 551983394, 556069653, 712553512, 733666847, 704405574, 675154545, 762387700, 749958851, 787859610, 792175277, 1889177024, 1901651959, 1931368878, 1927033753, 2006131996, 1985040171, 1947726194, 1976933189, 2122964088, 2135668303, 2098006038, 2093965857, 2038461604, 2017599123, 2047123658, 2076625661, 1824272048, 1836991623, 1866005214, 1861914857, 1807058540, 1786244187, 1748062722, 1777547317, 1655668488, 1668093247, 1630251878, 1625932113, 1705433044, 1684323811, 1713505210, 1742760333, 1222101792, 1226154263, 1263738702, 1251046777, 1339974652, 1310460363, 1281013650, 1301863845, 1187289752, 1191637167, 1161842422, 1149379777, 1103966788, 1074747507, 1112139306, 1133218845, 1425107024, 1429406311, 1467333694, 1454888457, 1408811148, 1379576507, 1350309090, 1371438805, 1524775400, 1528845279, 1499917702, 1487177649, 1575719220, 1546255107, 1584350554, 1605185389, 3778354048, 3774312887, 3803303918, 3816007129, 3862737756, 3892238699, 3854067506, 3833203973, 4012263992, 4007927823, 3970080342, 3982554209, 3895452388, 3924658387, 3953866378, 3932773565, 4245928176, 4241609415, 4271336606, 4283762345, 4196012076, 4225268251, 4187931714, 4166823541, 4076923208, 4072833919, 4035198246, 4047918865, 4094247316, 4123732899, 4153251322, 4132437965, 3648544096, 3636082519, 3673983246, 3678331705, 3732010428, 3753090955, 3723829714, 3694611429, 3614117080, 3601426159, 3572488374, 3576541825, 3496125444, 3516976691, 3555094634, 3525581405, 3311336976, 3298595879, 3336186494, 3340255305, 3260503756, 3281337595, 3251864226, 3222399125, 3410866088, 3398419871, 3368647622, 3372945905, 3427010420, 3448139075, 3485520666, 3456284973, 2444203584, 2423127159, 2452308526, 2481530905, 2527477404, 2539934891, 2502093554, 2497740997, 2679949304, 2659102159, 2620920726, 2650438049, 2562027300, 2574714131, 2603727690, 2599670141, 2374579504, 2353749767, 2383274334, 2412743529, 2323684844, 2336421851, 2298759554, 2294686645, 2207933576, 2186809023, 2149495014, 2178734801, 2224278612, 2236720739, 2266437690, 2262135309, 2850214048, 2820717207, 2858812622, 2879680249, 2934667388, 2938704459, 2909776914, 2897069605, 2817622296, 2788420399, 2759153014, 2780249921, 2700618180, 2704950259, 2742877610, 2730399645, 3049550800, 3020298727, 3057690558, 3078802825, 2999835404, 3004150075, 2974355298, 2961925461, 3151438440, 3121956959, 3092510214, 3113327665, 3168701108, 3172786307, 3210370778, 3197646061, 0, 3099354981, 2852767883, 313896942, 2405603159, 937357362, 627793884, 2648127673, 3316918511, 2097696650, 1874714724, 3607201537, 1255587768, 4067088605, 3772741427, 1482887254, 1343838111, 3903140090, 4195393300, 1118632049, 3749429448, 1741137837, 1970407491, 3452858150, 2511175536, 756094997, 1067759611, 2266550430, 449832999, 2725482306, 2965774508, 142231497, 2687676222, 412010587, 171665333, 2995192016, 793786473, 2548850444, 2237264098, 1038456711, 1703315409, 3711623348, 3482275674, 1999841343, 3940814982, 1381529571, 1089329165, 4166106984, 4029413537, 1217896388, 1512189994, 3802027855, 2135519222, 3354724499, 3577784189, 1845280792, 899665998, 2367928107, 2677414085, 657096608, 3137160985, 37822588, 284462994, 2823350519, 2601801789, 598228824, 824021174, 2309093331, 343330666, 2898962447, 3195996129, 113467524, 1587572946, 3860600759, 4104763481, 1276501820, 3519211397, 1769898208, 2076913422, 3279374443, 3406630818, 1941006535, 1627703081, 3652755532, 1148164341, 4241751952, 3999682686, 1457141531, 247015245, 3053797416, 2763059142, 470583459, 2178658330, 963106687, 735213713, 2473467892, 992409347, 2207944806, 2435792776, 697522413, 3024379988, 217581361, 508405983, 2800865210, 4271038444, 1177467017, 1419450215, 3962007554, 1911572667, 3377213406, 3690561584, 1665525589, 1799331996, 3548628985, 3241568279, 2039091058, 3831314379, 1558270126, 1314193216, 4142438437, 2928380019, 372764438, 75645176, 3158189981, 568925988, 2572515393, 2346768303, 861712586, 3982079547, 1441124702, 1196457648, 4293663189, 1648042348, 3666298377, 3358779879, 1888390786, 686661332, 2421291441, 2196002399, 978858298, 2811169155, 523464422, 226935048, 3040519789, 3175145892, 100435649, 390670639, 2952089162, 841119475, 2325614998, 2553003640, 546822429, 2029308235, 3225988654, 3539796416, 1782671013, 4153826844, 1328167289, 1570739863, 3844338162, 1298864389, 4124540512, 3882013070, 1608431339, 3255406162, 2058742071, 1744848601, 3501990332, 2296328682, 811816591, 584513889, 2590678532, 129869501, 3204563416, 2914283062, 352848211, 494030490, 2781751807, 3078325777, 264757620, 2450577869, 715964072, 941166918, 2158327331, 3636881013, 1618608400, 1926213374, 3396585883, 1470427426, 4011365959, 4255988137, 1158766284, 1984818694, 3471935843, 3695453837, 1693991400, 4180638033, 1100160564, 1395044826, 3952793279, 3019491049, 189112716, 435162722, 2706139399, 1016811966, 2217162459, 2526189877, 774831696, 643086745, 2666061564, 2354934034, 887166583, 2838900430, 294275499, 54519365, 3145957664, 3823145334, 1532818963, 1240029693, 4048895640, 1820460577, 3560857924, 3331051178, 2117577167, 3598663992, 1858283101, 2088143283, 3301633750, 1495127663, 3785470218, 4078182116, 1269332353, 332098007, 2876706482, 3116540252, 25085497, 2628386432, 605395429, 916469259, 2384220526, 2254837415, 1054503362, 745528876, 2496903497, 151290352, 2981684885, 2735556987, 464596510, 1137851976, 4218313005, 3923506883, 1365741990, 3434129695, 1946996346, 1723425172, 3724871409]).buffer;\n  var _3 = [new _$2(_5, 1024, 256), new _$2(_5, 2048, 256), new _$2(_5, 3072)];\n  _$0.TT = _3;\n\n  _$0.crc = function (s) {\n    var c = -1;\n\n    for (var i = 0; i < s.length; i++) c = c >>> 8 ^ T0[(c ^ s.charCodeAt(i)) & 0xff];\n\n    return ~c >>> 0;\n  };\n\n  _$0.views = _3;\n}).call(this);\n",
+    "stderr": ""
+   },
+   "hybrid": {
+    "label": "Hybrid",
+    "command": "hybrid.js hyb-tables.js",
+    "exitCode": 0,
+    "ms": 447,
+    "stdout": "(function(__h$g) {\n  var __h$dp = Object.defineProperty;\n  var __h$0 = (function(){var T0=(function(){\nvar t=new Int32Array(256);\nfor(var n=0;n<256;n++){\nvar c=n;\nfor(var k=0;k<8;k++)c=c&1?-306674912^(c>>>1):c>>>1;\nt[n]=c;\n}\nreturn t;\n})();\nvar TT=(function(){\nvar table=new Int32Array(1024);\nfor(var n=0;n<256;n++)table[n]=T0[n];\nfor(n=0;n<256;n++){\nvar v=T0[n];\nfor(var c=256+n;c<1024;c+=256)v=table[c]=(v>>>8)^T0[v&0xff];\n}\nvar out=[];\nfor(n=1;n<4;n++)out[n-1]=table.subarray(n*256,n*256+256);\nreturn out;\n})();;return [T0.buffer,TT[0].buffer];})();\n  var __h$1 = __h$0[1];\n  var __h$2 = (0,\nfunction (s) {\n  var c = -1;\n  for (var i = 0; i < s.length; i++) c = (c >>> 8) ^ T0[(c ^ s.charCodeAt(i)) & 0xff];\n  return ~c >>> 0;\n}\n);\n  var __h$3 = [new Int32Array(__h$1, 1024, 256), new Int32Array(__h$1, 2048, 256), new Int32Array(__h$1, 3072, 256)];\n  __h$dp(__h$g, \"T0\", { value: new Int32Array(__h$0[0], 0, 256), writable: true, enumerable: true, configurable: false });\n  __h$dp(__h$g, \"TT\", { value: __h$3, writable: true, enumerable: true, configurable: false });\n  __h$g.crc = __h$2;\n  __h$g.views = __h$3;\n})(typeof globalThis !== \"undefined\" ? globalThis : this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "crc(\"hello\"), views[2][7], views share one buffer",
+    "original": {
+     "ok": true,
+     "value": "3610a686,-1646839623,3072"
+    },
+    "orig": {
+     "ok": false,
+     "value": "ReferenceError: globalThis is not defined"
+    },
+    "revived": {
+     "ok": true,
+     "value": "3610a686,-1646839623,3072"
+    },
+    "hybrid": {
+     "ok": true,
+     "value": "3610a686,-1646839623,3072"
+    }
+   }
+  ]
+ },
+ "hyb-handlebars": {
+  "input": "(function () {\n  if (typeof globalThis === \"object\") return;\n  Object.prototype.__defineGetter__(\"__magic__\", function () {\n    return this;\n  });\n  __magic__.globalThis = __magic__;\n  delete Object.prototype.__magic__;\n})();\n\nglobalThis.HandlebarsMini = {\n  VERSION: \"4.7.10\",\n  escapeExpression: function (s) {\n    return String(s).replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\");\n  },\n};\n",
+  "inputName": "hyb-handlebars.js",
+  "tools": {
+   "orig": {
+    "label": "Prepack 0.2.54",
+    "command": "prepack-cli.js hyb-handlebars.js",
+    "exitCode": 0,
+    "ms": 309,
+    "stdout": "(function () {\n  var $$0 = {\n    enumerable: false,\n    configurable: true,\n    writable: true\n  };\n  var _$0 = this;\n  var _$1 = _$0.TypeError;\n  var _$2 = _$1.prototype;\n  var _$3 = _$0.Object;\n  var _$4 = _$3.defineProperty;\n  var __constructor = function () {};\n  var _3 = _$2;\n  var _0 = (__constructor.prototype = _3, new __constructor());\n  $$0.value = \"not an object\", _$4(_0, \"message\", $$0);\n  $$0.value = \"TypeError: not an object\\n    at hyb-handlebars.js:3:50\\n    at hyb-handlebars.js:1:1\", _$4(_0, \"stack\", $$0);\n  throw _0;\n}).call(this);\n",
+    "stderr": "In input file hyb-handlebars.js(3:50) Warning PP0023: Program may terminate with exception: not an object\n  TypeError: not an object\n    at hyb-handlebars.js:3:50\n    at hyb-handlebars.js:1:1 (https://github.com/facebook/prepack/wiki/PP0023)\n    \nPrepack succeeded, reporting 1 warning.\n"
+   },
+   "revived": {
+    "label": "Revived Prepack",
+    "command": "prepack-cli.js hyb-handlebars.js",
+    "exitCode": 0,
+    "ms": 350,
+    "stdout": "(function () {\n  var _$0 = this;\n\n  _$0.HandlebarsMini = {\n    VERSION: \"4.7.10\",\n    escapeExpression: function (s) {\n      return String(s).replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\");\n    }\n  };\n}).call(this);\n",
+    "stderr": ""
+   },
+   "hybrid": {
+    "label": "Hybrid",
+    "command": "hybrid.js hyb-handlebars.js",
+    "exitCode": 0,
+    "ms": 439,
+    "stdout": "(function(__h$g) {\n  var __h$0; { const escapeExpression = (\nfunction (s) {\n    return String(s).replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\");\n  }\n); __h$0 = escapeExpression; }\n  var __h$1 = { VERSION: \"4.7.10\", escapeExpression: __h$0 };\n  __h$g.HandlebarsMini = __h$1;\n})(typeof globalThis !== \"undefined\" ? globalThis : this);\n",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "HandlebarsMini",
+    "original": {
+     "ok": true,
+     "value": "4.7.10 a&amp;&lt;b>"
+    },
+    "orig": {
+     "ok": false,
+     "value": "TypeError: not an object"
+    },
+    "revived": {
+     "ok": true,
+     "value": "4.7.10 a&amp;&lt;b>"
+    },
+    "hybrid": {
+     "ok": true,
+     "value": "4.7.10 a&amp;&lt;b>"
+    }
+   }
+  ]
+ },
+ "hyb-guard": {
+  "input": "var root = typeof window !== \"undefined\" ? window : globalThis;\nvar isNode = typeof process !== \"undefined\" && process.versions != null;\nvar settings = {\n  platform: isNode ? \"node\" : \"browser\",\n  storage: typeof localStorage !== \"undefined\" ? \"local\" : \"memory\",\n};\nroot.Settings = settings;\n",
+  "inputName": "hyb-guard.js",
+  "tools": {
+   "hybrid": {
+    "label": "Hybrid",
+    "command": "hybrid.js hyb-guard.js",
+    "exitCode": 0,
+    "ms": 197,
+    "stdout": "if (!(\"window\" in globalThis && typeof window === \"object\" && window === globalThis && !(\"process\" in globalThis) && !(\"localStorage\" in globalThis))) {\n  (function () {\nvar root=typeof window!==\"undefined\"?window:globalThis;\nvar isNode=typeof process!==\"undefined\"&&process.versions!=null;\nvar settings={\nplatform:isNode?\"node\":\"browser\",\nstorage:typeof localStorage!==\"undefined\"?\"local\":\"memory\",\n};\nroot.Settings=settings;\n}).call(this);\n} else {\n(function(__h$g) {\n  var __h$dp = Object.defineProperty;\n  var __h$0 = { platform: \"browser\", storage: \"memory\" };\n  __h$dp(__h$g, \"root\", { value: __h$g, writable: true, enumerable: true, configurable: false });\n  __h$dp(__h$g, \"isNode\", { value: false, writable: true, enumerable: true, configurable: false });\n  __h$dp(__h$g, \"settings\", { value: __h$0, writable: true, enumerable: true, configurable: false });\n  __h$g.Settings = __h$0;\n})(typeof globalThis !== \"undefined\" ? globalThis : this);\n\n}",
+    "stderr": ""
+   }
+  },
+  "probes": [
+   {
+    "label": "browser-like host (window, no process)",
+    "original": {
+     "ok": true,
+     "value": "{ platform: 'browser', storage: 'memory' }"
+    },
+    "hybrid": {
+     "ok": true,
+     "value": "{ platform: 'browser', storage: 'memory' }"
+    }
+   },
+   {
+    "label": "Node (process present)",
+    "original": {
+     "ok": true,
+     "value": "{ platform: 'node', storage: 'memory' }"
+    },
+    "hybrid": {
+     "ok": true,
+     "value": "{ platform: 'node', storage: 'memory' }"
+    }
+   }
+  ]
+ }
+}

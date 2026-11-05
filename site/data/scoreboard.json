@@ -1,0 +1,2353 @@
+{
+ "orig": {
+  "prepack": "pp-lab/0.2.54",
+  "node": "v26.7.0",
+  "date": "2026-11-05T19:17:26.034Z",
+  "summary": {
+   "PASS": 40,
+   "CRASH": 96,
+   "WRONG": 43,
+   "BLOAT": 15
+  },
+  "results": [
+   {
+    "test": "P1-loops/collatz-data-dependent.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/do-while-build-object.js",
+    "problem": "P1",
+    "status": "WRONG",
+    "detail": "expected \"[{\\\"first\\\":true,\\\"k0\\\":0,\\\"count\\\":1},{\\\"first\\\":true,\\\"k0\\\":0,\\\"k1\\\":1,\\\"k2\\\":4,\\\"count\\\":3},{\\\"first\\\":true,\\\"k0\\\":0,\\\"k1\\\":1,\\\"k2\\\":4,\\\"k3\\\":9,\\\"k"
+   },
+   {
+    "test": "P1-loops/for-in-unknown-object.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0013: for in loops over unknown objects are not yet supported"
+   },
+   {
+    "test": "P1-loops/gcd-while-two-vars.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/issue-1174-global-unknown-bound.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value (7)"
+   },
+   {
+    "test": "P1-loops/issue-1174-unknown-bound-counter.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/issue-1722-state-before-loop.js",
+    "problem": "P1",
+    "status": "WRONG",
+    "detail": "expected \"{\\\"0\\\":\\\"a\\\",\\\"1\\\":\\\"b\\\",\\\"2\\\":\\\"x\\\",\\\"3\\\":\\\"x\\\",\\\"4\\\":\\\"x\\\"} i=5\" got \"{\\\"3\\\":\\\"x\\\",\\\"4\\\":\\\"x\\\",\\\"5\\\":\\\"x\\\"} i=5\""
+   },
+   {
+    "test": "P1-loops/issue-1959-shallow-equal.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: ; FatalError PP0037: failed to recover from a for/while loop bail-out due to unsupported logic in loop body"
+   },
+   {
+    "test": "P1-loops/issue-2053-babel-for-of.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: ; FatalError PP0035: break, throw or return cannot be guarded by abstract condition"
+   },
+   {
+    "test": "P1-loops/issue-2055-while-string-search.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/issue-2396-while-pure.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/issue-2396-while-return.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/issue-2477-babel-for-of-switch-return.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001:  (x2); FatalError PP0037: failed to recover from a for/while loop bail-out due to unsupported logic in loop body"
+   },
+   {
+    "test": "P1-loops/labeled-continue-nested.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: ; FatalError PP0037: failed to recover from a for/while loop bail-out due to unsupported logic in loop body"
+   },
+   {
+    "test": "P1-loops/loop-break-in-optimize.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/loop-return-in-optimize.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: ; FatalError PP0037: failed to recover from a for/while loop bail-out due to unsupported logic in loop body"
+   },
+   {
+    "test": "P1-loops/loop-string-accumulator.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/loop-throw-in-optimize.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: ; FatalError PP0037: failed to recover from a for/while loop bail-out due to unsupported logic in loop body"
+   },
+   {
+    "test": "P1-loops/loop-writes-known-object-unknown-keys.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/nested-loops-unknown-bounds.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P1-loops/while-string-trim-global.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0030: unknown property access might need to invoke a getter; FatalError PP0001: This operation is not yet supported on abstract values (\"hell"
+   },
+   {
+    "test": "P2-recursion/concrete-recursion-under-abstract-cond.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/deep-clone.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P2-recursion/descent-parser.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0045: Maximum stack depth exceeded (x2); FatalError PP0001:  (x74)"
+   },
+   {
+    "test": "P2-recursion/factorial-under-condition.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0045: Maximum stack depth exceeded"
+   },
+   {
+    "test": "P2-recursion/fib-optimized.js",
+    "status": "CRASH",
+    "detail": "timeout after 30000ms"
+   },
+   {
+    "test": "P2-recursion/flatten-recursive.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P2-recursion/gcd-recursive.js",
+    "status": "CRASH",
+    "detail": "timeout after 30000ms"
+   },
+   {
+    "test": "P2-recursion/issue-1586-fibonacci-abstract.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0045: Maximum stack depth exceeded"
+   },
+   {
+    "test": "P2-recursion/issue-543-fib-date-now.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/mutual-recursion-even-odd.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0045: Maximum stack depth exceeded"
+   },
+   {
+    "test": "P2-recursion/recursive-path-lookup.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0045: Maximum stack depth exceeded"
+   },
+   {
+    "test": "P2-recursion/tree-depth.js",
+    "problem": "P2",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P2-recursion/tree-walk-sum.js",
+    "status": "CRASH",
+    "detail": "timeout after 30000ms"
+   },
+   {
+    "test": "P3-joins/catch-rethrow-abstract.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0021: Possible throw inside try/catch is not yet supported (x2)"
+   },
+   {
+    "test": "P3-joins/fuzz-nested-conditional-assign-return.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/fuzz-returns-counters.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/global-conditional-throw-then-work.js",
+    "problem": "P3",
+    "status": "BLOAT",
+    "detail": "output 1169B is 3.39x input 345B (max 2x)"
+   },
+   {
+    "test": "P3-joins/issue-1378-switch-abstract.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-1378-switch-fallthrough.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value"
+   },
+   {
+    "test": "P3-joins/issue-1869-duplicate-console-log.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2120-havoced-object-access-throws.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"7,42,42\" got \"Error: no\""
+   },
+   {
+    "test": "P3-joins/issue-2120-try-catch-abstract-call.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0021: Possible throw inside try/catch is not yet supported"
+   },
+   {
+    "test": "P3-joins/issue-2354-multiple-returns.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"false,true,false,true,false,true,false,false|falsetrue\" got \"false,true,false,true,false,true,false,false|NaNx\""
+   },
+   {
+    "test": "P3-joins/issue-2363-possibly-normal-completion.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2363-with-values.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2561-throw-before-constructor.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value (true)"
+   },
+   {
+    "test": "P3-joins/labeled-block-break-global.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/labeled-block-break.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"start,start-1,start-1-2\" got \"start-1-2,start-1-2,start-1-2\""
+   },
+   {
+    "test": "P3-joins/nested-returns-side-effects.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P3-joins/return-in-nested-function-conditional-objects.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"[{\\\"kind\\\":\\\"A\\\"},{\\\"kind\\\":\\\"A\\\",\\\"touched\\\":true},{\\\"kind\\\":\\\"B\\\",\\\"touched\\\":true,\\\"extra\\\":1},{\\\"kind\\\":\\\"B\\\",\\\"touched\\\":true}]\" got \"[{\\\"kind\\\":"
+   },
+   {
+    "test": "P3-joins/short-circuit-abstract-calls.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/switch-global-abstract.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/throw-in-constructor.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0021: Possible throw inside try/catch is not yet supported (x6)"
+   },
+   {
+    "test": "P3-joins/try-finally-return-abstract.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0021: Possible throw inside try/catch is not yet supported (x2)"
+   },
+   {
+    "test": "P4-paths/comparison-chain-numbers.js",
+    "problem": "P4",
+    "status": "BLOAT",
+    "detail": "output 505B is 2.03x input 249B (max 2x)"
+   },
+   {
+    "test": "P4-paths/de-morgan-mixed-types.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/equality-refinement.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/infeasible-branch-pruning.js",
+    "problem": "P4",
+    "status": "BLOAT",
+    "detail": "contains \"unreachable\""
+   },
+   {
+    "test": "P4-paths/issue-2327-simplify-binary.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2355-truthiness-return.js",
+    "problem": "P4",
+    "status": "WRONG",
+    "detail": "expected \"true,false,false,true,false,false,false,true\" got \"1,0,,x,,,NaN,[object Object]\""
+   },
+   {
+    "test": "P4-paths/issue-2361-pushing-false.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2563-undefined-not-null.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2564-null-not-undefined.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/nested-ternary-falsy-values.js",
+    "problem": "P4",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P4-paths/null-check-then-property.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/repeated-condition-reuse.js",
+    "problem": "P4",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P4-paths/truthiness-ternary-mixed.js",
+    "problem": "P4",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P4-paths/typeof-refinement.js",
+    "problem": "P4",
+    "status": "BLOAT",
+    "detail": "output 811B is 2.08x input 389B (max 2x)"
+   },
+   {
+    "test": "P5-ranges/clamp-then-loop.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P5-ranges/conditional-index-write.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value"
+   },
+   {
+    "test": "P5-ranges/conditional-pop-length-arith.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P5-ranges/conditional-push-global-many-unique-names.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value (true)"
+   },
+   {
+    "test": "P5-ranges/conditional-push-global-many.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0019: An abstract value with the same name exists"
+   },
+   {
+    "test": "P5-ranges/conditional-push-last-element.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P5-ranges/conditional-push-optimized.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P5-ranges/issue-1066-conditional-push.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value (true)"
+   },
+   {
+    "test": "P5-ranges/masked-index-lookup.js",
+    "problem": "P5",
+    "status": "BLOAT",
+    "detail": "output 434B is 2.54x input 171B (max 2x)"
+   },
+   {
+    "test": "P5-ranges/string-length-range.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/abstract-fn-leaks-global-object.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0017: Unfrozen object leaked before end of global code"
+   },
+   {
+    "test": "P6-havoc/aliasing-two-params.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/array-filter-callback-mutates-local.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/getter-on-abstract-object.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-1750-lazy-cache.js",
+    "problem": "P6",
+    "status": "WRONG",
+    "detail": "expected \"a1,a2,b1,a3\" got \"a1,a1,b1,a1\""
+   },
+   {
+    "test": "P6-havoc/issue-1750-lazy-singleton.js",
+    "problem": "P6",
+    "status": "WRONG",
+    "detail": "expected \"true:1:1\" got \"false:1:1\""
+   },
+   {
+    "test": "P6-havoc/issue-2011-leaked-binding.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2012-havoc-binding-capture.js",
+    "problem": "P6",
+    "status": "BLOAT",
+    "detail": "output 730B is 2.53x input 289B (max 2x)"
+   },
+   {
+    "test": "P6-havoc/issue-2179-topval-alias.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2226-setter-on-prototype.js",
+    "problem": "P6",
+    "status": "BLOAT",
+    "detail": "output 748B is 2.8x input 267B (max 2x)"
+   },
+   {
+    "test": "P6-havoc/issue-2319-indexof.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2319-json-stringify-local.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P6-havoc/issue-2319-math-abs.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "FatalError PP0001:  (x7)"
+   },
+   {
+    "test": "P6-havoc/issue-2319-parseint.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P6-havoc/issue-2319-regexp-test.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P6-havoc/issue-977-read-write-conflict.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/object-keys-loop-over-param.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "P6-havoc/object-passed-to-unknown-fn.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/unknown-fn-mutates-captured-binding.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/date-local-timezone.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"1577817000000,-330\" got \"1577836800000,0\""
+   },
+   {
+    "test": "P7-environment/date-now-typeof.js",
+    "problem": "P7",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value"
+   },
+   {
+    "test": "P7-environment/dom-build-tree-at-init.js",
+    "problem": "P7",
+    "status": "CRASH",
+    "detail": "FatalError PP0012: member expression object abstract value document  is unknown"
+   },
+   {
+    "test": "P7-environment/dom-get-element-by-id.js",
+    "problem": "P7",
+    "status": "CRASH",
+    "detail": "FatalError PP0012: member expression object abstract value document  is unknown"
+   },
+   {
+    "test": "P7-environment/guarded-speculation-fallback.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"1577817000000,-330\" got \"1577836800000,0\""
+   },
+   {
+    "test": "P7-environment/guarded-speculation-holds.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"prod,1577817000000,-330\" got \"ReferenceError: process is not defined\""
+   },
+   {
+    "test": "P7-environment/intl-number-format.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"1.234,5\" got \"n/a\""
+   },
+   {
+    "test": "P7-environment/local-storage-init.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"5,0\" got \"ReferenceError: localStorage is not defined\""
+   },
+   {
+    "test": "P7-environment/math-random-init.js",
+    "problem": "P7",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value"
+   },
+   {
+    "test": "P7-environment/navigator-user-agent.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"{\\\"isMac\\\":true,\\\"isWindows\\\":false,\\\"lang\\\":\\\"en\\\"}Cmd\" got \"ReferenceError: navigator is not defined\""
+   },
+   {
+    "test": "P7-environment/node-require-module.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"src/lib/a/b\" got \"ReferenceError: require is not defined\""
+   },
+   {
+    "test": "P7-environment/number-to-locale-string.js",
+    "problem": "P7",
+    "status": "CRASH",
+    "detail": "FatalError: TODO #1005: implement Date.prototype.toLocaleDateString"
+   },
+   {
+    "test": "P7-environment/process-env-branch.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"{\\\"minify\\\":true,\\\"logLevel\\\":\\\"debug\\\"}\" got \"ReferenceError: process is not defined\""
+   },
+   {
+    "test": "P7-environment/react-dom-vendor-prefix-init.js",
+    "problem": "P7",
+    "status": "CRASH",
+    "detail": "FatalError PP0012: member expression object abstract value document  is unknown"
+   },
+   {
+    "test": "P7-environment/request-animation-frame.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"frame@1620px\" got \"ReferenceError: requestAnimationFrame is not defined\""
+   },
+   {
+    "test": "P7-environment/timers-set-interval-count.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/timers-set-timeout-order.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/umd-three-way-probe.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"sum=60\" got \"TypeError: module.exports.format is not a function\""
+   },
+   {
+    "test": "P7-environment/window-global-alias.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"api:true\" got \"api:false\""
+   },
+   {
+    "test": "P8-size/crc32-table.js",
+    "problem": "P8",
+    "status": "BLOAT",
+    "detail": "output 3053B is 9.25x input 330B (max 2x)"
+   },
+   {
+    "test": "P8-size/issue-2011-binding-writes.js",
+    "problem": "P8",
+    "status": "BLOAT",
+    "detail": "output 326B is 1.83x input 178B (max 1.5x)"
+   },
+   {
+    "test": "P8-size/issue-2140-inlining-explosion.js",
+    "problem": "P8",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0008: might be a symbol or an object with an unknown valueOf or toString or Symbol.toPrimitive method (x8); FatalError PP0001: "
+   },
+   {
+    "test": "P8-size/issue-2220-empty-if.js",
+    "problem": "P8",
+    "status": "BLOAT",
+    "detail": "contains \"{}\""
+   },
+   {
+    "test": "P8-size/issue-2286-cse-effectful.js",
+    "problem": "P8",
+    "status": "BLOAT",
+    "detail": "output 236B is 1.58x input 149B (max 1.5x)"
+   },
+   {
+    "test": "P8-size/repeated-defaults-objects.js",
+    "problem": "P8",
+    "status": "BLOAT",
+    "detail": "output 1835B is 6.33x input 290B (max 2x)"
+   },
+   {
+    "test": "P8-size/residual-closure-drags-code.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/string-builder-unrolled.js",
+    "problem": "P8",
+    "status": "BLOAT",
+    "detail": "output 769B is 5.57x input 138B (max 2x)"
+   },
+   {
+    "test": "P8-size/unrolled-table-1000.js",
+    "problem": "P8",
+    "status": "BLOAT",
+    "detail": "output 12105B is 70.79x input 171B (max 2x)"
+   },
+   {
+    "test": "P9-generators-async/async-function-defined-at-init.js",
+    "problem": "P9",
+    "status": "WRONG",
+    "detail": "expected \"object,function,object,function\" got \"number,undefined,number,undefined\""
+   },
+   {
+    "test": "P9-generators-async/generator-function-defined-not-called.js",
+    "problem": "P9",
+    "status": "WRONG",
+    "detail": "expected \"0,1,2\" got \"SyntaxError: Unexpected identifier 'i'\""
+   },
+   {
+    "test": "P9-generators-async/generator-suspended-at-init.js",
+    "problem": "P9",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "P9-generators-async/promise-then-at-init.js",
+    "problem": "P9",
+    "status": "WRONG",
+    "detail": "expected \"2,then-ok\" got \"pending,then-throws\""
+   },
+   {
+    "test": "fuzz/array-abstract-index-set-length.js",
+    "problem": "P6",
+    "status": "WRONG",
+    "detail": "expected \"1,2,5,1\" got \"1,1,1,1\""
+   },
+   {
+    "test": "fuzz/call-after-nested-returns.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"0,0,0,0,undefined,undefined,undefined,0\" got \"0,0,0,0,0,0,undefined,0\""
+   },
+   {
+    "test": "fuzz/composed-saved-completion-labeled-break.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"done,0,throw:RangeError,throw:TypeError,done\" got \"throw:RangeError,0,throw:RangeError,throw:TypeError,done\""
+   },
+   {
+    "test": "fuzz/conditional-call-base-nullish.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"42,throw:TypeError,throw:TypeError\" got \"42,null,undefined\""
+   },
+   {
+    "test": "fuzz/conditional-inner-throw-outer-alternate.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"outer,outer,outer,outer,0,0,throw:boom\" got \"0,0,0,0,0,0,throw:boom\""
+   },
+   {
+    "test": "fuzz/conditional-nested-temporal-scope.js",
+    "problem": "P4",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "fuzz/conditional-null-check-negation.js",
+    "problem": "P4",
+    "status": "WRONG",
+    "detail": "expected \"true,false,true,true,true,false,true,true|true,false,true,true,true,false,true,true\" got \"false,false,true,true,false,false,false,false|false,false,tr"
+   },
+   {
+    "test": "fuzz/conditional-push-while-join-mismatch.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "Invariant Violation: serialized 21 of 23"
+   },
+   {
+    "test": "fuzz/conditional-unknown-write-empty-to-undefined.js",
+    "problem": "P8",
+    "status": "WRONG",
+    "detail": "expected \"[[[\\\"p1\\\"],true,\\\"undefined\\\"],[[\\\"length\\\",\\\"p1\\\"],true,\\\"undefined\\\"],[[\\\"q\\\",\\\"p1\\\"],true,\\\"undefined\\\"]]\" got \"[[[\\\"p1\\\"],true,\\\"undefined\\\"],[[\\\""
+   },
+   {
+    "test": "fuzz/dead-if-hoisted-var.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"[\\\"undefined\\\",null,null]\" got \"ReferenceError: x is not defined\""
+   },
+   {
+    "test": "fuzz/delete-abstract-coercible-base.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/do-while-break-abrupt-widen.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "Invariant Violation: if a loop iteration ends abruptly, there is no need for fixed point computation"
+   },
+   {
+    "test": "fuzz/do-while-emitter-active-generator.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/do-while-false-abrupt.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"throw:body,early,throw:boom,no-throw,late,test-ok,throw:body,early,throw:boom,no-throw,late,test-ok\" got \"no-throw,late,test-ok,no-throw,late,test-ok,"
+   },
+   {
+    "test": "fuzz/do-while-object-emitter.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/do-while-object-hoisted-param.js",
+    "problem": "P1",
+    "status": "WRONG",
+    "detail": "expected \"42\" got \"ReferenceError: a is not defined\""
+   },
+   {
+    "test": "fuzz/for-in-continue-return-join.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"0,3,0,0,2\" got \"0,0,0,0,0\""
+   },
+   {
+    "test": "fuzz/infeasible-path-explored-crash.js",
+    "problem": "P4",
+    "status": "CRASH",
+    "detail": "Error: Infeasible path explored"
+   },
+   {
+    "test": "fuzz/inlining-probe-nullish-arg.js",
+    "problem": "P8",
+    "status": "CRASH",
+    "detail": "FatalError PP0001:  (x2)"
+   },
+   {
+    "test": "fuzz/labeled-break-before-throw-call.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/labeled-break-skips-code-after-block.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"called:true,called:false,called:1,called:0\" got \"undefined,called:false,undefined,called:0\""
+   },
+   {
+    "test": "fuzz/leaked-binding-declared-across-passes.js",
+    "problem": "P8",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0008: might be a symbol or an object with an unknown valueOf or toString or Symbol.toPrimitive method (x2); FatalError PP0001: "
+   },
+   {
+    "test": "fuzz/leaked-object-in-operator.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "fuzz/loop-null-check-path-condition.js",
+    "problem": "P4",
+    "status": "CRASH",
+    "detail": "Invariant Violation: assuming that false equals true is asking for trouble"
+   },
+   {
+    "test": "fuzz/map-cases-path-condition-leak.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: ; FatalError PP0037: failed to recover from a for/while loop bail-out due to unsupported logic in loop body"
+   },
+   {
+    "test": "fuzz/merged-join-uses-earlier-declared-value.js",
+    "problem": "P8",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "fuzz/nested-try-leaked-object-mutation.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0021: Possible throw inside try/catch is not yet supported (x2)"
+   },
+   {
+    "test": "fuzz/not-nullish-falsy-logical.js",
+    "problem": "P4",
+    "status": "WRONG",
+    "detail": "expected \"nullish,nullish,0,,false,NaN,true\" got \"nullish,nullish,true,true,true,true,true\""
+   },
+   {
+    "test": "fuzz/path-implies-both-true-visitor.js",
+    "problem": "P4",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/primitive-receiver-strict-set.js",
+    "problem": "P6",
+    "status": "WRONG",
+    "detail": "expected \"throw:TypeError,throw:TypeError,throw:TypeError,throw:RangeError,ok,ok,throw:RangeError|log=2\" got \"ok,ok,throw:TypeError,throw:RangeError,ok,throw:Ty"
+   },
+   {
+    "test": "fuzz/pure-unary-coercion-throws.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0008: might be a symbol or an object with an unknown valueOf or toString or Symbol.toPrimitive method (x2)"
+   },
+   {
+    "test": "fuzz/residual-loop-closure-mutated-param.js",
+    "problem": "P1",
+    "status": "WRONG",
+    "detail": "expected \"throw:TypeError,NaN\" got \"throw:TypeError,abc1\""
+   },
+   {
+    "test": "fuzz/switch-empty-nan-discriminant.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/switch-hoisted-var-loop.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/switch-nested-abrupt-default.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/throw-before-try-catch-finally.js",
+    "problem": "P3",
+    "status": "WRONG",
+    "detail": "expected \"throw:before,ok,throw:before,ok,finally,throw:before,swallowed\" got \"caught:before,ok,throw:before,ok,finally+finally,swallowed,swallowed\""
+   },
+   {
+    "test": "fuzz/throw-in-call-argument-join.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "fuzz/unknown-key-write-property-order.js",
+    "problem": "P8",
+    "status": "CRASH",
+    "detail": "FatalError PP0001:  (x2)"
+   },
+   {
+    "test": "fuzz/unknown-property-concrete-get-partial.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/unknown-property-concrete-get.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "fuzz/unused-in-non-object-throws.js",
+    "problem": "P6",
+    "status": "WRONG",
+    "detail": "expected \"throw:TypeError,throw:TypeError,throw:TypeError,1,1\" got \"1,1,1,1,1\""
+   },
+   {
+    "test": "fuzz/unused-property-read-throws.js",
+    "problem": "P6",
+    "status": "WRONG",
+    "detail": "expected \"throw:TypeError,throw:TypeError,1,1,1,1,throw:getter|getterRan=1\" got \"1,1,1,1,1,1,1|getterRan=0\""
+   },
+   {
+    "test": "fuzz/update-expression-string.js",
+    "problem": "P4",
+    "status": "WRONG",
+    "detail": "expected \"1,1,NaN,1,NaN,2\" got \"1,01,a1,1,NaN,2\""
+   },
+   {
+    "test": "fuzz/widen-nested-loop-in-helper.js",
+    "problem": "P1",
+    "status": "CRASH",
+    "detail": "Invariant Violation: "
+   },
+   {
+    "test": "real-world/babel-class-hierarchy.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/config-parser-concrete.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/config-parser-env-override.js",
+    "problem": "real-world",
+    "status": "CRASH",
+    "detail": "FatalError PP0031: property access on unknown object"
+   },
+   {
+    "test": "real-world/event-emitter-init.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/i18n-plural-rules.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/lodash-init.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/lookup-table-char-classes.js",
+    "problem": "real-world",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: "
+   },
+   {
+    "test": "real-world/module-system.js",
+    "problem": "real-world",
+    "status": "BLOAT",
+    "detail": "output 2207B is 2.04x input 1080B (max 2x)"
+   },
+   {
+    "test": "real-world/react-like-render.js",
+    "problem": "real-world",
+    "status": "CRASH",
+    "detail": "FatalError PP0001:  (x4)"
+   },
+   {
+    "test": "real-world/template-compiler.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/template-render-optimized.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/url-router.js",
+    "problem": "real-world",
+    "status": "CRASH",
+    "detail": "FatalError PP0001:  (x5)"
+   },
+   {
+    "test": "real-world-libs/crc32-sequential-loop-leaked-typedarray.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/d3-internmap-class-extends-map.js",
+    "problem": "serializer",
+    "status": "CRASH",
+    "detail": "Invariant Violation: serialized 7 of 8"
+   },
+   {
+    "test": "real-world-libs/d3-scale-default-param-factory.js",
+    "problem": "P8",
+    "status": "CRASH",
+    "detail": "FatalError: TODO: do not know how to deal with non-Identifier parameters"
+   },
+   {
+    "test": "real-world-libs/handlebars-globalthis-definegetter.js",
+    "problem": "P7",
+    "status": "WRONG",
+    "detail": "expected \"4.7.10:a&amp;&lt;b>\" got \"TypeError: not an object\""
+   },
+   {
+    "test": "real-world-libs/marked-class-static-getter.js",
+    "problem": "serializer",
+    "status": "CRASH",
+    "detail": "FatalError PP0022: a class method incorrectly went through the serializeValue() code path"
+   },
+   {
+    "test": "real-world-libs/marked-optional-catch-binding.js",
+    "problem": "language-feature",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/redux-random-split-join.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on abstract value"
+   },
+   {
+    "test": "real-world-libs/underscore-document-childnodes.js",
+    "problem": "P7",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: This operation is not yet supported on document at childNodes"
+   }
+  ]
+ },
+ "revived": {
+  "prepack": "story/0.2.55-alpha.0",
+  "node": "v26.7.0",
+  "date": "2026-11-05T19:16:26.041Z",
+  "summary": {
+   "PASS": 190,
+   "CRASH": 4,
+   "WRONG": 0,
+   "BLOAT": 0
+  },
+  "results": [
+   {
+    "test": "P1-loops/collatz-data-dependent.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/do-while-build-object.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/for-in-unknown-object.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/gcd-while-two-vars.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-1174-global-unknown-bound.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-1174-unknown-bound-counter.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-1722-state-before-loop.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-1959-shallow-equal.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-2053-babel-for-of.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-2055-while-string-search.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-2396-while-pure.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-2396-while-return.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/issue-2477-babel-for-of-switch-return.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/labeled-continue-nested.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/loop-break-in-optimize.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/loop-return-in-optimize.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/loop-string-accumulator.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/loop-throw-in-optimize.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/loop-writes-known-object-unknown-keys.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/nested-loops-unknown-bounds.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P1-loops/while-string-trim-global.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/concrete-recursion-under-abstract-cond.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/deep-clone.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/descent-parser.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/factorial-under-condition.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/fib-optimized.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/flatten-recursive.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/gcd-recursive.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/issue-1586-fibonacci-abstract.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/issue-543-fib-date-now.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/mutual-recursion-even-odd.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/recursive-path-lookup.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/tree-depth.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P2-recursion/tree-walk-sum.js",
+    "problem": "P2",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/catch-rethrow-abstract.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/fuzz-nested-conditional-assign-return.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/fuzz-returns-counters.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/global-conditional-throw-then-work.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-1378-switch-abstract.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-1378-switch-fallthrough.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-1869-duplicate-console-log.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2120-havoced-object-access-throws.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2120-try-catch-abstract-call.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2354-multiple-returns.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2363-possibly-normal-completion.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2363-with-values.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/issue-2561-throw-before-constructor.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/labeled-block-break-global.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/labeled-block-break.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/nested-returns-side-effects.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/return-in-nested-function-conditional-objects.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/short-circuit-abstract-calls.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/switch-global-abstract.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/throw-in-constructor.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P3-joins/try-finally-return-abstract.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/comparison-chain-numbers.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/de-morgan-mixed-types.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/equality-refinement.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/infeasible-branch-pruning.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2327-simplify-binary.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2355-truthiness-return.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2361-pushing-false.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2563-undefined-not-null.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/issue-2564-null-not-undefined.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/nested-ternary-falsy-values.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/null-check-then-property.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/repeated-condition-reuse.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/truthiness-ternary-mixed.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P4-paths/typeof-refinement.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/clamp-then-loop.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/conditional-index-write.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/conditional-pop-length-arith.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/conditional-push-global-many-unique-names.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/conditional-push-global-many.js",
+    "problem": "P5",
+    "status": "CRASH",
+    "detail": "FatalError PP0019: An abstract value with the same name exists"
+   },
+   {
+    "test": "P5-ranges/conditional-push-last-element.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/conditional-push-optimized.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/issue-1066-conditional-push.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/masked-index-lookup.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P5-ranges/string-length-range.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/abstract-fn-leaks-global-object.js",
+    "problem": "P6",
+    "status": "CRASH",
+    "detail": "RecoverableError PP0017: Unfrozen object leaked before end of global code"
+   },
+   {
+    "test": "P6-havoc/aliasing-two-params.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/array-filter-callback-mutates-local.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/getter-on-abstract-object.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-1750-lazy-cache.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-1750-lazy-singleton.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2011-leaked-binding.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2012-havoc-binding-capture.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2179-topval-alias.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2226-setter-on-prototype.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2319-indexof.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2319-json-stringify-local.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2319-math-abs.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2319-parseint.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-2319-regexp-test.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/issue-977-read-write-conflict.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/object-keys-loop-over-param.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/object-passed-to-unknown-fn.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P6-havoc/unknown-fn-mutates-captured-binding.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/date-local-timezone.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/date-now-typeof.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/dom-build-tree-at-init.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/dom-get-element-by-id.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/guarded-speculation-fallback.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/guarded-speculation-holds.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/intl-number-format.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/local-storage-init.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/math-random-init.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/navigator-user-agent.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/node-require-module.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/number-to-locale-string.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/process-env-branch.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/react-dom-vendor-prefix-init.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/request-animation-frame.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/timers-set-interval-count.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/timers-set-timeout-order.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/umd-three-way-probe.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P7-environment/window-global-alias.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/crc32-table.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/issue-2011-binding-writes.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/issue-2140-inlining-explosion.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/issue-2220-empty-if.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/issue-2286-cse-effectful.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/repeated-defaults-objects.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/residual-closure-drags-code.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/string-builder-unrolled.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P8-size/unrolled-table-1000.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P9-generators-async/async-function-defined-at-init.js",
+    "problem": "P9",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P9-generators-async/generator-function-defined-not-called.js",
+    "problem": "P9",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "P9-generators-async/generator-suspended-at-init.js",
+    "problem": "P9",
+    "status": "CRASH",
+    "detail": "FatalError PP0001: Generator objects cannot be serialized in residual heap"
+   },
+   {
+    "test": "P9-generators-async/promise-then-at-init.js",
+    "problem": "P9",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/array-abstract-index-set-length.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/call-after-nested-returns.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/composed-saved-completion-labeled-break.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/conditional-call-base-nullish.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/conditional-inner-throw-outer-alternate.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/conditional-nested-temporal-scope.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/conditional-null-check-negation.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/conditional-push-while-join-mismatch.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/conditional-unknown-write-empty-to-undefined.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/dead-if-hoisted-var.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/delete-abstract-coercible-base.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/do-while-break-abrupt-widen.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/do-while-emitter-active-generator.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/do-while-false-abrupt.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/do-while-object-emitter.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/do-while-object-hoisted-param.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/for-in-continue-return-join.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/infeasible-path-explored-crash.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/inlining-probe-nullish-arg.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/labeled-break-before-throw-call.js",
+    "problem": "P3",
+    "status": "CRASH",
+    "detail": "RecoverableError PP1002: Additional function main will terminate abruptly"
+   },
+   {
+    "test": "fuzz/labeled-break-skips-code-after-block.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/leaked-binding-declared-across-passes.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/leaked-object-in-operator.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/loop-null-check-path-condition.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/map-cases-path-condition-leak.js",
+    "problem": "P5",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/merged-join-uses-earlier-declared-value.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/nested-try-leaked-object-mutation.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/not-nullish-falsy-logical.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/path-implies-both-true-visitor.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/primitive-receiver-strict-set.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/pure-unary-coercion-throws.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/residual-loop-closure-mutated-param.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/switch-empty-nan-discriminant.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/switch-hoisted-var-loop.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/switch-nested-abrupt-default.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/throw-before-try-catch-finally.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/throw-in-call-argument-join.js",
+    "problem": "P3",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/unknown-key-write-property-order.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/unknown-property-concrete-get-partial.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/unknown-property-concrete-get.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/unused-in-non-object-throws.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/unused-property-read-throws.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/update-expression-string.js",
+    "problem": "P4",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "fuzz/widen-nested-loop-in-helper.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/babel-class-hierarchy.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/config-parser-concrete.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/config-parser-env-override.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/event-emitter-init.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/i18n-plural-rules.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/lodash-init.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/lookup-table-char-classes.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/module-system.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/react-like-render.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/template-compiler.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/template-render-optimized.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world/url-router.js",
+    "problem": "real-world",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/crc32-sequential-loop-leaked-typedarray.js",
+    "problem": "P1",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/d3-internmap-class-extends-map.js",
+    "problem": "serializer",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/d3-scale-default-param-factory.js",
+    "problem": "P8",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/handlebars-globalthis-definegetter.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/marked-class-static-getter.js",
+    "problem": "serializer",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/marked-optional-catch-binding.js",
+    "problem": "language-feature",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/redux-random-split-join.js",
+    "problem": "P6",
+    "status": "PASS",
+    "detail": ""
+   },
+   {
+    "test": "real-world-libs/underscore-document-childnodes.js",
+    "problem": "P7",
+    "status": "PASS",
+    "detail": ""
+   }
+  ]
+ }
+}
