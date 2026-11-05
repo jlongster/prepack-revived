@@ -11,10 +11,18 @@
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import type { Value } from "../values/index.js";
-import { StringValue } from "../values/index.js";
-import { Environment, To } from "../singletons.js";
+import { AbstractValue, StringValue, Value } from "../values/index.js";
+import { TypesDomain, ValuesDomain } from "../domains/index.js";
+import { Environment, Leak, To } from "../singletons.js";
+import { createOperationDescriptor } from "../utils/generator.js";
 import type { BabelNodeTemplateLiteral } from "@babel/types";
+
+function concatStrings(realm: Realm, x: Value, y: Value, loc): Value {
+  if (x instanceof StringValue && y instanceof StringValue) return new StringValue(realm, x.value + y.value);
+  if (x instanceof StringValue && x.value === "") return y;
+  if (y instanceof StringValue && y.value === "") return x;
+  return AbstractValue.createFromBinaryOp(realm, "+", x, y, loc);
+}
 
 // ECMA262 12.2.9
 export default function(
@@ -23,19 +31,48 @@ export default function(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
-  let str = "";
+  let result: Value = realm.intrinsics.emptyString;
 
   for (let i = 0; i < ast.quasis.length; i++) {
-    // add quasi
     let elem = ast.quasis[i];
-    str += elem.value.cooked;
+    let cooked = elem.value.cooked;
+    if (typeof cooked === "string" && cooked !== "") {
+      result = concatStrings(realm, result, new StringValue(realm, cooked), ast.loc);
+    }
 
-    // add expression
     let expr = ast.expressions[i];
     if (expr) {
-      str += To.ToStringPartial(realm, Environment.GetValue(realm, env.evaluate(expr, strictCode)));
+      let val = Environment.GetValue(realm, env.evaluate(expr, strictCode));
+      let strVal: Value;
+      if (val instanceof AbstractValue) {
+        if (To.IsToStringPure(realm, val)) {
+          strVal = To.ToStringValue(realm, val);
+          if (strVal instanceof AbstractValue && !strVal.isTemporal()) {
+            strVal = AbstractValue.convertToTemporalIfArgsAreTemporal(realm, strVal, [val]);
+          }
+        } else if (realm.isInPureScope() && !realm.instantRender.enabled) {
+          strVal = realm.evaluateWithPossibleThrowCompletion(
+            () => {
+              if (val.mightBeObject()) Leak.value(realm, val);
+              return AbstractValue.createTemporalFromBuildFunction(
+                realm,
+                StringValue,
+                [val],
+                createOperationDescriptor("COERCE_TO_STRING")
+              );
+            },
+            TypesDomain.topVal,
+            ValuesDomain.topVal
+          );
+        } else {
+          strVal = new StringValue(realm, To.ToStringPartial(realm, val));
+        }
+      } else {
+        strVal = new StringValue(realm, To.ToStringPartial(realm, val));
+      }
+      result = concatStrings(realm, result, strVal, ast.loc);
     }
   }
 
-  return new StringValue(realm, str);
+  return result;
 }

@@ -742,12 +742,63 @@ function simplifyUndefinedCheck(
   }
 }
 
+function getKnownStringPrefix(v: Value, depth: number = 0): string {
+  if (depth > 8) return "";
+  if (v instanceof StringValue) return v.value;
+  if (v instanceof AbstractValue && v.getType() === StringValue && v.kind === "+" && v.args.length === 2) {
+    let [a, b] = v.args;
+    if (a.getType() === StringValue && b.getType() === StringValue) {
+      let pa = getKnownStringPrefix(a, depth + 1);
+      return a instanceof StringValue ? pa + getKnownStringPrefix(b, depth + 1) : pa;
+    }
+  }
+  return "";
+}
+
+function getKnownStringSuffix(v: Value, depth: number = 0): string {
+  if (depth > 8) return "";
+  if (v instanceof StringValue) return v.value;
+  if (v instanceof AbstractValue && v.getType() === StringValue && v.kind === "+" && v.args.length === 2) {
+    let [a, b] = v.args;
+    if (a.getType() === StringValue && b.getType() === StringValue) {
+      let sb = getKnownStringSuffix(b, depth + 1);
+      return b instanceof StringValue ? getKnownStringSuffix(a, depth + 1) + sb : sb;
+    }
+  }
+  return "";
+}
+
+function areStringsDisjointByAffix(x: Value, y: Value): boolean {
+  let px = getKnownStringPrefix(x);
+  let py = getKnownStringPrefix(y);
+  let minP = Math.min(px.length, py.length);
+  if (minP > 0 && px.slice(0, minP) !== py.slice(0, minP)) return true;
+  if (x instanceof StringValue && x.value.length < py.length) return true;
+  if (y instanceof StringValue && y.value.length < px.length) return true;
+
+  let sx = getKnownStringSuffix(x);
+  let sy = getKnownStringSuffix(y);
+  let minS = Math.min(sx.length, sy.length);
+  if (minS > 0 && sx.slice(sx.length - minS) !== sy.slice(sy.length - minS)) return true;
+  if (x instanceof StringValue && x.value.length < sy.length) return true;
+  if (y instanceof StringValue && y.value.length < sx.length) return true;
+  return false;
+}
+
 function simplifyEquality(realm: Realm, equality: AbstractValue, depth: number): Value {
   let loc = equality.expressionLocation;
   let op = equality.kind;
   let [x, y] = equality.args;
   if (y instanceof EmptyValue) return equality;
   if (x instanceof ConcreteValue) [x, y] = [y, x];
+  if (
+    (op === "===" || op === "==" || op === "!==" || op === "!=") &&
+    x.getType() === StringValue &&
+    y.getType() === StringValue &&
+    areStringsDisjointByAffix(x, y)
+  ) {
+    return op === "===" || op === "==" ? realm.intrinsics.false : realm.intrinsics.true;
+  }
   if (op === "===" || op === "==" || op === "!==" || op === "==") {
     if (!x.mightNotBeNull()) {
       let sy = simplifyNullCheck(realm, op, y, depth + 1);

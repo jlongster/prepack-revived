@@ -824,13 +824,17 @@ export function GetFromArrayWithWidenedNumericProperty(
   invariant(proto instanceof ObjectValue && proto === realm.intrinsics.ArrayPrototype);
   if (typeof P === "string") {
     if (P === "length") {
-      return AbstractValue.createTemporalFromBuildFunction(
+      let lenVal = AbstractValue.createTemporalFromBuildFunction(
         realm,
         NumberValue,
         [arr],
         createOperationDescriptor("UNKNOWN_ARRAY_LENGTH"),
         { skipInvariant: true, isPure: true }
       );
+      if (arr instanceof ArrayValue && !arr._widenedMutated && arr.mightNotBeLeakedObject()) {
+        arr._lastWidenedLength = lenVal;
+      }
+      return lenVal;
     }
     let prototypeBinding = proto.properties.get(P);
     if (prototypeBinding !== undefined) {
@@ -842,9 +846,37 @@ export function GetFromArrayWithWidenedNumericProperty(
     }
   }
   let prop = typeof P === "string" ? new StringValue(realm, P) : P;
+  let elemType = Value;
+  if (
+    arr instanceof ArrayValue &&
+    arr._widenedIsDense === true &&
+    !arr._widenedMutated &&
+    arr.mightNotBeLeakedObject() &&
+    arr._lastWidenedLength !== undefined
+  ) {
+    let widenedType = ArrayValue.getWidenedElementType(arr);
+    if (widenedType !== Value) {
+      let lenVal = arr._lastWidenedLength;
+      if (typeof P === "string" && IsArrayIndex(realm, P)) {
+        let idx = +P;
+        let inBounds = realm.evaluateWithoutEffects(() =>
+          Path.implies(AbstractValue.createFromBinaryOp(realm, "<", new NumberValue(realm, idx), lenVal))
+        );
+        if (inBounds) elemType = widenedType;
+      } else if (P instanceof AbstractValue && !P.mightNotBeNumber()) {
+        let range = IntervalDomain.of(P);
+        if (range !== undefined && range.integral && !range.mayBeNaN && range.lo >= 0) {
+          let inBounds = realm.evaluateWithoutEffects(() =>
+            Path.implies(AbstractValue.createFromBinaryOp(realm, "<", P, lenVal))
+          );
+          if (inBounds) elemType = widenedType;
+        }
+      }
+    }
+  }
   return AbstractValue.createTemporalFromBuildFunction(
     realm,
-    Value,
+    elemType,
     [arr, prop],
     createOperationDescriptor("UNKNOWN_ARRAY_GET_PARTIAL"),
     {
