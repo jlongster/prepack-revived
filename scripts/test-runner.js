@@ -631,6 +631,9 @@ function runTest(name, code, options: PrepackOptions, args) {
             } else {
               actualPromise = execInContext(codeToRun);
             }
+            // The rejection is handled later, when the returned thunk runs; mark it handled now so that
+            // Node >= 15 does not abort the whole run with ERR_UNHANDLED_REJECTION in the meantime.
+            actualPromise.catch(() => {});
             return () =>
               actualPromise
                 .catch(function(execError) {
@@ -789,6 +792,8 @@ function run(args) {
           !test.name.endsWith("~") &&
           !test.file.includes("// skip this test for now") &&
           !(args.es5 && test.file.includes("// es6")) &&
+          // the hard-case corpus is scored by scripts/hard-scoreboard.js; only run it here when asked for
+          (!test.name.startsWith("test/serializer/hard/") || args.filter.includes("hard")) &&
           //only run specific tests if desired
           test.name.includes(args.filter)
         );
