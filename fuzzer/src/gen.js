@@ -447,6 +447,7 @@ const genPrgramWrappedInIife = genProgramStatements.then(statements =>
 );
 
 module.exports = {
+  genProgramStatements,
   genProgram,
   genPrgramWrappedInIife,
 };
