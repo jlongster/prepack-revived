@@ -20,6 +20,7 @@ import {
   ECMAScriptSourceFunctionValue,
   EmptyValue,
   FunctionValue,
+  IntegerIndexedExotic,
   NativeFunctionValue,
   NumberValue,
   ObjectValue,
@@ -1764,6 +1765,7 @@ export class ResidualHeapSerializer {
 
   // Checks whether a property can be defined via simple assignment, or using object literal syntax.
   _canEmbedProperty(obj: ObjectValue, key: string | SymbolValue | AbstractValue, prop: Descriptor): boolean {
+    if (key === "__proto__") return false;
     if (!(prop instanceof PropertyDescriptor)) return false;
 
     let targetDescriptor = this.residualHeapInspector.getTargetIntegrityDescriptor(obj);
@@ -1800,16 +1802,68 @@ export class ResidualHeapSerializer {
     return t.regExpLiteral(source, flags);
   }
 
+  _canConstructWithThisAssignments(proto: ObjectValue, keys: Array<string>): boolean {
+    if (keys.length === 0 || keys.length > 64) return false;
+    let cur = proto;
+    while (cur instanceof ObjectValue) {
+      if (
+        cur instanceof ProxyValue ||
+        cur instanceof IntegerIndexedExotic ||
+        cur.isPartialObject() ||
+        !cur.mightNotBeLeakedObject() ||
+        cur.unknownProperty !== undefined
+      ) {
+        return false;
+      }
+      for (let i = 0; i < keys.length; i++) {
+        let pb = cur.properties.get(keys[i]);
+        if (pb !== undefined && pb.descriptor !== undefined) {
+          let d = pb.descriptor;
+          if (!(d instanceof PropertyDescriptor)) return false;
+          if (d.get !== undefined || d.set !== undefined || d.writable !== true) return false;
+        }
+      }
+      cur = cur.$Prototype;
+    }
+    return cur === this.realm.intrinsics.null;
+  }
+
   // Overridable.
   serializeValueRawObject(
     val: ObjectValue,
     skipPrototype: boolean,
-    emitIntegrityCommand: void | (SerializedBody => void)
+    emitIntegrityCommand: void | (SerializedBody => void),
+    classConstructor?: Value
   ): BabelNodeExpression {
     let remainingProperties = new Map(val.properties);
     const dummyProperties = new Set();
     let props = [];
+    let embeddedKeys = [];
     let isCertainlyLeaked = !val.mightNotBeLeakedObject();
+    let prototypeEstablishedInLiteral = false;
+    let protoForConstructorCheck: void | ObjectValue;
+
+    let proto = val.$Prototype;
+    if (val.temporalAlias === undefined && !this.realm.instantRender.enabled) {
+      if (classConstructor !== undefined) {
+        if (!this.emitter.getReasonToWaitForDependencies(classConstructor)) {
+          let serializedCtor = this.serializeValue(classConstructor);
+          props.push(t.objectProperty(protoExpression, t.memberExpression(serializedCtor, t.identifier("prototype"))));
+          prototypeEstablishedInLiteral = true;
+          if (proto instanceof ObjectValue) protoForConstructorCheck = proto;
+        }
+      } else if (
+        !skipPrototype &&
+        proto !== this.realm.intrinsics.ObjectPrototype &&
+        (proto instanceof ObjectValue || proto === this.realm.intrinsics.null) &&
+        !this.emitter.getReasonToWaitForDependencies(proto)
+      ) {
+        let serializedProto = this.serializeValue(proto);
+        props.push(t.objectProperty(protoExpression, serializedProto));
+        prototypeEstablishedInLiteral = true;
+        if (proto instanceof ObjectValue) protoForConstructorCheck = proto;
+      }
+    }
 
     // TODO #2259: Make deduplication in the face of leaking work for custom accessors
     let shouldDropAsAssignedProp = (descriptor: Descriptor | void) =>
@@ -1864,9 +1918,11 @@ export class ResidualHeapSerializer {
             remainingProperties.delete(key);
             serializedValue = this.serializeValue(propValue);
           }
+          embeddedKeys.push(key);
           props.push(t.objectProperty(serializedKey, serializedValue));
         } else if (descriptor.value instanceof Value && descriptor.value.mightHaveBeenDeleted()) {
           dummyProperties.add(key);
+          embeddedKeys.push(key);
           props.push(t.objectProperty(serializedKey, voidExpression));
         }
       }
@@ -1875,12 +1931,20 @@ export class ResidualHeapSerializer {
     this._emitObjectProperties(
       val,
       remainingProperties,
-      /*objectPrototypeAlreadyEstablished*/ false,
+      /*objectPrototypeAlreadyEstablished*/ prototypeEstablishedInLiteral,
       dummyProperties,
       skipPrototype
     );
 
-    return t.objectExpression(props);
+    let objExpr = t.objectExpression(props);
+    if (
+      prototypeEstablishedInLiteral &&
+      protoForConstructorCheck !== undefined &&
+      this._canConstructWithThisAssignments(protoForConstructorCheck, embeddedKeys)
+    ) {
+      (objExpr: any)._canUseConstructorFactory = true;
+    }
+    return objExpr;
   }
 
   _serializeValueObjectViaConstructor(
@@ -2011,6 +2075,19 @@ export class ResidualHeapSerializer {
 
         let proto = val.$Prototype;
         let { skipPrototype, constructor: _constructor } = getObjectPrototypeMetadata(this.realm, val);
+        let canUseLiteralProto =
+          val.temporalAlias === undefined &&
+          !this.realm.instantRender.enabled &&
+          this.constructor === ResidualHeapSerializer &&
+          (_constructor !== undefined
+            ? !this.emitter.getReasonToWaitForDependencies(_constructor)
+            : !skipPrototype &&
+              proto !== this.realm.intrinsics.ObjectPrototype &&
+              (proto instanceof ObjectValue || proto === this.realm.intrinsics.null) &&
+              !this.emitter.getReasonToWaitForDependencies(proto));
+        if (canUseLiteralProto) {
+          return this.serializeValueRawObject(val, skipPrototype, emitIntegrityCommand, _constructor);
+        }
         let createViaAuxiliaryConstructor =
           val.temporalAlias === undefined &&
           proto !== this.realm.intrinsics.ObjectPrototype &&
