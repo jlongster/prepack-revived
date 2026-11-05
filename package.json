@@ -25,7 +25,7 @@
   "scripts": {
     "build": "yarn build-prepack && yarn build-bundle",
     "build-scripts": "babel scripts --out-dir lib --source-maps",
-    "build-bundle": "webpack-cli --silent",
+    "build-bundle": "NODE_OPTIONS=--openssl-legacy-provider webpack-cli --silent",
     "build-prepack": "babel src --out-dir lib --source-maps",
     "watch": "babel src scripts --out-dir lib --watch --source-maps --verbose",
     "lint": "eslint src scripts",
@@ -106,6 +106,7 @@
     "eslint-plugin-flowtype": "^2.40.0",
     "eslint-plugin-header": "^1.0.0",
     "eslint-plugin-prettier": "^2.1.2",
+    "flow-bin": "0.83.0",
     "flow-typed": "^2.3.0",
     "graceful-fs": "^4.1.11",
     "invariant": "^2.2.0",
@@ -157,5 +158,8 @@
     "transformIgnorePatterns": [
       "/node_modules/(?!react-native).+\\.js$"
     ]
+  },
+  "resolutions": {
+    "test262-stream": "https://codeload.github.com/bocoup/test262-stream/tar.gz/5435de672d20cd66789a5f57e5bb8bd60d001b44"
   }
 }

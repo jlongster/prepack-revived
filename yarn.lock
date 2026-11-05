@@ -4172,6 +4172,11 @@ flat-cache@^1.2.1:
     graceful-fs "^4.1.2"
     write "^0.2.1"
 
+flow-bin@0.83.0:
+  version "0.83.0"
+  resolved "https://registry.yarnpkg.com/flow-bin/-/flow-bin-0.83.0.tgz#fd26f5f95758d7701264b3f9a1e1a3d4cbcab1a9"
+  integrity sha512-1K83EL/U9Gh0BaXPKkZe6TRizSmNSKx9Wuws1c8gh7DJEwiburtCxYT+4o7in1+GnNEm3CZWnbnVV8n9HMpiDA==
+
 flow-typed@^2.3.0:
   version "2.3.0"
   resolved "https://registry.yarnpkg.com/flow-typed/-/flow-typed-2.3.0.tgz#0f8604faab60691b885024e16ec0e3256e3b680e"
@@ -8717,9 +8722,9 @@ test262-parser@^2.0.7:
     js-yaml "^3.2.1"
     through "^2.3.4"
 
-"test262-stream@git://github.com/bocoup/test262-stream.git":
+"test262-stream@git://github.com/bocoup/test262-stream.git", "test262-stream@https://codeload.github.com/bocoup/test262-stream/tar.gz/5435de672d20cd66789a5f57e5bb8bd60d001b44":
   version "1.0.0"
-  resolved "git://github.com/bocoup/test262-stream.git#5435de672d20cd66789a5f57e5bb8bd60d001b44"
+  resolved "https://codeload.github.com/bocoup/test262-stream/tar.gz/5435de672d20cd66789a5f57e5bb8bd60d001b44#1377e9a56faa1e70aaa6341e96daa8078f2244e3"
   dependencies:
     klaw "^2.1.0"
     test262-compiler "^3.0.0"
