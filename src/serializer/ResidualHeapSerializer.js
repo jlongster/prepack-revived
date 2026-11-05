@@ -116,6 +116,14 @@ class CountingSemaphore {
   }
 }
 
+function isNullableAtemporalPropertyAccess(val: Value): boolean {
+  if (!(val instanceof AbstractValue) || val.hasIdentifier()) return false;
+  if (val.kind === "abstractConcreteUnion" && val.args.length >= 1) {
+    return isNullableAtemporalPropertyAccess(val.args[0]);
+  }
+  return typeof val.kind === "string" && val.kind.startsWith("property:?");
+}
+
 export class ResidualHeapSerializer {
   constructor(
     realm: Realm,
@@ -1161,7 +1169,7 @@ export class ResidualHeapSerializer {
     }
 
     this.serializedValues.add(val);
-    if (!referenceOnly && HeapInspector.isLeaf(val)) {
+    if (!referenceOnly && (HeapInspector.isLeaf(val) || isNullableAtemporalPropertyAccess(val))) {
       let res = this._serializeValue(val);
       invariant(res !== undefined);
       return res;
@@ -1953,6 +1961,13 @@ export class ResidualHeapSerializer {
       }
     };
 
+    let markAccessorUndefinedSerialized = (desc: void | Descriptor) => {
+      if (desc instanceof PropertyDescriptor) {
+        if (desc.get instanceof UndefinedValue) this.serializedValues.add(desc.get);
+        if (desc.set instanceof UndefinedValue) this.serializedValues.add(desc.set);
+      }
+    };
+
     // find all the properties on the class that we need to serialize
     for (let [propertyName, method] of classFunc.properties) {
       if (
@@ -1961,21 +1976,25 @@ export class ResidualHeapSerializer {
         method.descriptor !== undefined &&
         !(propertyName === "length" && canIgnoreClassLengthProperty(classFunc, method.descriptor, this.logger))
       ) {
+        markAccessorUndefinedSerialized(method.descriptor);
         withDescriptorValue(propertyName, method.descriptor, serializeClassProperty);
       }
     }
     for (let [symbol, method] of classFunc.symbols) {
       if (method.descriptor !== undefined) {
+        markAccessorUndefinedSerialized(method.descriptor);
         withDescriptorValue(symbol, method.descriptor, serializeClassProperty);
       }
     }
 
     // handle non-symbol prototype properties (inline methods serialize now; mutations defer until after class definition)
     for (let [propertyName, method] of classPrototype.properties) {
+      markAccessorUndefinedSerialized(method.descriptor);
       withDescriptorValue(propertyName, method.descriptor, serializeProtoMethodOrProperty);
     }
     // handle symbol prototype properties
     for (let [symbol, method] of classPrototype.symbols) {
+      markAccessorUndefinedSerialized(method.descriptor);
       withDescriptorValue(symbol, method.descriptor, serializeProtoMethodOrProperty);
     }
     // assign the AST method key node for the "constructor"

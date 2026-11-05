@@ -10,7 +10,7 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { ObjectValue, AbstractObjectValue } from "../../values/index.js";
+import { AbstractValue, ObjectValue, AbstractObjectValue } from "../../values/index.js";
 import { createAbstract } from "../prepack/utils.js";
 import { Properties } from "../../singletons.js";
 import invariant from "../../invariant";
@@ -29,24 +29,34 @@ const functions = [
   "createTextNode",
 ];
 
-export default function(realm: Realm): AbstractObjectValue {
+export default function(realm: Realm): ObjectValue | AbstractValue {
+  let optionalBrowserDoc = realm.isCompatibleWith("browser") && !realm.react.enabled;
+  let docName = optionalBrowserDoc ? "global.document" : "document";
   // document object
-  let document = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, "document", false);
+  let document = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, docName, false);
 
   // check if we can use abstracts
   if (realm.useAbstractInterpretation) {
+    document.makeSimple("transitive");
     // common methods on document
     for (let name of functions) {
-      let func = createAbstract(realm, "function", `document.${name}`);
+      let func = createAbstract(realm, "function", `${docName}.${name}`);
       Properties.Set(realm, document, name, func, false);
     }
 
     // document.body
-    let body = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, "document.body");
+    let body = new ObjectValue(realm, realm.intrinsics.ObjectPrototype, `${docName}.body`);
+    body.makeSimple("transitive");
     Properties.Set(realm, document, "body", body, false);
 
+    // In general browser/UMD bundles, `document` may be absent when loaded in Node/workers;
+    // keep `document` non-nullish only when React DOM / fb-www / node-react mocks are active.
+    if (optionalBrowserDoc) {
+      return createAbstract(realm, document, docName, undefined, realm.intrinsics.undefined);
+    }
+
     // make abstract
-    let abstractObject = createAbstract(realm, document, "document");
+    let abstractObject = createAbstract(realm, document, docName);
     invariant(abstractObject instanceof AbstractObjectValue);
     return abstractObject;
   }

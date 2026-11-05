@@ -878,6 +878,17 @@ function simplifyEquality(realm: Realm, equality: AbstractValue, depth: number):
   if (x instanceof ConcreteValue) [x, y] = [y, x];
   if (
     (op === "===" || op === "==" || op === "!==" || op === "!=") &&
+    x instanceof AbstractValue &&
+    x.kind === "typeof" &&
+    x.args.length === 1 &&
+    y instanceof StringValue &&
+    y.value === "undefined"
+  ) {
+    let targetOp = op === "===" || op === "==" ? "===" : "!==";
+    return AbstractValue.createFromBinaryOp(realm, targetOp, x.args[0], realm.intrinsics.undefined, loc);
+  }
+  if (
+    (op === "===" || op === "==" || op === "!==" || op === "!=") &&
     x.getType() === StringValue &&
     y.getType() === StringValue &&
     areStringsDisjointByAffix(x, y)

@@ -1539,7 +1539,7 @@ export class PropertiesImplementation {
                   type,
                   [O._templateFor || O, new StringValue(realm, P)],
                   createOperationDescriptor("ABSTRACT_PROPERTY"),
-                  { kind: AbstractValue.makeKind("property", P) }
+                  { kind: AbstractValue.makeKind("property", (realm.pathConditions.isEmpty() ? "" : "?") + P) }
                 );
               } else if (realm.generator !== undefined) {
                 return AbstractValue.createTemporalFromBuildFunction(

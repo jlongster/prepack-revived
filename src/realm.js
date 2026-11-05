@@ -277,7 +277,7 @@ export class Realm {
 
     this.start = Date.now();
     this.compatibility = opts.compatibility !== undefined ? opts.compatibility : "browser";
-    this.remainingCalls = opts.maxStackDepth || 112;
+    this.remainingCalls = opts.maxStackDepth || 160;
     this.invariantLevel = opts.invariantLevel || 0;
     this.invariantMode = opts.invariantMode || "throw";
     this.emitConcreteModel = !!opts.emitConcreteModel;

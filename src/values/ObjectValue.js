@@ -151,6 +151,15 @@ export default class ObjectValue extends ConcreteValue {
           );
           let binding = this[propBindingName];
           if (binding === undefined) {
+            if (this.$IsClassPrototype === undefined) {
+              this[propBindingName] = {
+                descriptor: new InternalSlotDescriptor(v),
+                object: this,
+                key: propName,
+                internalSlot: true,
+              };
+              return;
+            }
             let desc = new InternalSlotDescriptor(undefined);
             this[propBindingName] = binding = {
               descriptor: desc,

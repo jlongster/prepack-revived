@@ -13,7 +13,7 @@ import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import type { PropertyKeyValue } from "../types.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
-import { AbstractValue, ConcreteValue, ObjectValue, StringValue } from "../values/index.js";
+import { AbstractValue, ConcreteValue, NullValue, ObjectValue, StringValue } from "../values/index.js";
 import { IsAnonymousFunctionDefinition, HasOwnProperty } from "../methods/index.js";
 import { Create, Environment, Functions, Properties, To } from "../singletons.js";
 import invariant from "../invariant.js";
@@ -86,6 +86,20 @@ export default function(
 
       // 4. Let propValue be ? GetValue(exprValueRef).
       let propValue = Environment.GetValue(realm, exprValueRef);
+
+      // ECMA262 B.3.1: __proto__ Property Names in Object Initializers
+      let isProtoSetter =
+        !prop.computed &&
+        !prop.shorthand &&
+        (propKey === "__proto__" || (propKey instanceof StringValue && propKey.value === "__proto__"));
+      if (isProtoSetter) {
+        if (propValue instanceof ObjectValue || propValue instanceof NullValue) {
+          obj.$SetPrototypeOf(propValue);
+        } else if (propValue instanceof AbstractValue && (propValue.mightBeObject() || propValue.mightBeNull())) {
+          propValue.throwIfNotConcrete();
+        }
+        continue;
+      }
 
       // 5. If IsAnonymousFunctionDefinition(AssignmentExpression) is true, then
       if (IsAnonymousFunctionDefinition(realm, prop.value)) {

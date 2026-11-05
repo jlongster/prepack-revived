@@ -14,6 +14,7 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { type Effects, Realm } from "../realm.js";
 import { Path } from "../singletons.js";
 import type { Descriptor, PropertyBinding, ObjectKind } from "../types.js";
+import type { SerializerOptions } from "../options.js";
 import type { Binding } from "../environment.js";
 import { HashSet, IsArray, Get } from "../methods/index.js";
 import {
@@ -86,7 +87,8 @@ export class ResidualHeapVisitor {
     logger: Logger,
     modules: Modules,
     additionalFunctionValuesAndEffects: Map<FunctionValue, AdditionalFunctionEffects>,
-    enableRecompute: boolean = false
+    enableRecompute: boolean = false,
+    serializerOptions?: SerializerOptions
   ) {
     invariant(realm.useAbstractInterpretation);
     this.realm = realm;
@@ -117,12 +119,23 @@ export class ResidualHeapVisitor {
     this.residualReactElementVisitor = new ResidualReactElementVisitor(this.realm, this);
     this.generatorTree = new GeneratorTree();
     this.recomputeRecipes = enableRecompute ? getVerifiedRecomputeRecipes(realm) : new Map();
+    this._canPruneGlobalFunctionScopes =
+      serializerOptions !== undefined &&
+      !serializerOptions.debugScopes &&
+      additionalFunctionValuesAndEffects.size === 0;
+    this._delayInitializations = serializerOptions !== undefined && !!serializerOptions.delayInitializations;
+    this._globalRootedFunctions = new Set();
+    this._valuesWithGlobalRootedScope = new Set();
   }
 
   realm: Realm;
   logger: Logger;
   modules: Modules;
   globalGenerator: Generator;
+  _canPruneGlobalFunctionScopes: boolean;
+  _delayInitializations: boolean;
+  _globalRootedFunctions: Set<FunctionValue>;
+  _valuesWithGlobalRootedScope: Set<Value>;
 
   // Caches that ensure one ResidualFunctionBinding exists per (record, name) pair
   declarativeEnvironmentRecordsBindings: Map<DeclarativeEnvironmentRecord, Map<string, ResidualFunctionBinding>>;
@@ -1077,6 +1090,32 @@ export class ResidualHeapVisitor {
   // Overridable hook for post-visiting the value.
   postProcessValue(val: Value): void {}
 
+  _isGlobalRootedFunction(fn: FunctionValue): boolean {
+    if (this._globalRootedFunctions.has(fn)) return true;
+    let creator = this.generatorTree.getCreator(fn);
+    if (creator !== undefined && creator !== this.globalGenerator) return false;
+    let visited = new Set();
+    let stack = [fn];
+    while (stack.length > 0) {
+      let cur = stack.pop();
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      let fScopes = this.values.get(cur);
+      if (fScopes === undefined) continue;
+      if (fScopes.has(this.globalGenerator) || this._globalRootedFunctions.has(cur)) {
+        this._globalRootedFunctions.add(fn);
+        return true;
+      }
+      for (let s of fScopes) {
+        if (s instanceof FunctionValue) {
+          let sc = this.generatorTree.getCreator(s);
+          if (sc === undefined || sc === this.globalGenerator) stack.push(s);
+        }
+      }
+    }
+    return false;
+  }
+
   _mark(val: Value): boolean {
     let scopes = this.values.get(val);
     if (scopes === undefined) this.values.set(val, (scopes = new Set()));
@@ -1092,6 +1131,33 @@ export class ResidualHeapVisitor {
         if (scopes.has(g)) return false;
       }
     } else if (scopes.has(this.scope)) return false;
+
+    if (this._canPruneGlobalFunctionScopes) {
+      if (this.scope === this.globalGenerator) {
+        this._valuesWithGlobalRootedScope.add(val);
+      } else if (
+        this.scope instanceof FunctionValue &&
+        !(val instanceof AbstractValue) &&
+        !(val instanceof ObjectValue && ObjectValue.isIntrinsicDerivedObject(val)) &&
+        this._isGlobalRootedFunction(this.scope)
+      ) {
+        if (scopes.has(this.globalGenerator)) {
+          if (scopes.size === 1) scopes.add(this.scope);
+          return false;
+        }
+        if (!this._delayInitializations) {
+          if (this._valuesWithGlobalRootedScope.has(val)) {
+            if (scopes.size === 1) scopes.add(this.scope);
+            return false;
+          }
+          this._valuesWithGlobalRootedScope.add(val);
+        } else if (scopes.size >= 16) {
+          this._visitInUnrelatedScope(this.globalGenerator, val);
+          return false;
+        }
+      }
+    }
+
     scopes.add(this.scope);
     return true;
   }
