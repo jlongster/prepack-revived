@@ -244,6 +244,10 @@ export class PathConditionsImplementation extends PathConditions {
         let savedImpliedNegatives = this._impliedNegatives;
         let savedFailed = this._failedImplications;
         let savedFailedNeg = this._failedNegativeImplications;
+        // Caches between the target and this may record implications that depend on the conditions detached below.
+        let savedChainCaches = [];
+        for (let p = refinementTarget; p !== undefined && p !== this; p = p._baseConditions)
+          savedChainCaches.push([p, p._impliedConditions, p._impliedNegatives]);
         let ranRefine = false;
         try {
           for (let assumedCondition of savedBaseConditions._assumedConditions) {
@@ -255,6 +259,10 @@ export class PathConditionsImplementation extends PathConditions {
                 this._impliedNegatives = undefined;
                 this._failedImplications = undefined;
                 this._failedNegativeImplications = undefined;
+                for (let [p] of savedChainCaches) {
+                  p._impliedConditions = undefined;
+                  p._impliedNegatives = undefined;
+                }
                 ranRefine = true;
               }
               refine(assumedCondition);
@@ -268,6 +276,10 @@ export class PathConditionsImplementation extends PathConditions {
               this._impliedNegatives = savedImpliedNegatives;
               this._failedImplications = savedFailed;
               this._failedNegativeImplications = savedFailedNeg;
+              for (let [p, implied, impliedNegatives] of savedChainCaches) {
+                p._impliedConditions = implied;
+                p._impliedNegatives = impliedNegatives;
+              }
             } else {
               this._impliedConditions = undefined;
               this._impliedNegatives = undefined;

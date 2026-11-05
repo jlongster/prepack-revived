@@ -505,6 +505,8 @@ function pureOperationSpec(v: AbstractValue): void | [OperationDescriptor, Array
     }
     return undefined;
   }
+  // Abstract arguments (e.g. recursion probe arguments) may share a name while denoting different values.
+  if (typeof v.kind === "string" && v.kind.startsWith("abstractCounted:")) return undefined;
   if (v.operationDescriptor !== undefined) {
     return [v.operationDescriptor, v.args];
   }
