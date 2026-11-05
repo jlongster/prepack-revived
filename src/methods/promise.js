@@ -151,12 +151,12 @@ export function EnqueueJob(realm: Realm, queueName: string, job: Function, args:
   if (!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) {
     failPromiseOp(realm, "Promise reaction jobs under abstract conditions are not supported");
   }
-  if (realm.generator !== undefined && realm.generator.name === "evaluateIgnoringEffects") {
+  if (realm.generator !== undefined && realm.generator.getName() === "evaluateIgnoringEffects") {
     failPromiseOp(realm, "Promise reaction jobs during side-effect-free evaluation are not supported");
   }
   let state = realmJobQueues.get(realm);
   if (state === undefined || !state.acceptingJobs) {
-    failPromiseOp(realm, "Promise reaction jobs outside global initialization are not supported");
+    throw failPromiseOp(realm, "Promise reaction jobs outside global initialization are not supported");
   }
   let stack = state.effectsJobStack;
   let target = stack.length > 0 ? stack[stack.length - 1] : state.rootJobs;
@@ -502,7 +502,7 @@ export function PerformPromiseThen(
   if (!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) {
     failPromiseOp(realm, "Promise reactions under abstract conditions are not supported");
   }
-  if (realm.generator !== undefined && realm.generator.name === "evaluateIgnoringEffects") {
+  if (realm.generator !== undefined && realm.generator.getName() === "evaluateIgnoringEffects") {
     failPromiseOp(realm, "Promise reactions during side-effect-free evaluation are not supported");
   }
 

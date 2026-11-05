@@ -88,7 +88,7 @@ export default function(
     let one = HostBigInt(1);
     let newBi = new BigIntValue(realm, ast.operator === "++" ? oldNumeric.value + one : oldNumeric.value - one);
     Properties.PutValue(realm, expr, newBi);
-    return ast.prefix ? newBi : oldNumeric;
+    return ast.prefix === true ? newBi : oldNumeric;
   }
   let oldValue = oldNumeric.value;
 

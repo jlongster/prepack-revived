@@ -7,14 +7,14 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-/* @flow strict-local */
+/* @flow */
 
 import { PrimitiveValue, Value } from "./index.js";
 import type { Realm } from "../realm.js";
 
-const hostGlobal: any = Function("return this")(); // eslint-disable-line no-new-func
+const hostGlobal: any = new Function("return this")(); // eslint-disable-line no-new-func
 export const HostBigInt: any = hostGlobal.BigInt;
-export const bigIntPow: (any, any) => any = (Function("a", "b", "return a ** b;"): any); // eslint-disable-line no-new-func
+export const bigIntPow: (any, any) => any = (new Function("a", "b", "return a ** b;"): any); // eslint-disable-line no-new-func
 
 export default class BigIntValue extends PrimitiveValue {
   constructor(realm: Realm, value: any, intrinsicName?: string) {

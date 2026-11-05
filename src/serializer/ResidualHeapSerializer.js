@@ -1895,21 +1895,24 @@ export class ResidualHeapSerializer {
       let desc = pb.descriptor;
       invariant(desc instanceof PropertyDescriptor);
       if (desc.value !== undefined) {
-        invariant(desc.value instanceof ECMAScriptSourceFunctionValue);
-        this.serializedValues.add(desc.value);
-        this._serializeClassMethod(key, desc.value);
+        let fnVal = desc.value;
+        invariant(fnVal instanceof ECMAScriptSourceFunctionValue);
+        this.serializedValues.add(fnVal);
+        this._serializeClassMethod(key, fnVal);
       } else {
-        if (desc.get instanceof UndefinedValue) {
-          this.serializedValues.add(desc.get);
-        } else if (desc.get instanceof ECMAScriptSourceFunctionValue) {
-          this.serializedValues.add(desc.get);
-          this._serializeClassMethod(key, desc.get);
+        let getter = desc.get;
+        if (getter instanceof UndefinedValue) {
+          this.serializedValues.add(getter);
+        } else if (getter instanceof ECMAScriptSourceFunctionValue) {
+          this.serializedValues.add(getter);
+          this._serializeClassMethod(key, getter);
         }
-        if (desc.set instanceof UndefinedValue) {
-          this.serializedValues.add(desc.set);
-        } else if (desc.set instanceof ECMAScriptSourceFunctionValue) {
-          this.serializedValues.add(desc.set);
-          this._serializeClassMethod(key, desc.set);
+        let setter = desc.set;
+        if (setter instanceof UndefinedValue) {
+          this.serializedValues.add(setter);
+        } else if (setter instanceof ECMAScriptSourceFunctionValue) {
+          this.serializedValues.add(setter);
+          this._serializeClassMethod(key, setter);
         }
       }
     };
@@ -1973,7 +1976,8 @@ export class ResidualHeapSerializer {
           this._serializeClassMethod(elem.privateSymbol, elem.func);
         } else {
           this.serializedValues.add(elem.initializer);
-          this._serializeClassMethod(elem.key, elem.initializer);
+          let elemKey = elem.key instanceof StringValue ? elem.key.value : elem.key;
+          this._serializeClassMethod(elemKey, elem.initializer);
         }
       }
     }
@@ -3071,7 +3075,10 @@ export class ResidualHeapSerializer {
             } else {
               func.body.directives = [];
             }
-            if (!hasDirective) func.body.directives.unshift(strictDirective);
+            if (!hasDirective) {
+              let dirs = func.body.directives || (func.body.directives = []);
+              dirs.unshift(strictDirective);
+            }
           } else {
             // ES2016+ forbids a "use strict" directive inside a function with non-simple parameters.
             declarator.init = t.callExpression(

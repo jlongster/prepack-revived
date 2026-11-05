@@ -1174,7 +1174,11 @@ export class ResidualFunctions {
 
           let declarator = defineFunction(instance, functionId, funcNode);
           if (t.isFunctionExpression(funcNode)) {
-            registerFunctionStrictness(funcNode, functionValue.$Strict, declarator);
+            registerFunctionStrictness(
+              ((funcNode: any): BabelNodeFunctionExpression),
+              functionValue.$Strict,
+              declarator
+            );
           }
         }
       }

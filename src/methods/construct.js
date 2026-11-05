@@ -163,7 +163,7 @@ export function MakeClassConstructor(realm: Realm, F: ECMAScriptSourceFunctionVa
 }
 
 function isConstructorClassMethod(elem: BabelNodeClassMethod): boolean {
-  if (IsStatic(elem) || elem.computed) return false;
+  if (IsStatic(elem) || elem.computed === true) return false;
   if ((elem.key.type: string) === "PrivateName") return false;
   return elem.key.name === "constructor" || elem.key.value === "constructor";
 }

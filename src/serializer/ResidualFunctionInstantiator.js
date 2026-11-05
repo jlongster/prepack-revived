@@ -124,13 +124,14 @@ export class ResidualFunctionInstantiator<
   }
 
   _getLiteralTruthiness(node: BabelNodeExpression): Truthiness {
+    if ((node.type: string) === "BigIntLiteral") {
+      return (node: any).value !== "0";
+    }
     switch (node.type) {
       case "BooleanLiteral":
       case "NumericLiteral":
       case "StringLiteral":
         return !!((node: any): BabelNodeBooleanLiteral | BabelNodeNumericLiteral | BabelNodeStringLiteral).value;
-      case "BigIntLiteral":
-        return (node: any).value !== "0";
       case "Identifier": {
         let replacement = this.identifierReplacements.get(node);
         if (replacement !== undefined) return replacement.truthiness;

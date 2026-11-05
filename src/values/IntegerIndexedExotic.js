@@ -275,7 +275,7 @@ export default class IntegerIndexedExotic extends ObjectValue {
 
     // 6. For each own property key P of O such that Type(P) is Symbol, in ascending chronological order of property creation
     for (let key of O.symbols.keys()) {
-      if (key.$IsPrivateName) continue;
+      if (key.$IsPrivateName === true) continue;
       // a. Add P as the last element of keys.
       keys.push(key);
     }

@@ -951,18 +951,21 @@ export class ResidualHeapVisitor {
           let pName = symbol.$PrivateName;
           invariant(typeof pName === "string");
           if (desc.value !== undefined) {
-            if (!desc.writable && desc.value instanceof ECMAScriptSourceFunctionValue) {
-              claimedMethods.add(desc.value);
-              this._visitClassMethod(classFunc, symbol, desc.value, "value", classPrototype, true, pName);
+            let fnVal = desc.value;
+            if (!desc.writable && fnVal instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(fnVal);
+              this._visitClassMethod(classFunc, symbol, fnVal, "value", classPrototype, true, pName);
             }
           } else {
-            if (desc.get instanceof ECMAScriptSourceFunctionValue) {
-              claimedMethods.add(desc.get);
-              this._visitClassMethod(classFunc, symbol, desc.get, "get", classPrototype, true, pName);
+            let getter = desc.get;
+            if (getter instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(getter);
+              this._visitClassMethod(classFunc, symbol, getter, "get", classPrototype, true, pName);
             }
-            if (desc.set instanceof ECMAScriptSourceFunctionValue) {
-              claimedMethods.add(desc.set);
-              this._visitClassMethod(classFunc, symbol, desc.set, "set", classPrototype, true, pName);
+            let setter = desc.set;
+            if (setter instanceof ECMAScriptSourceFunctionValue) {
+              claimedMethods.add(setter);
+              this._visitClassMethod(classFunc, symbol, setter, "set", classPrototype, true, pName);
             }
           }
         }
@@ -989,13 +992,14 @@ export class ResidualHeapVisitor {
           });
           this.visitValue(elem.func);
         } else {
+          let elemKey = elem.key instanceof StringValue ? elem.key.value : elem.key;
           this.classMethodInstances.set(elem.initializer, {
             classConstructor: classFunc,
             classPrototype,
             methodType: elem.isPrivate ? "privateField" : "field",
             classSuperNode: undefined,
             classMethodIsStatic: false,
-            classMethodKey: elem.key,
+            classMethodKey: elemKey,
             classMethodKeyNode: undefined,
             classMethodComputed: elem.computed,
             privateName: elem.privateName,

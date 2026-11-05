@@ -1342,7 +1342,7 @@ export class EnvironmentImplementation {
       }
 
       // 3. Return the result of performing BindingInitialization for BindingPattern passing v and environment as arguments.
-      return this.BindingInitialization(realm, node, v, strictCode, environment);
+      return this.BindingInitialization(realm, node, v, strictCode, environment || undefined);
     }
   }
 }

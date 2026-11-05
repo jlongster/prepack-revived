@@ -172,7 +172,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "getter must be a function");
     }
     let desc = new PropertyDescriptor({
-      get: getter.throwIfNotConcreteObject(),
+      get: (getter.throwIfNotConcreteObject(): any),
       enumerable: true,
       configurable: true,
     });
@@ -188,7 +188,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "setter must be a function");
     }
     let desc = new PropertyDescriptor({
-      set: setter.throwIfNotConcreteObject(),
+      set: (setter.throwIfNotConcreteObject(): any),
       enumerable: true,
       configurable: true,
     });

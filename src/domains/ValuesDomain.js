@@ -231,8 +231,6 @@ export default class ValuesDomain {
           throw e;
         }
       }
-      lval = lprim instanceof ConcreteValue ? lprim : lval;
-      rval = rprim instanceof ConcreteValue ? rprim : rval;
       if (op === ">>>") {
         let lnum = To.ToUint32(realm, lprim);
         let rnum = To.ToUint32(realm, rprim);

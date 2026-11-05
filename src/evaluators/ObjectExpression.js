@@ -78,7 +78,7 @@ export default function(
       // Annex B.3.1 / ECMA262 13.2.5.5 __proto__ Property Names in Object Initializers
       let isProtoSetter =
         !prop.computed &&
-        !prop.shorthand &&
+        !(prop: any).shorthand &&
         ((prop.key.type === "Identifier" && prop.key.name === "__proto__") ||
           (prop.key.type === "StringLiteral" && prop.key.value === "__proto__"));
       if (isProtoSetter) {

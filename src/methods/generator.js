@@ -75,7 +75,7 @@ function getOrCreateRealmRegeneratorRuntime(realm: Realm): ObjectValue {
     realm.popContext(ctx);
   }
   if (res instanceof AbruptCompletion || !(res instanceof ObjectValue)) {
-    failGeneratorOp(realm, "Failed to initialize internal generator runtime");
+    throw failGeneratorOp(realm, "Failed to initialize internal generator runtime");
   }
   realmRegeneratorRuntimes.set(realm, res);
   return res;
@@ -155,7 +155,7 @@ export function evaluateGeneratorCall(
   try {
     factoryAst = parse(realm, factorySrc, "lowered-generator");
   } catch (_e) {
-    failGeneratorOp(realm, "Failed to parse lowered generator body");
+    throw failGeneratorOp(realm, "Failed to parse lowered generator body");
   }
   let closureEnv = F.$Environment;
   invariant(closureEnv !== undefined);
@@ -237,7 +237,7 @@ function stepRegenerator(realm: Realm, generator: ObjectValue, method: "next" | 
   }
   let invokeFn = generator.$RegeneratorInvoke;
   if (invokeFn === undefined) {
-    failGeneratorOp(realm, "Resuming a generator during initialization is not supported");
+    throw failGeneratorOp(realm, "Resuming a generator during initialization is not supported");
   }
   generator.$GeneratorState = "executing";
   try {
