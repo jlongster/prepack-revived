@@ -21,6 +21,7 @@ import {
   Completion,
   ContinueCompletion,
   JoinedAbruptCompletions,
+  JoinedNormalAndAbruptCompletions,
   NormalCompletion,
 } from "../completions.js";
 import {
@@ -41,7 +42,7 @@ import {
   DestructuringAssignmentEvaluation,
   GetIterator,
 } from "../methods/index.js";
-import { Environment, Properties, To } from "../singletons.js";
+import { Environment, Functions, Properties, To } from "../singletons.js";
 import type {
   BabelNode,
   BabelNodeForOfStatement,
@@ -228,7 +229,16 @@ export function ForInOfBodyEvaluation(
     let nextResult = IteratorStep(realm, iterator);
 
     // b. If nextResult is false, return NormalCompletion(V).
-    if (!nextResult) return V;
+    if (!nextResult) {
+      // This is a join point for the paths that left earlier iterations with a break.
+      let exitResult = Functions.incorporateSavedCompletion(realm, V);
+      if (exitResult instanceof JoinedNormalAndAbruptCompletions) {
+        let selector = c => c instanceof BreakCompletion && !c.target;
+        exitResult = Completion.normalizeSelectedCompletions(selector, exitResult);
+        realm.composeWithSavedCompletion(exitResult);
+      }
+      return V;
+    }
 
     // c. Let nextValue be ? IteratorValue(nextResult).
     let nextValue = IteratorValue(realm, nextResult);
@@ -340,6 +350,10 @@ export function ForInOfBodyEvaluation(
     // i. Let result be the result of evaluating stmt.
     let result = env.evaluateCompletion(stmt, strictCode);
     invariant(result instanceof Value || result instanceof AbruptCompletion);
+    // This is a join point for break and continue completions that happened on some paths only
+    // (as in ForBodyEvaluation): without it, a conditional `continue` would be ignored.
+    result = Functions.incorporateSavedCompletion(realm, result);
+    invariant(result !== undefined);
 
     // j. Set the running execution context's LexicalEnvironment to oldEnv.
 
@@ -355,6 +369,11 @@ export function ForInOfBodyEvaluation(
       invariant(result instanceof AbruptCompletion);
       throw IteratorClose(realm, iterator, result);
     }
+
+    if (result instanceof JoinedNormalAndAbruptCompletions) {
+      result = Completion.normalizeSelectedCompletions(c => c instanceof ContinueCompletion, result);
+    }
+    if (result instanceof Completion) result = realm.composeWithSavedCompletion(result);
 
     // l. If result.[[Value]] is not empty, let V be result.[[Value]].
     let resultValue = InternalGetResultValue(realm, result);

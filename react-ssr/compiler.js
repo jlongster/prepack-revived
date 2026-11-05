@@ -250,6 +250,7 @@ __optimize(__ssrRender${argModel === undefined ? "" : ", " + JSON.stringify(argM
     result = prepack.prepackSources([{ filePath: "react-ssr-input.js", fileContents: source }], {
       compatibility: "browser",
       arrayNestedOptimizedFunctionsEnabled: true,
+      residualCallHeuristics: false,
       errorHandler: diagnostic => {
         diagnostics.push(diagnostic);
         return diagnostic.severity === "Warning" || diagnostic.severity === "Information" ? "Recover" : "Fail";

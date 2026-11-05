@@ -86,6 +86,9 @@ export type RealmOptions = {
   stripFlow?: boolean,
   abstractValueImpliesMax?: number,
   arrayNestedOptimizedFunctionsEnabled?: boolean,
+  // When false, calls are always evaluated (inlined) rather than turned into residual calls by
+  // the size and recursion heuristics (src/methods/inlining.js, src/methods/recursion.js).
+  residualCallHeuristics?: boolean,
   reactFailOnUnsupportedSideEffects?: boolean,
   removeModuleFactoryFunctions?: boolean,
   closedWorld?: boolean,

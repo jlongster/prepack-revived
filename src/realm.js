@@ -375,6 +375,7 @@ export class Realm {
     this.arrayNestedOptimizedFunctionsEnabled =
       opts.arrayNestedOptimizedFunctionsEnabled || opts.instantRender || false;
     this.removeModuleFactoryFunctions = opts.removeModuleFactoryFunctions || false;
+    this.residualCallHeuristics = opts.residualCallHeuristics !== false;
   }
 
   statistics: RealmStatistics;
@@ -528,6 +529,7 @@ export class Realm {
 
   optimizedFunctions: Map<FunctionValue | AbstractValue, ArgModel | void>;
   arrayNestedOptimizedFunctionsEnabled: boolean;
+  residualCallHeuristics: boolean;
   currentOptimizedFunction: FunctionValue | void;
 
   eagerlyRequireModuleDependencies: void | boolean;

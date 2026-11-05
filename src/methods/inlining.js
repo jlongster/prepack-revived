@@ -94,6 +94,7 @@ export function tryAvoidInliningExplosion(
 ): void | Value {
   if (
     !realm.useAbstractInterpretation ||
+    !realm.residualCallHeuristics ||
     !realm.isInPureScope() ||
     realm.instantRender.enabled ||
     realm.react.enabled ||
