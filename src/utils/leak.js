@@ -20,7 +20,57 @@ import { HeapInspector } from "../utils/HeapInspector.js";
 import { Logger } from "../utils/logger.js";
 import { isReactElement } from "../react/utils.js";
 import { Reachability } from "../singletons.js";
-import { PropertyDescriptor } from "../descriptors.js";
+import { AbstractJoinedDescriptor, PropertyDescriptor } from "../descriptors.js";
+import type { Descriptor } from "../types.js";
+import { Generator } from "../utils/generator.js";
+
+function emitUnknownPropertyValueToGenerator(
+  realm: Realm,
+  gen: Generator,
+  object: ObjectValue,
+  absVal: AbstractValue
+): void {
+  if (absVal.kind === "widened property" || absVal.kind === "template for prototype member expression") return;
+  if (absVal.args.length !== 3) return;
+  let cond = absVal.args[0];
+  invariant(cond instanceof AbstractValue);
+  if (cond.kind === "template for property name condition") {
+    let P = cond.args[0];
+    invariant(P instanceof AbstractValue);
+    let V = absVal.args[1];
+    let earlier = absVal.args[2];
+    if (earlier instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, gen, object, earlier);
+    gen.emitPropertyAssignment(object, P, V);
+  } else {
+    let consequent = absVal.args[1];
+    let alternate = absVal.args[2];
+    let g1 = new Generator(realm, "leakUnknownPropertyConsequent", gen.pathConditions);
+    let g2 = new Generator(realm, "leakUnknownPropertyAlternate", gen.pathConditions);
+    if (consequent instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, g1, object, consequent);
+    if (alternate instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, g2, object, alternate);
+    if (!g1.empty() || !g2.empty()) gen.joinGenerators(cond, g1, g2);
+  }
+}
+
+function emitUnknownPropertyDescriptorToGenerator(
+  realm: Realm,
+  gen: Generator,
+  object: ObjectValue,
+  desc: void | Descriptor
+): void {
+  if (desc === undefined) return;
+  if (desc instanceof PropertyDescriptor) {
+    if (desc.value instanceof AbstractValue) {
+      emitUnknownPropertyValueToGenerator(realm, gen, object, desc.value);
+    }
+  } else if (desc instanceof AbstractJoinedDescriptor) {
+    let g1 = new Generator(realm, "leakUnknownPropertyDesc1", gen.pathConditions);
+    let g2 = new Generator(realm, "leakUnknownPropertyDesc2", gen.pathConditions);
+    emitUnknownPropertyDescriptorToGenerator(realm, g1, object, desc.descriptor1);
+    emitUnknownPropertyDescriptorToGenerator(realm, g2, object, desc.descriptor2);
+    if (!g1.empty() || !g2.empty()) gen.joinGenerators(desc.joinCondition, g1, g2);
+  }
+}
 
 function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInspector?: () => HeapInspector): void {
   let generator = realm.generator;
@@ -82,6 +132,21 @@ function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInsp
             }
           }
         }
+      }
+    }
+  }
+
+  if (object.unknownProperty !== undefined && object.unknownProperty.descriptor !== undefined) {
+    let unknownDesc = object.unknownProperty.descriptor;
+    if (
+      !(
+        unknownDesc instanceof PropertyDescriptor &&
+        unknownDesc.value instanceof AbstractValue &&
+        unknownDesc.value.kind === "widened property"
+      )
+    ) {
+      if (generator !== undefined) {
+        emitUnknownPropertyDescriptorToGenerator(realm, generator, object, unknownDesc);
       }
     }
   }

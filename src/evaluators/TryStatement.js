@@ -317,7 +317,8 @@ function addPreexistingModifiedState(
     if (binding.environment.id < firstNewEnvironmentId) bindings.add(binding);
   });
   effects.modifiedProperties.forEach((desc, propertyBinding) => {
-    if (ObjectValue.refuseSerializationOnPropertyBinding(propertyBinding)) return;
+    if (ObjectValue.refuseSerializationOnPropertyBinding(propertyBinding) && propertyBinding.key !== "_isLeaked")
+      return;
     let object = propertyBinding.object;
     if (object instanceof ObjectValue && !effects.createdObjects.has(object)) objects.add(object);
   });

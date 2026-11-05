@@ -324,7 +324,7 @@ export class ResidualHeapVisitor {
     }
 
     // inject properties with computed names
-    if (obj.unknownProperty !== undefined) {
+    if (obj.unknownProperty !== undefined && obj.mightNotBeLeakedObject()) {
       this.visitObjectPropertiesWithComputedNamesDescriptor(obj.unknownProperty.descriptor);
     }
 

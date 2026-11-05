@@ -329,7 +329,7 @@ export class PathImplementation {
         // if condition is true, one of the saved path conditions must be false
         // since we have to assume that those conditions are true we now know that on this path, condition is false
         realm.pathConditions = savedPath;
-        this.pushInverseAndRefine(condition);
+        pushInverseAndRefineImpl(condition);
         savedPath = realm.pathConditions;
       }
       throw e;
@@ -355,7 +355,7 @@ export class PathImplementation {
         // if condition is false, one of the saved path conditions must be false
         // since we have to assume that those conditions are true we now know that on this path, condition is true
         realm.pathConditions = savedPath;
-        this.pushAndRefine(condition);
+        pushAndRefineImpl(condition);
         savedPath = realm.pathConditions;
       }
       throw e;
@@ -365,29 +365,37 @@ export class PathImplementation {
   }
 
   pushAndRefine(condition: Value): void {
-    let realm = condition.$Realm;
-    let savedPath = realm.pathConditions;
-    realm.pathConditions = new PathConditionsImplementation(savedPath);
-    try {
-      pushPathCondition(condition);
-      realm.pathConditions.refineBaseConditons(realm);
-    } catch (e) {
-      realm.pathConditions = savedPath;
-      throw e;
-    }
+    pushAndRefineImpl(condition);
   }
 
   pushInverseAndRefine(condition: Value): void {
-    let realm = condition.$Realm;
-    let savedPath = realm.pathConditions;
-    realm.pathConditions = new PathConditionsImplementation(savedPath);
-    try {
-      pushInversePathCondition(condition);
-      realm.pathConditions.refineBaseConditons(realm);
-    } catch (e) {
-      realm.pathConditions = savedPath;
-      throw e;
-    }
+    pushInverseAndRefineImpl(condition);
+  }
+}
+
+function pushAndRefineImpl(condition: Value): void {
+  let realm = condition.$Realm;
+  let savedPath = realm.pathConditions;
+  realm.pathConditions = new PathConditionsImplementation(savedPath);
+  try {
+    pushPathCondition(condition);
+    realm.pathConditions.refineBaseConditons(realm);
+  } catch (e) {
+    realm.pathConditions = savedPath;
+    throw e;
+  }
+}
+
+function pushInverseAndRefineImpl(condition: Value): void {
+  let realm = condition.$Realm;
+  let savedPath = realm.pathConditions;
+  realm.pathConditions = new PathConditionsImplementation(savedPath);
+  try {
+    pushInversePathCondition(condition);
+    realm.pathConditions.refineBaseConditons(realm);
+  } catch (e) {
+    realm.pathConditions = savedPath;
+    throw e;
   }
 }
 

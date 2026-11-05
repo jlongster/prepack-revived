@@ -355,7 +355,7 @@ export class ResidualHeapSerializer {
     }
 
     // inject properties with computed names
-    if (obj.unknownProperty !== undefined) {
+    if (obj.unknownProperty !== undefined && !isCertainlyLeaked) {
       let desc = obj.unknownProperty.descriptor;
       if (desc !== undefined) {
         let semaphore = this._acquireOneObjectSemaphore(obj);
