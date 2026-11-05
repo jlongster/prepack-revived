@@ -18,6 +18,7 @@ import {
   NumberValue,
   IntegralValue,
 } from "../../values/index.js";
+import { Placeholders } from "../../utils/PreludeGenerator.js";
 import { To } from "../../singletons.js";
 import invariant from "../../invariant.js";
 
@@ -87,17 +88,22 @@ export default function(realm: Realm, obj: ObjectValue): void {
     return new StringValue(realm, x.toFixed(f));
   });
 
-  let toLocaleStringSrc = "(A).toLocaleString()";
-
   // ECMA262 20.1.3.4
-  obj.defineNativeMethod("toLocaleString", 0, context => {
+  obj.defineNativeMethod("toLocaleString", 0, (context, args, argCount) => {
     let x = To.thisNumberValue(realm, context);
     if (realm.useAbstractInterpretation) {
+      let passed = args.slice(0, argCount);
+      let argParams = Placeholders.slice(1, 1 + passed.length).join(", ");
       // The locale is environment-dependent and may also be time-dependent
       // so do this at runtime and at this point in time
-      return AbstractValue.createTemporalFromTemplate(realm, toLocaleStringSrc, StringValue, [x]);
+      return AbstractValue.createTemporalFromTemplate(
+        realm,
+        `(A).toLocaleString(${argParams})`,
+        StringValue,
+        [x, ...passed]
+      );
     } else {
-      return new StringValue(realm, x.toLocaleString());
+      return new StringValue(realm, x.value.toLocaleString());
     }
   });
 

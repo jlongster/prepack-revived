@@ -26,6 +26,18 @@ export default function(realm: Realm): void {
     })
   );
 
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    global.$DefineOwnProperty(
+      "globalThis",
+      new PropertyDescriptor({
+        value: global,
+        writable: true,
+        enumerable: false,
+        configurable: true,
+      })
+    );
+  }
+
   for (let name of ["undefined", "NaN", "Infinity"]) {
     global.$DefineOwnProperty(
       name,
