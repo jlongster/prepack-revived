@@ -1917,12 +1917,23 @@ export class ResidualHeapSerializer {
     return keys.length > 0 && keys.length <= 64 ? keys : undefined;
   }
 
-  _isInRepeatingConstructorGroup(val: ObjectValue): boolean {
+  _shouldUseLiteralProto(val: ObjectValue): boolean {
     let proto = val.$Prototype;
+    if (proto === this.realm.intrinsics.null) return true;
     if (!(proto instanceof ObjectValue)) return false;
+    if (this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) || this.realm.isCompatibleWith("mobile")) {
+      return true;
+    }
     let keys = this._getEmbeddableKeysSignature(val);
-    if (keys === undefined || !this._canConstructWithThisAssignments(proto, keys)) return false;
+    if (keys === undefined) return false;
+    // If proto's chain has a setter or non-writable property shadowing one of `keys`,
+    // `Object.create(proto)` + `obj.k = v` would invoke `[[Set]]` instead of `[[DefineOwnProperty]]`
+    // and silently drop or throw on the write; `{ __proto__: proto, k: v }` uses `CreateDataPropertyOrThrow`.
+    if (!this._canConstructWithThisAssignments(proto, keys)) return true;
+    return this._isInRepeatingConstructorGroup(val, proto, keys);
+  }
 
+  _isInRepeatingConstructorGroup(val: ObjectValue, proto: ObjectValue, keys: Array<string>): boolean {
     let countsByProto = this._ctorGroupCounts;
     if (countsByProto === undefined) {
       countsByProto = new Map();
@@ -2349,18 +2360,14 @@ export class ResidualHeapSerializer {
 
         let proto = val.$Prototype;
         let { skipPrototype, constructor: _constructor } = getObjectPrototypeMetadata(this.realm, val);
-        let isLegacyJsc =
-          this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) || this.realm.isCompatibleWith("mobile");
         let canUseLiteralProto =
           val.temporalAlias === undefined &&
           !this.realm.instantRender.enabled &&
+          this._shouldUseLiteralProto(val) &&
           (_constructor !== undefined
-            ? !this.emitter.getReasonToWaitForDependencies(_constructor) &&
-              (isLegacyJsc || this._isInRepeatingConstructorGroup(val))
+            ? !this.emitter.getReasonToWaitForDependencies(_constructor)
             : !skipPrototype &&
               proto !== this.realm.intrinsics.ObjectPrototype &&
-              (proto === this.realm.intrinsics.null ||
-                (proto instanceof ObjectValue && (isLegacyJsc || this._isInRepeatingConstructorGroup(val)))) &&
               !this.emitter.getReasonToWaitForDependencies(proto));
         if (canUseLiteralProto) {
           return ResidualHeapSerializer.prototype.serializeValueRawObject.call(
