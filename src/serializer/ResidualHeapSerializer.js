@@ -78,6 +78,7 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { canHoistFunction } from "../react/hoisting.js";
 import { Path, To } from "../singletons.js";
 import traverseFast from "../utils/traverse-fast.js";
+import { buildRecomputeLoopStatements, type LoopRecomputeRecipe, type RecomputeRecipe } from "../methods/recompute.js";
 import { ResidualReactElementSerializer } from "./ResidualReactElementSerializer.js";
 import type { Binding } from "../environment.js";
 import { GlobalEnvironmentRecord, DeclarativeEnvironmentRecord } from "../environment.js";
@@ -225,6 +226,8 @@ export class ResidualHeapSerializer {
     this.declaredGlobalLets = new Map();
     this._objectSemaphores = new Map();
     this.additionalGeneratorRoots = residualHeapInfo.additionalGeneratorRoots;
+    this.recomputeRecipes = residualHeapInfo.recomputeRecipes || new Map();
+    this._emittedLoopRecipes = [];
     let environment = realm.$GlobalEnv.environmentRecord;
     invariant(environment instanceof GlobalEnvironmentRecord);
     this.globalEnvironmentRecord = environment;
@@ -283,6 +286,8 @@ export class ResidualHeapSerializer {
   generatorTree: GeneratorTree;
   conditionalFeasibility: Map<AbstractValue, { t: boolean, f: boolean }>;
   additionalGeneratorRoots: Map<Generator, Set<ObjectValue>>;
+  recomputeRecipes: Map<ObjectValue, RecomputeRecipe>;
+  _emittedLoopRecipes: Array<LoopRecomputeRecipe>;
   _currentGenerator: void | Generator;
 
   declaredGlobalLets: Map<string, Value>;
@@ -2311,6 +2316,16 @@ export class ResidualHeapSerializer {
   }
 
   _serializeValueObjectBase(obj: ObjectValue): void | BabelNodeExpression {
+    let recipe = this.recomputeRecipes.get(obj);
+    if (recipe !== undefined) {
+      if (recipe.kind === "call") {
+        let calleeExpr = this.serializeValue(recipe.callee);
+        return t.callExpression(calleeExpr, []);
+      } else {
+        this._emittedLoopRecipes.push(recipe);
+        return recipe.targetIsArray ? t.arrayExpression([]) : t.objectExpression([]);
+      }
+    }
     if (obj instanceof ProxyValue) {
       return this._serializeValueProxy(obj);
     }
@@ -2686,7 +2701,31 @@ export class ResidualHeapSerializer {
 
   // Hook point for any serialization needs to be done after generator serialization is complete.
   postGeneratorSerialization(): void {
-    // For overriding only.
+    if (this._emittedLoopRecipes.length > 0) {
+      let mutatedNames = new Set();
+      for (let recipe of this._emittedLoopRecipes) {
+        for (let varName of recipe.mutatedGlobalsPre.keys()) mutatedNames.add(varName);
+      }
+      if (mutatedNames.size > 0) {
+        this.mainBody.entries = this.mainBody.entries.filter(stmt => {
+          if (
+            stmt.type === "ExpressionStatement" &&
+            stmt.expression.type === "AssignmentExpression" &&
+            stmt.expression.left.type === "MemberExpression" &&
+            !stmt.expression.left.computed &&
+            stmt.expression.left.property.type === "Identifier" &&
+            mutatedNames.has(stmt.expression.left.property.name)
+          ) {
+            return false;
+          }
+          return true;
+        });
+      }
+      for (let recipe of this._emittedLoopRecipes) {
+        let loopStmts = buildRecomputeLoopStatements(recipe, this.preludeGenerator.declaredGlobals);
+        this.mainBody.entries.push(...loopStmts);
+      }
+    }
   }
 
   serialize(): BabelNodeFile {
