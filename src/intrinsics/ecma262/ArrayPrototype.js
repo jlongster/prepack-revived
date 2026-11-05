@@ -17,6 +17,7 @@ import {
   BoundFunctionValue,
   ConcreteValue,
   ECMAScriptSourceFunctionValue,
+  EmptyValue,
   NativeFunctionValue,
   NullValue,
   NumberValue,
@@ -764,9 +765,29 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }
 
       // 7. Repeat, while k < len
+      let disjunction: void | Value;
       while (k < len) {
         // a. Let elementK be the result of ? Get(O, ! ToString(k)).
         let elementK = Get(realm, O, To.ToString(realm, new NumberValue(realm, k)));
+
+        if (searchElement instanceof AbstractValue || elementK instanceof AbstractValue) {
+          let promoted = promoteEmptyElement(elementK);
+          if (promoted !== undefined) {
+            let same = sameValueZeroAbstract(searchElement, promoted);
+            if (!same.mightNotBeTrue()) return realm.intrinsics.true;
+            if (!same.mightNotBeFalse()) {
+              k = k + 1;
+              continue;
+            }
+            if (hasPureIndexedAccesses(O, k + 1, len)) {
+              disjunction =
+                disjunction === undefined ? same : AbstractValue.createFromLogicalOp(realm, "||", disjunction, same);
+              if (!disjunction.mightNotBeTrue()) return realm.intrinsics.true;
+              k = k + 1;
+              continue;
+            }
+          }
+        }
 
         // b. If SameValueZero(searchElement, elementK) is true, return true.
         if (SameValueZeroPartial(realm, searchElement, elementK) === true) return realm.intrinsics.true;
@@ -776,7 +797,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }
 
       // 8. Return false.
-      return realm.intrinsics.false;
+      return disjunction !== undefined ? disjunction : realm.intrinsics.false;
     });
 
   // ECMA262 22.1.3.12
@@ -831,29 +852,199 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 8. Repeat, while k < len
+    let pendingMatches: Array<[number, Value]> = [];
+    let tailResult: Value = new NumberValue(realm, -1);
     while (k < len) {
+      let key = k + "";
+      if (
+        O instanceof ArrayValue &&
+        O.$TypedArrayName === undefined &&
+        !O.isPartialObject() &&
+        !O.mightBeLeakedObject() &&
+        O.unknownProperty === undefined &&
+        O.$Prototype === realm.intrinsics.ArrayPrototype &&
+        realm.intrinsics.ArrayPrototype.properties.get(key) === undefined &&
+        realm.intrinsics.ObjectPrototype.properties.get(key) === undefined
+      ) {
+        let binding = O.properties.get(key);
+        if (binding === undefined || binding.descriptor === undefined) {
+          k++;
+          continue;
+        }
+        if (binding.descriptor instanceof PropertyDescriptor && binding.descriptor.value instanceof Value) {
+          let rawVal = binding.descriptor.value;
+          if (rawVal instanceof AbstractValue || searchElement instanceof AbstractValue) {
+            let present = elementPresenceCondition(rawVal, { nodes: 32 }, new Map());
+            let promoted = promoteEmptyElement(rawVal);
+            if (present !== undefined && promoted !== undefined) {
+              let eq = AbstractValue.createFromBinaryOp(realm, "===", searchElement, promoted);
+              let match = !present.mightNotBeTrue()
+                ? eq
+                : !present.mightNotBeFalse()
+                ? realm.intrinsics.false
+                : !searchElement.mightBeUndefined()
+                ? eq
+                : AbstractValue.createFromLogicalOp(realm, "&&", present, eq);
+              if (!match.mightNotBeFalse()) {
+                k++;
+                continue;
+              }
+              if (!match.mightNotBeTrue()) {
+                tailResult = new NumberValue(realm, k);
+                break;
+              }
+              if (hasPureIndexedAccesses(O, k + 1, len)) {
+                pendingMatches.push([k, match]);
+                k++;
+                continue;
+              }
+            }
+          }
+        }
+      }
+
       // a. Let kPresent be ? HasProperty(O, ! ToString(k)).
-      let kPresent = HasProperty(realm, O, k + "");
+      let kPresent = HasProperty(realm, O, key);
 
       // b. If kPresent is true, then
       if (kPresent === true) {
         // i. Let elementK be ? Get(O, ! ToString(k)).
-        let elementK = Get(realm, O, k + "");
+        let elementK = Get(realm, O, key);
 
         // ii. Let same be the result of performing Strict Equality Comparison searchElement === elementK.
         let same = StrictEqualityComparisonPartial(realm, searchElement, elementK);
 
         // iii. If same is true, return k.
-        if (same) return new NumberValue(realm, k);
+        if (same) {
+          tailResult = new NumberValue(realm, k);
+          break;
+        }
       }
 
       // c. Increase k by 1.
       k++;
     }
 
-    // 9. Return -1.
-    return new NumberValue(realm, -1);
+    // 9. Return -1 (or the conditional chain of earlier abstract matches).
+    for (let i = pendingMatches.length - 1; i >= 0; i--) {
+      let [idx, match] = pendingMatches[i];
+      tailResult = AbstractValue.createFromConditionalOp(realm, match, new NumberValue(realm, idx), tailResult);
+    }
+    return tailResult;
   });
+
+  function hasPureIndexedAccesses(O: ObjectValue | AbstractObjectValue, from: number, to: number): boolean {
+    if (
+      !(O instanceof ArrayValue) ||
+      O.$TypedArrayName !== undefined ||
+      O.isPartialObject() ||
+      O.mightBeLeakedObject() ||
+      O.unknownProperty !== undefined ||
+      O.$Prototype !== realm.intrinsics.ArrayPrototype ||
+      to - from > 64
+    ) {
+      return false;
+    }
+    for (let j = from; j < to; j++) {
+      let key = j + "";
+      if (
+        realm.intrinsics.ArrayPrototype.properties.get(key) !== undefined ||
+        realm.intrinsics.ObjectPrototype.properties.get(key) !== undefined
+      ) {
+        return false;
+      }
+      let b = O.properties.get(key);
+      if (b !== undefined && b.descriptor !== undefined) {
+        if (!(b.descriptor instanceof PropertyDescriptor) || b.descriptor.value === undefined) return false;
+      }
+    }
+    return true;
+  }
+
+  function promoteEmptyElement(val: Value): void | Value {
+    if (val instanceof EmptyValue) return realm.intrinsics.undefined;
+    if (!(val instanceof AbstractValue)) return val;
+    if (!val.mightHaveBeenDeleted()) return realm.simplifyAndRefineAbstractValue(val);
+    let mapped = mapEmptyToUndefined(val, { nodes: 32 }, new Map());
+    if (mapped !== undefined) return realm.simplifyAndRefineAbstractValue(mapped);
+    if (!val.values.isTop()) return val.promoteEmptyToUndefined();
+    return undefined;
+  }
+
+  function mapEmptyToUndefined(
+    val: Value,
+    budget: { nodes: number },
+    memo: Map<AbstractValue, Value | null>
+  ): void | Value {
+    if (val instanceof EmptyValue) return realm.intrinsics.undefined;
+    if (!(val instanceof AbstractValue)) return val;
+    if (!val.mightHaveBeenDeleted()) return val;
+    let cached = memo.get(val);
+    if (cached !== undefined) return cached === null ? undefined : cached;
+    if (val.kind !== "conditional" || --budget.nodes < 0) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let [c, x, y] = val.args;
+    let mx = mapEmptyToUndefined(x, budget, memo);
+    if (mx === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let my = mapEmptyToUndefined(y, budget, memo);
+    if (my === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let res = AbstractValue.createFromConditionalOp(realm, c, mx, my, val.expressionLocation);
+    memo.set(val, res);
+    return res;
+  }
+
+  function elementPresenceCondition(
+    val: Value,
+    budget: { nodes: number },
+    memo: Map<AbstractValue, Value | null>
+  ): void | Value {
+    if (val instanceof EmptyValue) return realm.intrinsics.false;
+    if (!(val instanceof AbstractValue) || !val.mightHaveBeenDeleted()) return realm.intrinsics.true;
+    let cached = memo.get(val);
+    if (cached !== undefined) return cached === null ? undefined : cached;
+    if (val.kind !== "conditional" || --budget.nodes < 0) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let [c, x, y] = val.args;
+    let px = elementPresenceCondition(x, budget, memo);
+    if (px === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let py = elementPresenceCondition(y, budget, memo);
+    if (py === undefined) {
+      memo.set(val, null);
+      return undefined;
+    }
+    let res = AbstractValue.createFromConditionalOp(realm, c, px, py, val.expressionLocation, true);
+    memo.set(val, res);
+    return res;
+  }
+
+  function mightValueBeNaN(val: Value): boolean {
+    if (val instanceof NumberValue) return val.value !== val.value;
+    if (!(val instanceof AbstractValue) || !val.mightBeNumber()) return false;
+    let r = IntervalDomain.of(val);
+    return r === undefined ? true : r.mayBeNaN;
+  }
+
+  function sameValueZeroAbstract(x: Value, y: Value): Value {
+    let eq = AbstractValue.createFromBinaryOp(realm, "===", x, y);
+    if (!mightValueBeNaN(x) || !mightValueBeNaN(y)) return eq;
+    let xNaN = AbstractValue.createFromBinaryOp(realm, "!==", x, x);
+    let yNaN = AbstractValue.createFromBinaryOp(realm, "!==", y, y);
+    let bothNaN = AbstractValue.createFromLogicalOp(realm, "&&", xNaN, yNaN);
+    return AbstractValue.createFromLogicalOp(realm, "||", eq, bothNaN);
+  }
 
   // ECMA262 22.1.3.13
   defineArrayMethod("join", 1, (context, [separator]) => {
