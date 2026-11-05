@@ -12,8 +12,22 @@ const DIST_DIR = path.join(BENCH_DIR, "libs", "dist");
 const MANIFEST_FILE = path.join(BENCH_DIR, "libs", "manifest.json");
 const TMP_DIR = "/tmp/opencode/pp-bench-setup";
 
+function needsInstall() {
+  const benchPkg = JSON.parse(fs.readFileSync(path.join(BENCH_DIR, "package.json"), "utf8"));
+  const declared = Object.assign({}, benchPkg.dependencies, benchPkg.devDependencies);
+  for (const [name, wanted] of Object.entries(declared)) {
+    const installedPkgPath = path.join(NM_DIR, name, "package.json");
+    if (!fs.existsSync(installedPkgPath)) return true;
+    if (/^\d+\.\d+\.\d+/.test(wanted)) {
+      const installed = JSON.parse(fs.readFileSync(installedPkgPath, "utf8"));
+      if (installed.version !== wanted) return true;
+    }
+  }
+  return false;
+}
+
 function ensureInstalled() {
-  if (!fs.existsSync(path.join(NM_DIR, "lodash", "package.json"))) {
+  if (needsInstall()) {
     console.log("Installing bench dependencies inside bench/node_modules ...");
     const r = childProcess.spawnSync("npm", ["install", "--no-audit", "--no-fund"], {
       cwd: BENCH_DIR,
@@ -49,10 +63,10 @@ function buildCorpus() {
     fs.writeFileSync(outFile, code, "utf8");
 
     // Verify plain determinism across two fresh Node runs and two fresh VM runs.
-    const vm1 = runInVm(code, spec.smokeCode);
-    const vm2 = runInVm(code, spec.smokeCode);
-    const node1 = runInFreshNode(code, spec.smokeCode, TMP_DIR, `${spec.id}-1`);
-    const node2 = runInFreshNode(code, spec.smokeCode, TMP_DIR, `${spec.id}-2`);
+    const vm1 = runInVm(code, spec.smokeCode, 60000);
+    const vm2 = runInVm(code, spec.smokeCode, 60000);
+    const node1 = runInFreshNode(code, spec.smokeCode, TMP_DIR, `${spec.id}-1`, 60000);
+    const node2 = runInFreshNode(code, spec.smokeCode, TMP_DIR, `${spec.id}-2`, 60000);
 
     if (!vm1.ok || !vm2.ok || !node1.ok || !node2.ok) {
       throw new Error(
@@ -67,10 +81,12 @@ function buildCorpus() {
 
     const pkgMeta = spec.packages.map(readPkgMeta);
     const bytes = Buffer.byteLength(code, "utf8");
+    const tier = spec.tier || (bytes >= 750 * 1024 ? "large" : "standard");
     entries.push({
       id: spec.id,
       name: spec.name,
       kind: spec.kind,
+      tier,
       buildType: spec.buildType,
       description: spec.description,
       file: `libs/dist/${spec.id}.js`,
@@ -82,7 +98,7 @@ function buildCorpus() {
     });
     const vers = pkgMeta.map(p => `${p.name}@${p.version} (${p.license})`).join(", ");
     console.log(
-      `ok  ${spec.id.padEnd(16)} ${(bytes / 1024).toFixed(1).padStart(6)} KB  digest=${node1.digest.slice(0, 12)}  [${vers}]`
+      `ok  ${spec.id.padEnd(18)} ${(bytes / 1024).toFixed(1).padStart(7)} KB  [${tier.padEnd(8)}]  digest=${node1.digest.slice(0, 12)}  [${vers}]`
     );
   }
 
