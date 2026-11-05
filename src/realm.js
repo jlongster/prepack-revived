@@ -211,6 +211,8 @@ export class ExecutionContext {
   lexicalEnvironment: LexicalEnvironment;
   isReadOnly: boolean;
   isStrict: boolean;
+  // The FunctionEnvironmentRecord created for this call, if this context is a function invocation.
+  functionEnvironmentRecord: void | FunctionEnvironmentRecord;
 
   setCaller(context: ExecutionContext): void {
     this.caller = context;
@@ -304,7 +306,7 @@ export class Realm {
     this.usedAssumptionGuards = new Map();
     this._envGlobals = new Map();
     this._typeofGlobalValues = new Map();
-    this.remainingCalls = opts.maxStackDepth || 112;
+    this.remainingCalls = opts.maxStackDepth || 160;
     this.invariantLevel = opts.invariantLevel || 0;
     this.invariantMode = opts.invariantMode || "throw";
     this.emitConcreteModel = !!opts.emitConcreteModel;
@@ -612,10 +614,13 @@ export class Realm {
   }
 
   clearBlockBindings(modifiedBindings: void | Bindings, environmentRecord: DeclarativeEnvironmentRecord): void {
-    if (modifiedBindings === undefined) return;
-    for (let b of modifiedBindings.keys()) {
+    if (modifiedBindings === undefined || modifiedBindings.size === 0) return;
+    // Iterate the (small) scope rather than the (possibly huge) modified-bindings map.
+    let bindings = environmentRecord.bindings;
+    for (let name in bindings) {
+      let b = bindings[name];
       if (b.mightHaveBeenCaptured) continue;
-      if (environmentRecord.bindings[b.name] && environmentRecord.bindings[b.name] === b) modifiedBindings.delete(b);
+      modifiedBindings.delete(b);
     }
   }
 
@@ -660,12 +665,13 @@ export class Realm {
     let lexEnv = context.lexicalEnvironment;
     while (lexEnv != null) {
       let envRec = lexEnv.environmentRecord;
-      if (envRec instanceof DeclarativeEnvironmentRecord) {
+      if (envRec instanceof DeclarativeEnvironmentRecord && !envRec.allBindingsMightHaveBeenCaptured) {
         let bindings = envRec.bindings;
         for (let name in bindings) {
           let binding = bindings[name];
           binding.mightHaveBeenCaptured = true;
         }
+        envRec.allBindingsMightHaveBeenCaptured = true;
       }
       lexEnv = lexEnv.parent;
     }
@@ -682,7 +688,12 @@ export class Realm {
 
   popContext(context: ExecutionContext): void {
     let funcVal = context.function;
-    if (funcVal) {
+    let funcEnvRec = context.functionEnvironmentRecord;
+    if (funcEnvRec !== undefined) {
+      // Only the bindings of the invocation that is returning are dead now. Bindings of other, still active
+      // invocations of the same function must keep their undo information.
+      this.clearBlockBindings(this.modifiedBindings, funcEnvRec);
+    } else if (funcVal) {
       this.clearFunctionBindings(this.modifiedBindings, funcVal);
     }
     let c = this.contextStack.pop();

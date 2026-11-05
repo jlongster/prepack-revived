@@ -22,8 +22,10 @@ import {
   NullValue,
   NumberValue,
   ObjectValue,
+  PrimitiveValue,
   ProxyValue,
   StringValue,
+  SymbolValue,
   UndefinedValue,
   Value,
 } from "../values/index.js";
@@ -381,6 +383,74 @@ export function OrdinaryGetPartial(
   if (O.unknownProperty === undefined && !O.isPartialObject()) {
     let keys = IntervalDomain.enumeratePropertyKeys(P, MAX_KEY_CASES);
     if (keys !== undefined) return mapCases(realm, P, keys, k => O.$Get(To.ToString(realm, k), Receiver));
+
+    // For larger bounded integer index ranges (e.g. `lut[x & 255]` on a 256-entry lookup table),
+    // emit a single typed `OBJECT_GET_PARTIAL` read instead of a 256-deep conditional chain.
+    if (
+      O === Receiver &&
+      O instanceof ArrayValue &&
+      !O.isIntrinsic() &&
+      !O.mightBeLeakedObject() &&
+      O.$Prototype === realm.intrinsics.ArrayPrototype &&
+      !P.mightNotBeNumber() &&
+      realm.generator !== undefined
+    ) {
+      let lenBinding = O.properties.get("length");
+      let lenDesc = lenBinding !== undefined ? lenBinding.descriptor : undefined;
+      let lenVal = lenDesc instanceof PropertyDescriptor ? lenDesc.value : undefined;
+      let range = IntervalDomain.of(P);
+      if (
+        lenVal instanceof NumberValue &&
+        range !== undefined &&
+        range.integral &&
+        !range.mayBeNaN &&
+        range.lo >= 0 &&
+        range.hi < lenVal.value &&
+        range.hi - range.lo <= 4096
+      ) {
+        let commonType: void | typeof Value;
+        let allPresentData = true;
+        for (let k = range.lo; k <= range.hi; k++) {
+          let elemBinding = O.properties.get(k + "");
+          let elemDesc = elemBinding !== undefined ? elemBinding.descriptor : undefined;
+          if (!(elemDesc instanceof PropertyDescriptor)) {
+            allPresentData = false;
+            break;
+          }
+          let ev = elemDesc.value;
+          if (
+            !(ev instanceof Value) ||
+            ev instanceof EmptyValue ||
+            (ev instanceof AbstractValue && ev.mightHaveBeenDeleted())
+          ) {
+            allPresentData = false;
+            break;
+          }
+          let et = ev.getType();
+          if (commonType === undefined) {
+            commonType = et;
+          } else if (commonType !== et) {
+            if (Value.isTypeCompatibleWith(et, commonType)) {
+              // keep commonType
+            } else if (Value.isTypeCompatibleWith(commonType, et)) {
+              commonType = et;
+            } else {
+              commonType = Value;
+            }
+          }
+        }
+        if (allPresentData && commonType !== undefined && Value.isTypeCompatibleWith(commonType, PrimitiveValue)) {
+          O.makeFinal();
+          return AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            commonType,
+            [O, P],
+            createOperationDescriptor("OBJECT_GET_PARTIAL"),
+            { skipInvariant: true, isPure: true }
+          );
+        }
+      }
+    }
   }
 
   // A string coercion might have side-effects.
@@ -457,6 +527,7 @@ export function OrdinaryGetPartial(
     }
   }
 
+  let originalP = P;
   P = To.ToStringAbstract(realm, P);
 
   // If all else fails, use this expression
@@ -507,7 +578,13 @@ export function OrdinaryGetPartial(
       if (val.kind === "widened numeric property") {
         invariant(O instanceof ArrayValue && ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O));
         invariant(Receiver instanceof ObjectValue || Receiver instanceof AbstractObjectValue);
-        return GetFromArrayWithWidenedNumericProperty(realm, Receiver, P instanceof StringValue ? P.value : P);
+        let indexOrProp =
+          originalP instanceof AbstractValue && !originalP.mightNotBeNumber()
+            ? originalP
+            : P instanceof StringValue
+            ? P.value
+            : P;
+        return GetFromArrayWithWidenedNumericProperty(realm, Receiver, indexOrProp);
       }
       result = specializeJoin(realm, val, P);
     }
@@ -859,13 +936,22 @@ export function GetFromArrayWithWidenedNumericProperty(
   invariant(proto instanceof ObjectValue && proto === realm.intrinsics.ArrayPrototype);
   if (typeof P === "string") {
     if (P === "length") {
-      return AbstractValue.createTemporalFromBuildFunction(
+      let lenVal = AbstractValue.createTemporalFromBuildFunction(
         realm,
         NumberValue,
         [arr],
         createOperationDescriptor("UNKNOWN_ARRAY_LENGTH"),
         { skipInvariant: true, isPure: true }
       );
+      if (
+        lenVal instanceof AbstractValue &&
+        arr instanceof ArrayValue &&
+        !arr._widenedMutated &&
+        arr.mightNotBeLeakedObject()
+      ) {
+        arr._lastWidenedLength = lenVal;
+      }
+      return lenVal;
     }
     let prototypeBinding = proto.properties.get(P);
     if (prototypeBinding !== undefined) {
@@ -875,11 +961,51 @@ export function GetFromArrayWithWidenedNumericProperty(
         return descriptor.value;
       }
     }
+  } else if (P instanceof SymbolValue) {
+    // Widened numeric properties never cover symbol keys, so built-in symbol methods
+    // such as Array.prototype[Symbol.iterator] come straight from the prototype.
+    let prototypeBinding = proto.symbols.get(P);
+    if (prototypeBinding !== undefined) {
+      let descriptor = prototypeBinding.descriptor;
+      if (descriptor instanceof PropertyDescriptor && descriptor.value instanceof NativeFunctionValue) {
+        return descriptor.value;
+      }
+    }
   }
   let prop = typeof P === "string" ? new StringValue(realm, P) : P;
+  let elemType = Value;
+  if (
+    arr instanceof ArrayValue &&
+    arr._widenedIsDense === true &&
+    !arr._widenedMutated &&
+    arr.mightNotBeLeakedObject() &&
+    arr._lastWidenedLength !== undefined
+  ) {
+    let widenedType = ArrayValue.getWidenedElementType(arr);
+    let lenVal = arr._lastWidenedLength;
+    if (widenedType !== Value && lenVal !== undefined) {
+      const knownLen: AbstractValue = lenVal;
+      if (typeof P === "string" && IsArrayIndex(realm, P)) {
+        let idx = +P;
+        let inBounds = realm.evaluateWithoutEffects(() =>
+          Path.implies(AbstractValue.createFromBinaryOp(realm, "<", new NumberValue(realm, idx), knownLen))
+        );
+        if (inBounds) elemType = widenedType;
+      } else if (P instanceof AbstractValue && !P.mightNotBeNumber()) {
+        const keyAbs: AbstractValue = P;
+        let range = IntervalDomain.of(keyAbs);
+        if (range !== undefined && range.integral && !range.mayBeNaN && range.lo >= 0) {
+          let inBounds = realm.evaluateWithoutEffects(() =>
+            Path.implies(AbstractValue.createFromBinaryOp(realm, "<", keyAbs, knownLen))
+          );
+          if (inBounds) elemType = widenedType;
+        }
+      }
+    }
+  }
   return AbstractValue.createTemporalFromBuildFunction(
     realm,
-    Value,
+    elemType,
     [arr, prop],
     createOperationDescriptor("UNKNOWN_ARRAY_GET_PARTIAL"),
     {

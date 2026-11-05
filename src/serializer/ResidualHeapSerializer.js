@@ -12,6 +12,7 @@
 import { Realm } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
 import { IsArray, Get } from "../methods/index.js";
+import { ArrayElementSize } from "../methods/typedarray.js";
 import {
   AbstractObjectValue,
   AbstractValue,
@@ -21,6 +22,7 @@ import {
   ECMAScriptSourceFunctionValue,
   EmptyValue,
   FunctionValue,
+  IntegerIndexedExotic,
   NativeFunctionValue,
   NullValue,
   NumberValue,
@@ -65,7 +67,7 @@ import { Logger } from "../utils/logger.js";
 import { Modules } from "../utils/modules.js";
 import { HeapInspector, getNativeErrorConstructorName } from "../utils/HeapInspector.js";
 import { ResidualFunctions } from "./ResidualFunctions.js";
-import { factorifyObjects } from "./factorify.js";
+import { constructorSafeObjectExpressions, factorifyObjects } from "./factorify.js";
 import {
   nullExpression,
   voidExpression,
@@ -122,6 +124,14 @@ class CountingSemaphore {
     invariant(this.count > 0);
     if (--this.count === 0) this.action();
   }
+}
+
+function isNullableAtemporalPropertyAccess(val: Value): boolean {
+  if (!(val instanceof AbstractValue) || val.hasIdentifier()) return false;
+  if (val.kind === "abstractConcreteUnion" && val.args.length >= 1) {
+    return isNullableAtemporalPropertyAccess(val.args[0]);
+  }
+  return typeof val.kind === "string" && val.kind.startsWith("property:?");
 }
 
 export class ResidualHeapSerializer {
@@ -281,6 +291,7 @@ export class ResidualHeapSerializer {
   _options: SerializerOptions;
   referencedDeclaredValues: Map<Value, void | FunctionValue>;
   activeGeneratorBodies: Map<Generator, SerializedBody>;
+  _ctorGroupCounts: void | Map<ObjectValue, Map<string, number>>;
   additionalFunctionValuesAndEffects: Map<FunctionValue, AdditionalFunctionEffects>;
   additionalFunctionValueInfos: Map<FunctionValue, AdditionalFunctionInfo>;
   rewrittenAdditionalFunctions: Map<FunctionValue, Array<BabelNodeStatement>>;
@@ -1203,7 +1214,7 @@ export class ResidualHeapSerializer {
     }
 
     this.serializedValues.add(val);
-    if (!referenceOnly && HeapInspector.isLeaf(val)) {
+    if (!referenceOnly && (HeapInspector.isLeaf(val) || isNullableAtemporalPropertyAccess(val))) {
       let res = this._serializeValue(val);
       invariant(res !== undefined);
       return res;
@@ -1734,12 +1745,35 @@ export class ResidualHeapSerializer {
     invariant(buf !== undefined);
     let outlinedArrayBuffer = this.serializeValue(buf, true);
     this._emitObjectProperties(val);
-    return t.newExpression(this.preludeGenerator.memoizeReference(val.getKind()), [outlinedArrayBuffer]);
+    let bufByteLen = buf.$ArrayBufferByteLength;
+    invariant(typeof bufByteLen === "number");
+    let byteOffset = val.$ByteOffset || 0;
+    let ctorArgs: Array<BabelNodeExpression> = [outlinedArrayBuffer];
+    let kind = val.getKind();
+    if (kind === "DataView") {
+      let byteLen = val.$ByteLength;
+      invariant(typeof byteLen === "number");
+      if (byteOffset !== 0 || byteLen !== bufByteLen) {
+        ctorArgs.push(t.numericLiteral(byteOffset));
+        if (byteOffset + byteLen !== bufByteLen) {
+          ctorArgs.push(t.numericLiteral(byteLen));
+        }
+      }
+    } else {
+      let elemSize = ArrayElementSize[(kind: any)];
+      let arrLen = val.$ArrayLength;
+      invariant(typeof elemSize === "number" && typeof arrLen === "number");
+      if (byteOffset !== 0 || arrLen * elemSize !== bufByteLen) {
+        ctorArgs.push(t.numericLiteral(byteOffset));
+        if (byteOffset + arrLen * elemSize !== bufByteLen) {
+          ctorArgs.push(t.numericLiteral(arrLen));
+        }
+      }
+    }
+    return t.newExpression(this.preludeGenerator.memoizeReference(kind), ctorArgs);
   }
 
   _serializeValueArrayBuffer(val: ObjectValue): BabelNodeExpression {
-    let elems = [];
-
     let len = val.$ArrayBufferByteLength;
     let db = val.$ArrayBufferData;
     invariant(len !== undefined);
@@ -1748,16 +1782,30 @@ export class ResidualHeapSerializer {
     for (let i = 0; i < len; i++) {
       if (db[i] !== 0) {
         allzero = false;
+        break;
       }
-      let elem = t.numericLiteral(db[i]);
-      elems.push(elem);
     }
 
     this._emitObjectProperties(val);
     if (allzero) {
       // if they're all zero, just emit the array buffer constructor
       return t.newExpression(this.preludeGenerator.memoizeReference(val.getKind()), [t.numericLiteral(len)]);
+    } else if (len >= 64 && len % 4 === 0) {
+      // Pack 4 little-endian bytes per Uint32 literal (matching SetValueInBuffer's little-endian layout)
+      // so large TypedArray lookup tables emit 4x fewer AST nodes.
+      let view = new DataView(db.buffer, db.byteOffset, len);
+      let wordCount = len >> 2;
+      let words = new Array(wordCount);
+      for (let i = 0; i < wordCount; i++) {
+        words[i] = t.numericLiteral(view.getUint32(i << 2, true));
+      }
+      let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint32Array"), [t.arrayExpression(words)]);
+      return t.memberExpression(consExpr, t.identifier("buffer"));
     } else {
+      let elems = new Array(len);
+      for (let i = 0; i < len; i++) {
+        elems[i] = t.numericLiteral(db[i]);
+      }
       // initialize from a byte array otherwise
       let arrayValue = t.arrayExpression(elems);
       let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint8Array"), [arrayValue]);
@@ -2157,6 +2205,7 @@ export class ResidualHeapSerializer {
 
   // Checks whether a property can be defined via simple assignment, or using object literal syntax.
   _canEmbedProperty(obj: ObjectValue, key: string | SymbolValue | AbstractValue, prop: Descriptor): boolean {
+    if (key === "__proto__") return false;
     if (!(prop instanceof PropertyDescriptor)) return false;
 
     let targetDescriptor = this.residualHeapInspector.getTargetIntegrityDescriptor(obj);
@@ -2193,16 +2242,134 @@ export class ResidualHeapSerializer {
     return t.regExpLiteral(source, flags);
   }
 
+  _getEmbeddableKeysSignature(val: ObjectValue): void | Array<string> {
+    if (!val.mightNotBeLeakedObject()) return undefined;
+    let keys = [];
+    for (let [key, propertyBinding] of val.properties) {
+      if (propertyBinding.pathNode !== undefined) continue;
+      let descriptor = propertyBinding.descriptor;
+      if (descriptor === undefined || !(descriptor instanceof PropertyDescriptor) || descriptor.value === undefined)
+        continue;
+      if (this._canEmbedProperty(val, key, descriptor)) {
+        if (this.residualHeapInspector.canIgnoreProperty(val, key)) continue;
+        if (key.indexOf("|") >= 0) return undefined;
+        keys.push(key);
+      }
+    }
+    return keys.length > 0 && keys.length <= 64 ? keys : undefined;
+  }
+
+  _shouldUseLiteralProto(val: ObjectValue): boolean {
+    let proto = val.$Prototype;
+    if (proto === this.realm.intrinsics.null) return true;
+    if (!(proto instanceof ObjectValue)) return false;
+    if (this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) || this.realm.isCompatibleWith("mobile")) {
+      return true;
+    }
+    let keys = this._getEmbeddableKeysSignature(val);
+    if (keys === undefined) return false;
+    // If proto's chain has a setter or non-writable property shadowing one of `keys`,
+    // `Object.create(proto)` + `obj.k = v` would invoke `[[Set]]` instead of `[[DefineOwnProperty]]`
+    // and silently drop or throw on the write; `{ __proto__: proto, k: v }` uses `CreateDataPropertyOrThrow`.
+    if (!this._canConstructWithThisAssignments(proto, keys)) return true;
+    return this._isInRepeatingConstructorGroup(val, proto, keys);
+  }
+
+  _isInRepeatingConstructorGroup(val: ObjectValue, proto: ObjectValue, keys: Array<string>): boolean {
+    let countsByProto = this._ctorGroupCounts;
+    if (countsByProto === undefined) {
+      countsByProto = new Map();
+      this._ctorGroupCounts = countsByProto;
+      for (let candidate of this.residualValues.keys()) {
+        if (
+          !(candidate instanceof ObjectValue) ||
+          candidate.originalConstructor !== undefined ||
+          candidate.temporalAlias !== undefined ||
+          candidate.getKind() !== "Object"
+        ) {
+          continue;
+        }
+        let cProto = candidate.$Prototype;
+        if (!(cProto instanceof ObjectValue)) continue;
+        let cKeys = this._getEmbeddableKeysSignature(candidate);
+        if (cKeys === undefined) continue;
+        let sig = cKeys.join("|");
+        let map = countsByProto.get(cProto);
+        if (map === undefined) {
+          map = new Map();
+          countsByProto.set(cProto, map);
+        }
+        map.set(sig, (map.get(sig) || 0) + 1);
+      }
+    }
+
+    let protoMap = countsByProto.get(proto);
+    if (protoMap === undefined) return false;
+    return (protoMap.get(keys.join("|")) || 0) >= 4;
+  }
+
+  _canConstructWithThisAssignments(proto: ObjectValue, keys: Array<string>): boolean {
+    if (keys.length === 0 || keys.length > 64) return false;
+    let cur = proto;
+    while (cur instanceof ObjectValue) {
+      if (
+        cur instanceof ProxyValue ||
+        cur instanceof IntegerIndexedExotic ||
+        cur.isPartialObject() ||
+        !cur.mightNotBeLeakedObject() ||
+        cur.unknownProperty !== undefined
+      ) {
+        return false;
+      }
+      for (let i = 0; i < keys.length; i++) {
+        let pb = cur.properties.get(keys[i]);
+        if (pb !== undefined && pb.descriptor !== undefined) {
+          let d = pb.descriptor;
+          if (!(d instanceof PropertyDescriptor)) return false;
+          if (d.get !== undefined || d.set !== undefined || d.writable !== true) return false;
+        }
+      }
+      cur = cur.$Prototype;
+    }
+    return cur === this.realm.intrinsics.null;
+  }
+
   // Overridable.
   serializeValueRawObject(
     val: ObjectValue,
     skipPrototype: boolean,
-    emitIntegrityCommand: void | (SerializedBody => void)
+    emitIntegrityCommand: void | (SerializedBody => void),
+    classConstructor?: Value
   ): BabelNodeExpression {
     let remainingProperties = new Map(val.properties);
     const dummyProperties = new Set();
     let props = [];
+    let embeddedKeys = [];
     let isCertainlyLeaked = !val.mightNotBeLeakedObject();
+    let prototypeEstablishedInLiteral = false;
+    let protoForConstructorCheck: void | ObjectValue;
+
+    let proto = val.$Prototype;
+    if (val.temporalAlias === undefined && !this.realm.instantRender.enabled) {
+      if (classConstructor !== undefined) {
+        if (!this.emitter.getReasonToWaitForDependencies(classConstructor)) {
+          let serializedCtor = this.serializeValue(classConstructor);
+          props.push(t.objectProperty(protoExpression, t.memberExpression(serializedCtor, t.identifier("prototype"))));
+          prototypeEstablishedInLiteral = true;
+          if (proto instanceof ObjectValue) protoForConstructorCheck = proto;
+        }
+      } else if (
+        !skipPrototype &&
+        proto !== this.realm.intrinsics.ObjectPrototype &&
+        (proto instanceof ObjectValue || proto === this.realm.intrinsics.null) &&
+        !this.emitter.getReasonToWaitForDependencies(proto)
+      ) {
+        let serializedProto = this.serializeValue(proto);
+        props.push(t.objectProperty(protoExpression, serializedProto));
+        prototypeEstablishedInLiteral = true;
+        if (proto instanceof ObjectValue) protoForConstructorCheck = proto;
+      }
+    }
 
     // TODO #2259: Make deduplication in the face of leaking work for custom accessors
     let shouldDropAsAssignedProp = (descriptor: Descriptor | void) =>
@@ -2277,16 +2444,19 @@ export class ResidualHeapSerializer {
             if (idx < lastEmbeddedIdx) {
               let serializedValue = !instantRenderMode ? voidExpression : emptyExpression;
               dummyProperties.add(key);
+              embeddedKeys.push(key);
               props.push(t.objectProperty(serializedKey, serializedValue));
             }
           } else {
             remainingProperties.delete(key);
             let serializedValue = this.serializeValue(propValue);
+            embeddedKeys.push(key);
             props.push(t.objectProperty(serializedKey, serializedValue));
           }
         } else if (descriptor.value instanceof Value && descriptor.value.mightHaveBeenDeleted()) {
           if (idx < lastEmbeddedIdx) {
             dummyProperties.add(key);
+            embeddedKeys.push(key);
             props.push(t.objectProperty(serializedKey, voidExpression));
           }
         }
@@ -2296,12 +2466,20 @@ export class ResidualHeapSerializer {
     this._emitObjectProperties(
       val,
       remainingProperties,
-      /*objectPrototypeAlreadyEstablished*/ false,
+      /*objectPrototypeAlreadyEstablished*/ prototypeEstablishedInLiteral,
       dummyProperties,
       skipPrototype
     );
 
-    return t.objectExpression(props);
+    let objExpr = t.objectExpression(props);
+    if (
+      prototypeEstablishedInLiteral &&
+      protoForConstructorCheck !== undefined &&
+      this._canConstructWithThisAssignments(protoForConstructorCheck, embeddedKeys)
+    ) {
+      constructorSafeObjectExpressions.add(objExpr);
+    }
+    return objExpr;
   }
 
   _serializeValueNativeError(val: ObjectValue, ctorName: string): BabelNodeExpression {
@@ -2544,6 +2722,24 @@ export class ResidualHeapSerializer {
 
         let proto = val.$Prototype;
         let { skipPrototype, constructor: _constructor } = getObjectPrototypeMetadata(this.realm, val);
+        let canUseLiteralProto =
+          val.temporalAlias === undefined &&
+          !this.realm.instantRender.enabled &&
+          this._shouldUseLiteralProto(val) &&
+          (_constructor !== undefined
+            ? !this.emitter.getReasonToWaitForDependencies(_constructor)
+            : !skipPrototype &&
+              proto !== this.realm.intrinsics.ObjectPrototype &&
+              !this.emitter.getReasonToWaitForDependencies(proto));
+        if (canUseLiteralProto) {
+          return ResidualHeapSerializer.prototype.serializeValueRawObject.call(
+            this,
+            val,
+            skipPrototype,
+            emitIntegrityCommand,
+            _constructor
+          );
+        }
         let createViaAuxiliaryConstructor =
           val.temporalAlias === undefined &&
           proto !== this.realm.intrinsics.ObjectPrototype &&

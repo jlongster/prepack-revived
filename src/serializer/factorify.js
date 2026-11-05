@@ -10,8 +10,10 @@
 /* @flow strict-local */
 
 import * as t from "@babel/types";
-import type { BabelNodeStatement, BabelNodeObjectExpression, BabelNodeLVal } from "@babel/types";
+import type { BabelNodeExpression, BabelNodeStatement, BabelNodeObjectExpression, BabelNodeLVal } from "@babel/types";
 import { NameGenerator } from "../utils/NameGenerator";
+
+export const constructorSafeObjectExpressions: WeakSet<BabelNodeObjectExpression> = new WeakSet();
 
 function isLiteral(node) {
   switch (node.type) {
@@ -52,7 +54,44 @@ function isSameNode(left, right) {
     );
   }
 
+  if (type === "MemberExpression") {
+    return (
+      !left.computed &&
+      !right.computed &&
+      isSameNode(left.object, right.object) &&
+      isSameNode(left.property, right.property)
+    );
+  }
+
   return false;
+}
+
+function getStaticProtoCode(node: BabelNodeExpression): string | false {
+  if (node.type === "Identifier") return node.name;
+  if (node.type === "MemberExpression" && node.computed !== true && node.property.type === "Identifier") {
+    let base = getStaticProtoCode(node.object);
+    if (base !== false) return `${base}.${node.property.name}`;
+  }
+  return false;
+}
+
+function cloneStaticProtoExpr(node: BabelNodeExpression): BabelNodeExpression {
+  if (node.type === "Identifier") return t.identifier(node.name);
+  if (node.type === "MemberExpression" && node.computed !== true && node.property.type === "Identifier") {
+    return t.memberExpression(cloneStaticProtoExpr(node.object), t.identifier(node.property.name), false);
+  }
+  return node;
+}
+
+function makeThisPropertyMember(key: string) {
+  let index = Number.parseInt(key, 10);
+  if (index >= 0 && index.toString() === key) {
+    return t.memberExpression(t.thisExpression(), t.numericLiteral(index), true);
+  }
+  if (t.isValidIdentifier(key) && /^[\u0000-\u007f]*$/.test(key)) {
+    return t.memberExpression(t.thisExpression(), t.identifier(key), false);
+  }
+  return t.memberExpression(t.thisExpression(), t.stringLiteral(key), true);
 }
 
 function getObjectKeys(obj: BabelNodeObjectExpression): string | false {
@@ -67,6 +106,8 @@ function getObjectKeys(obj: BabelNodeObjectExpression): string | false {
     } else if (key.type === "Identifier") {
       if (prop.computed) return false;
       keys.push(key.name);
+    } else if (key.type === "NumericLiteral") {
+      keys.push(String(key.value));
     } else {
       return false;
     }
@@ -74,6 +115,16 @@ function getObjectKeys(obj: BabelNodeObjectExpression): string | false {
 
   for (let key of keys) {
     if (key.indexOf("|") >= 0) return false;
+  }
+
+  if (keys.length >= 2 && keys[0] === "__proto__" && constructorSafeObjectExpressions.has(obj)) {
+    let firstProp = obj.properties[0];
+    if (firstProp.type === "ObjectProperty") {
+      let protoCode = getStaticProtoCode(firstProp.value);
+      if (protoCode !== false && protoCode.indexOf("|") < 0) {
+        return `@ctor:${protoCode}|` + keys.slice(1).join("|");
+      }
+    }
   }
 
   return keys.join("|");
@@ -92,25 +143,25 @@ function getObjectKeys(obj: BabelNodeObjectExpression): string | false {
 export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGenerator: NameGenerator): void {
   let signatures = Object.create(null);
 
-  function collectObjectExpressions(holder, key: string | number): void {
+  function collectObjectExpressions(stmt: BabelNodeStatement, holder, key: string | number): void {
     let node = (holder: $FlowFixMe)[key];
     if (!node || typeof node !== "object") return;
     if (node.type === "ArrayExpression") {
       for (let i = 0; i < node.elements.length; i++) {
-        if (node.elements[i]) collectObjectExpressions(node.elements, i);
+        if (node.elements[i]) collectObjectExpressions(stmt, node.elements, i);
       }
       return;
     }
     if (node.type === "ObjectExpression") {
       for (let prop of node.properties) {
         if (prop.type === "ObjectProperty") {
-          collectObjectExpressions(prop, "value");
+          collectObjectExpressions(stmt, prop, "value");
         }
       }
       let keys = getObjectKeys(node);
       if (!keys) return;
       let declars = (signatures[keys] = signatures[keys] || []);
-      declars.push({ declar: holder, initializerAstNodeName: key });
+      declars.push({ stmt, declar: holder, initializerAstNodeName: key });
     }
   }
 
@@ -118,14 +169,14 @@ export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGen
     switch (node.type) {
       case "VariableDeclaration":
         for (let declar of node.declarations) {
-          if (declar.init) collectObjectExpressions(declar, "init");
+          if (declar.init) collectObjectExpressions(node, declar, "init");
         }
         break;
 
       case "ExpressionStatement":
         const expr = node.expression;
         if (expr.type === "AssignmentExpression") {
-          collectObjectExpressions(expr, "right");
+          collectObjectExpressions(node, expr, "right");
         }
         break;
 
@@ -137,7 +188,120 @@ export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGen
 
   for (let signatureKey in signatures) {
     let declars = signatures[signatureKey];
-    if (declars.length < 5) continue;
+    let isCtor = signatureKey.startsWith("@ctor:");
+    if (declars.length < (isCtor ? 4 : 5)) continue;
+
+    if (isCtor) {
+      let pipeIdx = signatureKey.indexOf("|");
+      let keys = signatureKey.slice(pipeIdx + 1).split("|");
+      let firstObj = declars[0].declar[declars[0].initializerAstNodeName];
+      let firstProp = firstObj.properties[0];
+      if (firstProp.type !== "ObjectProperty") continue;
+      let protoExpr = cloneStaticProtoExpr(firstProp.value);
+
+      let ctorParams: Array<BabelNodeLVal> = [];
+      let ctorStmts: Array<BabelNodeStatement> = [];
+      for (let keyIndex = 0; keyIndex < keys.length; keyIndex++) {
+        let key = keys[keyIndex];
+        let id = t.identifier(`__${keyIndex}`);
+        ctorParams.push(id);
+        ctorStmts.push(t.expressionStatement(t.assignmentExpression("=", makeThisPropertyMember(key), id)));
+      }
+
+      let ctorId = t.identifier(factoryNameGenerator.generate("ctor"));
+      let ctorDecl = t.functionDeclaration(ctorId, ctorParams, t.blockStatement(ctorStmts));
+      body.unshift(ctorDecl);
+
+      let firstStmtIdx = body.indexOf(declars[0].stmt);
+      let setProtoStmt = t.expressionStatement(
+        t.assignmentExpression("=", t.memberExpression(t.identifier(ctorId.name), t.identifier("prototype")), protoExpr)
+      );
+      if (firstStmtIdx >= 0) {
+        body.splice(firstStmtIdx, 0, setProtoStmt);
+      }
+
+      for (let { declar, initializerAstNodeName } of declars) {
+        let props = declar[initializerAstNodeName].properties;
+        let args = [];
+        for (let p = 1; p < props.length; p++) {
+          let propNode = props[p];
+          if (propNode.type === "ObjectProperty") {
+            args.push(propNode.value);
+          }
+        }
+        declar[initializerAstNodeName] = t.newExpression(t.identifier(ctorId.name), args);
+      }
+
+      let seen = new Set();
+      for (let { declar, initializerAstNodeName } of declars) {
+        if (seen.has(declar)) continue;
+        let common = [];
+        let mostSharedArgsLength = 0;
+        for (let { declar: declar2, initializerAstNodeName: initializerAstNodeName2 } of declars) {
+          if (seen.has(declar2) || declar === declar2) continue;
+          let sharedArgs = [];
+          for (let i = 0; i < keys.length; i++) {
+            if (
+              isSameNode(declar[initializerAstNodeName].arguments[i], declar2[initializerAstNodeName2].arguments[i])
+            ) {
+              sharedArgs.push(i);
+            }
+          }
+          if (!sharedArgs.length) continue;
+          mostSharedArgsLength = Math.max(mostSharedArgsLength, sharedArgs.length);
+          common.push({ declar: declar2, initializerAstNodeName: initializerAstNodeName2, sharedArgs });
+        }
+        let sharedPairs = Object.create(null);
+        for (let { declar: declar2, initializerAstNodeName: initializerAstNodeName2, sharedArgs } of common) {
+          if (sharedArgs.length === mostSharedArgsLength) {
+            let keyStr = sharedArgs.join(",");
+            let pair = (sharedPairs[keyStr] = sharedPairs[keyStr] || [{ declar, initializerAstNodeName }]);
+            pair.push({ declar: declar2, initializerAstNodeName: initializerAstNodeName2 });
+          }
+        }
+        let highestPairArgs = "";
+        let highestPairCount = 0;
+        for (let pairArgs in sharedPairs) {
+          let pair = sharedPairs[pairArgs];
+          if (pair.length > highestPairCount) {
+            highestPairCount = pair.length;
+            highestPairArgs = pairArgs;
+          }
+        }
+        if (highestPairCount < 3) continue;
+
+        let declarsSub = sharedPairs[highestPairArgs];
+        let removeArgs = highestPairArgs.split(",");
+        let subFactoryArgs = [];
+        let subFactoryParams = [];
+        let baseArgs = declar[initializerAstNodeName].arguments;
+        for (let i = 0; i < baseArgs.length; i++) {
+          let arg = baseArgs[i];
+          if (removeArgs.indexOf(i + "") >= 0) {
+            subFactoryArgs.push(arg);
+          } else {
+            let id = t.identifier(`__${i}`);
+            subFactoryArgs.push(id);
+            subFactoryParams.push(id);
+          }
+        }
+        let subFactoryId = t.identifier(factoryNameGenerator.generate("sub"));
+        let subFactoryBody = t.blockStatement([
+          t.returnStatement(t.newExpression(t.identifier(ctorId.name), subFactoryArgs)),
+        ]);
+        let subFactory = t.functionDeclaration(subFactoryId, subFactoryParams, subFactoryBody);
+        body.unshift(subFactory);
+
+        for (let { declar: declar2, initializerAstNodeName: initializerAstNodeName2 } of declarsSub) {
+          seen.add(declar2);
+          let callArgs = declar2[initializerAstNodeName2].arguments.filter(function(val, i) {
+            return removeArgs.indexOf(i + "") < 0;
+          });
+          declar2[initializerAstNodeName2] = t.callExpression(t.identifier(subFactoryId.name), callArgs);
+        }
+      }
+      continue;
+    }
 
     let keys = signatureKey.split("|");
 

@@ -982,8 +982,10 @@ export class FunctionImplementation {
     ParameterList: Array<BabelNodeLVal>,
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
-    Strict: boolean
+    Strict: boolean,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue {
+    if (isAsync === true) return this.AsyncGeneratorFunctionCreate(realm, kind, ParameterList, Body, Scope, Strict);
     // 1. Let functionPrototype be the intrinsic object %Generator%.
     let functionPrototype = realm.intrinsics.Generator;
 
@@ -1007,6 +1009,7 @@ export class FunctionImplementation {
   ): ECMAScriptSourceFunctionValue {
     let functionPrototype = realm.intrinsics.AsyncFunctionPrototype;
     let F = this.FunctionAllocate(realm, functionPrototype, Strict, "async");
+    F.$IsAsync = true;
     let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
     F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
     if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
@@ -1023,6 +1026,7 @@ export class FunctionImplementation {
   ): ECMAScriptSourceFunctionValue {
     let functionPrototype = realm.intrinsics.AsyncGenerator;
     let F = this.FunctionAllocate(realm, functionPrototype, Strict, "asyncGenerator");
+    F.$IsAsync = true;
     let result = this.FunctionInitialize(realm, F, kind, ParameterList, Body, Scope);
     F.pathConditionDuringDeclaration = realm.pathConditions.isEmpty() ? undefined : realm.pathConditions;
     if (F.pathConditionDuringDeclaration) invariant(F.pathConditionDuringDeclaration.isReadOnly());
@@ -1375,8 +1379,10 @@ export class FunctionImplementation {
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
     Strict: boolean,
-    prototype?: ObjectValue
+    prototype?: ObjectValue,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue {
+    if (isAsync === true) return this.AsyncFunctionCreate(realm, kind, ParameterList, Body, Scope, Strict);
     // 1. If the prototype argument was not passed, then
     if (!prototype) {
       // a. Let prototype be the intrinsic object %FunctionPrototype%.
@@ -1702,7 +1708,16 @@ export class FunctionImplementation {
     }
 
     // 6. Let closure be FunctionCreate(kind, StrictFormalParameters, FunctionBody, scope, strict). If functionPrototype was passed as a parameter, then pass its value as the prototype optional argument of FunctionCreate.
-    let closure = this.FunctionCreate(realm, kind, prop.params, prop.body, scope, strict, functionPrototype);
+    let closure = this.FunctionCreate(
+      realm,
+      kind,
+      prop.params,
+      prop.body,
+      scope,
+      strict,
+      functionPrototype,
+      !!prop.async
+    );
 
     // 7. Perform MakeMethod(closure, object).
     this.MakeMethod(realm, closure, obj);

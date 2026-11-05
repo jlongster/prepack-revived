@@ -574,7 +574,8 @@ export type FunctionType = {
     ParameterList: Array<BabelNodeLVal>,
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
-    Strict: boolean
+    Strict: boolean,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue,
 
   AsyncFunctionCreate(
@@ -648,7 +649,8 @@ export type FunctionType = {
     Body: BabelNodeBlockStatement,
     Scope: LexicalEnvironment,
     Strict: boolean,
-    prototype?: ObjectValue
+    prototype?: ObjectValue,
+    isAsync?: boolean
   ): ECMAScriptSourceFunctionValue,
 
   // ECMA262 18.2.1.2

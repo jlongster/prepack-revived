@@ -74,6 +74,8 @@ export function ClassDefinitionEvaluation(
   strictCode: boolean,
   env: LexicalEnvironment
 ): ECMAScriptSourceFunctionValue {
+  // ECMA262 10.2.1: All parts of a ClassDeclaration or a ClassExpression are strict mode code (always passed as true below).
+
   // 1. Let lex be the LexicalEnvironment of the running execution context.
   let lex = env;
 

@@ -11,10 +11,11 @@
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import type { Value } from "../values/index.js";
-import { AbstractValue, StringValue } from "../values/index.js";
+import { AbstractValue, StringValue, Value } from "../values/index.js";
+import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import { computeBinary } from "./BinaryExpression.js";
-import { Environment, To } from "../singletons.js";
+import { Environment, Leak, To } from "../singletons.js";
+import { createOperationDescriptor } from "../utils/generator.js";
 import type { BabelNodeTemplateLiteral } from "@babel/types";
 
 // ECMA262 12.2.9
@@ -24,24 +25,48 @@ export default function(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
-  let acc: Value = realm.intrinsics.emptyString;
+  let result: Value = realm.intrinsics.emptyString;
 
   for (let i = 0; i < ast.quasis.length; i++) {
     let elem = ast.quasis[i];
-    if (elem.value.cooked.length > 0) {
-      acc = computeBinary(realm, "+", acc, new StringValue(realm, elem.value.cooked));
+    let cooked = elem.value.cooked;
+    if (typeof cooked === "string" && cooked.length > 0) {
+      result = computeBinary(realm, "+", result, new StringValue(realm, cooked));
     }
 
     let expr = ast.expressions[i];
     if (expr) {
       let val = Environment.GetValue(realm, env.evaluate(expr, strictCode));
-      let strVal =
-        val instanceof AbstractValue && To.IsToStringPure(realm, val)
-          ? To.ToStringAbstract(realm, val)
-          : new StringValue(realm, To.ToStringPartial(realm, val));
-      acc = computeBinary(realm, "+", acc, strVal);
+      let strVal: Value;
+      if (val instanceof AbstractValue) {
+        if (To.IsToStringPure(realm, val)) {
+          strVal = To.ToStringValue(realm, val);
+          if (strVal instanceof AbstractValue && !strVal.isTemporal()) {
+            strVal = AbstractValue.convertToTemporalIfArgsAreTemporal(realm, strVal, [val]);
+          }
+        } else if (realm.isInPureScope() && !realm.instantRender.enabled) {
+          strVal = realm.evaluateWithPossibleThrowCompletion(
+            () => {
+              if (val.mightBeObject()) Leak.value(realm, val);
+              return AbstractValue.createTemporalFromBuildFunction(
+                realm,
+                StringValue,
+                [val],
+                createOperationDescriptor("COERCE_TO_STRING")
+              );
+            },
+            TypesDomain.topVal,
+            ValuesDomain.topVal
+          );
+        } else {
+          strVal = new StringValue(realm, To.ToStringPartial(realm, val));
+        }
+      } else {
+        strVal = new StringValue(realm, To.ToStringPartial(realm, val));
+      }
+      result = computeBinary(realm, "+", result, strVal);
     }
   }
 
-  return acc;
+  return result;
 }

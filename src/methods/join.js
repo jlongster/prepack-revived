@@ -10,6 +10,7 @@
 /* @flow */
 
 import type { Binding } from "../environment.js";
+import { FatalError } from "../errors.js";
 import type { Bindings, BindingEntry, PropertyBindings, CreatedAbstracts, CreatedObjects, Realm } from "../realm.js";
 import { construct_empty_effects, Effects } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
@@ -501,6 +502,23 @@ export class JoinImplementation {
           d2 = b.descriptor; //Get value of property before the split
         }
       }
+      if (b.internalSlot && (b.key === "$ArrayBufferData" || b.key === "$ArrayBufferByteLength")) {
+        let v1 = d1 instanceof InternalSlotDescriptor ? d1.value : undefined;
+        let v2 = d2 instanceof InternalSlotDescriptor ? d2.value : undefined;
+        if (v1 === v2) return d1;
+        if (v1 instanceof Uint8Array && v2 instanceof Uint8Array && v1.length === v2.length) {
+          let same = true;
+          for (let i = 0; i < v1.length; i++) {
+            if (v1[i] !== v2[i]) {
+              same = false;
+              break;
+            }
+          }
+          if (same) return d1;
+        }
+        AbstractValue.reportIntrospectionError(b.object, b.key);
+        throw new FatalError();
+      }
       return this.joinDescriptors(realm, joinCondition, d1, d2);
     };
     return this.joinMaps(m1, m2, join);
@@ -588,7 +606,11 @@ export class JoinImplementation {
         return dc;
       }
       if (d1 instanceof InternalSlotDescriptor && d2 instanceof InternalSlotDescriptor) {
-        return new InternalSlotDescriptor(this.joinValues(realm, d1.value, d2.value, getAbstractValue));
+        let v1 = d1.value;
+        let v2 = d2.value;
+        invariant(!(v1 instanceof Uint8Array) && typeof v1 !== "number" && v1 !== null);
+        invariant(!(v2 instanceof Uint8Array) && typeof v2 !== "number" && v2 !== null);
+        return new InternalSlotDescriptor(this.joinValues(realm, v1, v2, getAbstractValue));
       }
       return new AbstractJoinedDescriptor(joinCondition, d1, d2);
     }

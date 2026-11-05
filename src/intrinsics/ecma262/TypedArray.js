@@ -604,7 +604,7 @@ export function build(realm: Realm, type: ElementType): NativeFunctionValue {
   });
 
   // ECMA262 22.2.5
-  func.$Prototype = realm.intrinsics.TypedArray;
+  func.$Prototype = realm.intrinsics.TypedArray || realm.intrinsics.FunctionPrototype;
 
   // ECMA262 22.2.5.1
   func.defineNativeConstant("BYTES_PER_ELEMENT", new NumberValue(realm, ElementSize[type]));

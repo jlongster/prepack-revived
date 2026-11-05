@@ -78,6 +78,7 @@ export type ClassMethodInstance = {|
   staticPrivateFields?: Array<{ privateName: string, valueNode: ?BabelNodeExpression }>,
   minInsertionIndex?: number,
   minInsertionBody?: SerializedBody,
+  homeKey?: string | SymbolValue,
 |};
 
 // Each of these will correspond to a different preludeGenerator and thus will

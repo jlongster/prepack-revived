@@ -24,5 +24,6 @@ export default class ECMAScriptFunctionValue extends FunctionValue {
   $ThisMode: "lexical" | "strict" | "global";
   $HomeObject: void | ObjectValue;
   $FunctionKind: "normal" | "classConstructor" | "generator" | "async" | "asyncGenerator";
+  $IsAsync: void | boolean;
   isCalledInMultipleContexts: boolean;
 }

@@ -177,12 +177,16 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
     super(realm);
     this.bindings = (Object.create(null): any);
     this.frozen = false;
+    this.allBindingsMightHaveBeenCaptured = false;
   }
 
   bindings: { [name: string]: Binding };
   // Frozen Records cannot have bindings created or deleted but can have bindings updated
   frozen: boolean;
   $PrivateBindings: void | Map<string, SymbolValue>;
+  // True when every binding currently in this record has mightHaveBeenCaptured set
+  // (lets Realm.markVisibleLocalBindingsAsPotentiallyCaptured skip the record).
+  allBindingsMightHaveBeenCaptured: boolean;
 
   // ECMA262 8.1.1.1.1
   HasBinding(N: string): boolean {
@@ -208,6 +212,7 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
     invariant(!envRec.bindings[N], `shouldn't have the binding ${N}`);
 
     // 3. Create a mutable binding in envRec for N and record that it is uninitialized. If D is true, record that the newly created binding may be deleted by a subsequent DeleteBinding call.
+    this.allBindingsMightHaveBeenCaptured = false;
     this.bindings[N] = realm.recordModifiedBinding({
       initialized: false,
       mutable: true,
@@ -245,6 +250,7 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
       mightHaveBeenCaptured: false,
       hasLeaked: false,
     };
+    this.allBindingsMightHaveBeenCaptured = false;
     this.bindings[N] = skipRecord ? binding : realm.recordModifiedBinding(binding);
 
     // 4. Return NormalCompletion(empty).

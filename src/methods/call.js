@@ -13,6 +13,7 @@ import type { PropertyKeyValue } from "../types.js";
 import type { ECMAScriptFunctionValue } from "../values/index.js";
 import {
   EnvironmentRecord,
+  FunctionEnvironmentRecord,
   GlobalEnvironmentRecord,
   LexicalEnvironment,
   mightBecomeAnObject,
@@ -235,6 +236,8 @@ export function PrepareForOrdinaryCall(
 
   // 10. Set the VariableEnvironment of calleeContext to localEnv.
   calleeContext.variableEnvironment = localEnv;
+  let localEnvRec = localEnv.environmentRecord;
+  if (localEnvRec instanceof FunctionEnvironmentRecord) calleeContext.functionEnvironmentRecord = localEnvRec;
 
   // 11. If callerContext is not already suspended, suspend callerContext.
   callerContext.suspend();

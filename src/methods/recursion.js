@@ -34,6 +34,7 @@ import {
   AbstractValue,
   BooleanValue,
   ECMAScriptSourceFunctionValue,
+  EmptyValue,
   FunctionValue,
   NullValue,
   NumberValue,
@@ -581,12 +582,9 @@ function proveResultType(
       try {
         let probeArgs = argsList.map(arg => {
           let argType = arg.getType();
-          return AbstractValue.createAbstractArgument(
-            realm,
-            "__recursionProbe",
-            realm.currentLocation,
-            argType === NullValue || argType === UndefinedValue ? Value : argType
-          );
+          let probeType =
+            argType === NullValue || argType === UndefinedValue || argType === EmptyValue ? Value : argType;
+          return AbstractValue.createAbstractArgument(realm, "__recursionProbe", realm.currentLocation, probeType);
         });
         bypass = F;
         effects = realm.evaluateForEffects(() => call(thisArgument, probeArgs), undefined, "residual recursion probe");

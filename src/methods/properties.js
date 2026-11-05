@@ -564,6 +564,22 @@ export class PropertiesImplementation {
       return false;
     }
 
+    if (
+      O.isSimpleObject() &&
+      !realm.ignoreLeakLogic &&
+      !O.mightNotBeLeakedObject() &&
+      !realm.isInPureScope() &&
+      (!P.mightNotBeString() || !P.mightNotBeNumber()) &&
+      realm.generator !== undefined
+    ) {
+      if (realm.createdObjectsTrackedForLeaks !== undefined) {
+        Leak.value(realm, V);
+      }
+      invariant(P instanceof AbstractValue);
+      realm.generator.emitPropertyAssignment(Receiver, P, V);
+      return true;
+    }
+
     // We assume that simple objects have no getter/setter properties and
     // that all properties are writable. Non-widened ArrayValues have exotic
     // length-updating [[DefineOwnProperty]] semantics on index writes.
@@ -1604,7 +1620,7 @@ export class PropertiesImplementation {
                   type,
                   [O._templateFor || O, new StringValue(realm, P)],
                   createOperationDescriptor("ABSTRACT_PROPERTY"),
-                  { kind: AbstractValue.makeKind("property", P) }
+                  { kind: AbstractValue.makeKind("property", (realm.pathConditions.isEmpty() ? "" : "?") + P) }
                 );
               } else if (realm.generator !== undefined) {
                 return AbstractValue.createTemporalFromBuildFunction(

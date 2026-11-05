@@ -75,11 +75,13 @@ export default function(
     return F;
   } else {
     // 3. Let F be FunctionCreate(Normal, FormalParameters, FunctionBody, scope, strict).
-    let F = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, env, strict);
+    let F = Functions.FunctionCreate(realm, "normal", ast.params, ast.body, env, strict, undefined, !!ast.async);
     if (ast.id && ast.id.name) F.__originalName = ast.id.name;
 
-    // 4. Perform MakeConstructor(F).
-    MakeConstructor(realm, F);
+    if (!ast.async) {
+      // 4. Perform MakeConstructor(F).
+      MakeConstructor(realm, F);
+    }
 
     // 5. Perform SetFunctionName(F, name).
     Functions.SetFunctionName(realm, F, name);
