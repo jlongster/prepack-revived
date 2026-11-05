@@ -133,9 +133,9 @@ the 500 fall back, both hand-written edge cases the training data never produced
 there were no mismatches at all, and inputs that make the app throw throw the same error. A cached build loads,
 prepares and renders its first page in about 5 ms, against 16 ms for React.</p>
 
+<p class="table-caption w">Renders per second relative to <code>ReactDOMServer.renderToString</code>, same machine, same run
+(<code>react-bench/perf.js</code>, November 5, 2026). Small pages are about 6 KB of HTML, large ones about 285 KB.</p>
 <div class="table-wrap w"><table class="react-perf">
-<caption>Renders per second relative to <code>ReactDOMServer.renderToString</code>, same machine, same run
-(<code>react-bench/perf.js</code>, November 5, 2026). Small pages are about 6 KB of HTML, large ones about 285 KB.</caption>
 <thead><tr><th scope="col"></th><th scope="col">JIT, small</th><th scope="col">JIT, large</th><th scope="col">jitless, small</th><th scope="col">jitless, large</th></tr></thead>
 <tbody>
 <tr><th scope="row">React <code>renderToString</code></th><td>1.00×</td><td>1.00×</td><td>1.00×</td><td>1.00×</td></tr>

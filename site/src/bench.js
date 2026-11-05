@@ -38,11 +38,11 @@ runs) and failed on 8. Re-run for this article on the final build:</p>
   <div class="stat"><span class="stat-num">${bench.summary.fail}</span><span class="stat-label">stop with a clean diagnostic</span></div>
 </div>
 
-<div class="table-wrap w"><table class="bench">
-<caption>Revived Prepack on real code, browser profile. “Code cache” is load plus smoke test in a <code>vm</code>
+<p class="table-caption w">Revived Prepack on real code, browser profile. “Code cache” is load plus smoke test in a <code>vm</code>
 context with V8’s code cache, the setting Prepack was designed for; “exec only” excludes compilation entirely; “cold”
 is a fresh <code>node</code> process minus Node’s own ${ms(bench.coldBaselineMs)} ms startup, shown only where the
-original takes at least 5 ms. Medians of 30 runs (15 for inputs over 750 KB) on a shared 4-core machine.</caption>
+original takes at least 5 ms. Medians of 30 runs (15 for inputs over 750 KB) on a shared 4-core machine.</p>
+<div class="table-wrap w"><table class="bench">
 <thead><tr><th scope="col">Workload</th><th scope="col">KB</th><th scope="col">Profiles OK</th><th scope="col">gzip size vs original</th><th scope="col">Code cache</th><th scope="col">Exec only</th><th scope="col">Cold <code>node</code></th></tr></thead>
 <tbody>${rows}</tbody></table></div>
 
