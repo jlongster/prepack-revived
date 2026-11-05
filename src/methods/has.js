@@ -9,11 +9,20 @@
 
 /* @flow strict-local */
 
+import { PropertyDescriptor } from "../descriptors.js";
 import { FatalError } from "../errors.js";
 import type { Realm } from "../realm.js";
 import type { PropertyKeyValue } from "../types.js";
 import { IsPropertyKey } from "./index.js";
-import { Value, AbstractValue, ObjectValue, NullValue, AbstractObjectValue } from "../values/index.js";
+import {
+  Value,
+  AbstractValue,
+  ObjectValue,
+  NullValue,
+  AbstractObjectValue,
+  StringValue,
+  SymbolValue,
+} from "../values/index.js";
 import { Properties } from "../singletons.js";
 import invariant from "../invariant.js";
 import type { BabelNodeExpression } from "@babel/types";
@@ -70,12 +79,39 @@ export function HasProperty(realm: Realm, O: ObjectValue | AbstractObjectValue, 
   return O.$HasProperty(P);
 }
 
+function getRawOwnPropertyBinding(O: ObjectValue, P: PropertyKeyValue) {
+  if (P instanceof SymbolValue) return O.symbols.get(P);
+  let key = typeof P === "string" ? P : P instanceof StringValue ? P.value : undefined;
+  invariant(key !== undefined);
+  return O.properties.get(key);
+}
+
 // ECMA262 7.3.11
 export function HasOwnProperty(realm: Realm, O: ObjectValue | AbstractObjectValue, P: PropertyKeyValue): boolean {
   // 1. Assert: Type(O) is Object.
 
   // 2. Assert: IsPropertyKey(P) is true.
   invariant(IsPropertyKey(realm, P), "not a valid property key");
+
+  if (O instanceof ObjectValue) {
+    let rawBinding = getRawOwnPropertyBinding(O, P);
+    if (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && O.mightNotBeFinalObject()) {
+      let rawDesc = rawBinding !== undefined ? rawBinding.descriptor : undefined;
+      if (rawDesc instanceof PropertyDescriptor && rawDesc.configurable === false && !rawDesc.mightHaveBeenDeleted()) {
+        return true;
+      }
+      AbstractValue.reportIntrospectionError(O, P);
+      throw new FatalError();
+    }
+    if (
+      !(P instanceof SymbolValue) &&
+      (O.unknownProperty !== undefined || (O.isPartialObject() && !O.isSimpleObject())) &&
+      (rawBinding === undefined || rawBinding.descriptor === undefined)
+    ) {
+      AbstractValue.reportIntrospectionError(O, P);
+      throw new FatalError();
+    }
+  }
 
   // 3. Let desc be ? O.[[GetOwnProperty]](P).
   let desc = O.$GetOwnProperty(P);
@@ -92,6 +128,29 @@ export function HasOwnProperty(realm: Realm, O: ObjectValue | AbstractObjectValu
 export function OrdinaryHasProperty(realm: Realm, O: ObjectValue, P: PropertyKeyValue): boolean {
   // 1. Assert: IsPropertyKey(P) is true.
   invariant(typeof P === "string" || IsPropertyKey(realm, P), "expected property key");
+
+  let rawBinding = getRawOwnPropertyBinding(O, P);
+  if (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && O.mightNotBeFinalObject()) {
+    let rawDesc = rawBinding !== undefined ? rawBinding.descriptor : undefined;
+    if (rawDesc instanceof PropertyDescriptor && rawDesc.configurable === false && !rawDesc.mightHaveBeenDeleted()) {
+      return true;
+    }
+    AbstractValue.reportIntrospectionError(O, P);
+    throw new FatalError();
+  }
+  if (
+    !(P instanceof SymbolValue) &&
+    O.unknownProperty !== undefined &&
+    (rawBinding === undefined || rawBinding.descriptor === undefined)
+  ) {
+    let parent = O.$GetPrototypeOf();
+    if (!(parent instanceof NullValue)) {
+      invariant(parent instanceof ObjectValue);
+      if (parent.$HasProperty(P)) return true;
+    }
+    AbstractValue.reportIntrospectionError(O, P);
+    throw new FatalError();
+  }
 
   // 2. Let hasOwn be ? O.[[GetOwnProperty]](P).
   let hasOwn = O.$GetOwnProperty(P);

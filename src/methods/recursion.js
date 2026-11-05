@@ -456,12 +456,11 @@ function verifyPureCallEffects(
   try {
     let fCall = F.$Call;
     invariant(fCall !== undefined);
-    let probeArgs = argsList.map(arg => {
-      if (!(arg instanceof PrimitiveValue)) return arg;
-      let argType = arg.getType();
-      let probeType = argType === NullValue || argType === UndefinedValue || argType === EmptyValue ? Value : argType;
-      return AbstractValue.createAbstractArgument(realm, "__recursionPureProbe", realm.currentLocation, probeType);
-    });
+    let probeArgs = argsList.map(arg =>
+      arg instanceof PrimitiveValue && !(arg instanceof NullValue) && !(arg instanceof UndefinedValue)
+        ? AbstractValue.createAbstractArgument(realm, "__recursionPureProbe", realm.currentLocation, arg.getType())
+        : arg
+    );
     bypass = F;
     let mainEffects = realm.evaluateForEffects(
       () => fCall(thisArgument, probeArgs),

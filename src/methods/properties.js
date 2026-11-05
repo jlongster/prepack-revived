@@ -99,10 +99,22 @@ function InternalSetProperty(realm: Realm, O: ObjectValue, P: PropertyKeyValue, 
   let key = InternalGetPropertiesKey(P);
   let propertyBinding = map.get(key);
   if (propertyBinding === undefined) {
-    propertyBinding = { descriptor: undefined, object: O, key: key };
+    propertyBinding = ({ descriptor: undefined, object: O, key: key }: PropertyBinding);
     map.set(key, propertyBinding);
   }
   realm.recordModifiedProperty(propertyBinding);
+  if (propertyBinding.descriptor === undefined && typeof key === "string") {
+    // Remember whether this property was created after a write with an unknown property name, so that the
+    // serializer can preserve the property enumeration order. (Array indices always enumerate first.)
+    let unknownDesc = O.unknownProperty !== undefined ? O.unknownProperty.descriptor : undefined;
+    let isIndex = String(+key >>> 0) === key && +key !== 4294967295;
+    propertyBinding.createdAfterUnknownWrite =
+      unknownDesc === undefined || isIndex
+        ? undefined
+        : unknownDesc instanceof PropertyDescriptor && unknownDesc.value !== undefined
+        ? unknownDesc.value
+        : unknownDesc;
+  }
   propertyBinding.descriptor = desc;
 }
 
@@ -267,6 +279,10 @@ export class PropertiesImplementation {
   // ECMA262 9.1.9.1
   OrdinarySet(realm: Realm, O: ObjectValue, P: PropertyKeyValue, V: Value, Receiver: Value): boolean {
     ensureIsNotFinal(realm, O, P);
+    if (O === realm.$GlobalObject && realm.persistentReadTracker !== undefined) {
+      let keyName = typeof P === "string" ? P : P instanceof StringValue ? P.value : undefined;
+      if (keyName !== undefined) realm.recordPersistentGlobalWrite(keyName);
+    }
     if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
       // Leaking is transitive, hence writing a value to a leaked object leaks the value
       Leak.value(realm, V);
@@ -527,6 +543,27 @@ export class PropertiesImplementation {
       }
     }
 
+    // On a simple object, neither O nor its prototype chain has setters, so [[Set]] with a
+    // primitive Receiver always fails at ECMA262 9.1.9.1 step 4.b after ToPropertyKey(P).
+    if (O.isSimpleObject() && !Receiver.mightBeObject()) {
+      let propKey = P;
+      if (propKey.mightBeObject() && realm.isInPureScope()) {
+        realm.evaluateWithPossibleThrowCompletion(
+          () =>
+            AbstractValue.createTemporalFromBuildFunction(
+              realm,
+              Value,
+              [realm.intrinsics.zero, propKey],
+              createOperationDescriptor("OBJECT_GET_PARTIAL"),
+              { skipInvariant: true }
+            ),
+          TypesDomain.topVal,
+          ValuesDomain.topVal
+        );
+      }
+      return false;
+    }
+
     if (
       O.isSimpleObject() &&
       !realm.ignoreLeakLogic &&
@@ -544,8 +581,13 @@ export class PropertiesImplementation {
     }
 
     // We assume that simple objects have no getter/setter properties and
-    // that all properties are writable.
-    if (!O.isSimpleObject() || (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && realm.isInPureScope())) {
+    // that all properties are writable. Non-widened ArrayValues have exotic
+    // length-updating [[DefineOwnProperty]] semantics on index writes.
+    if (
+      !O.isSimpleObject() ||
+      (!pIsLoopVar && O instanceof ArrayValue && !ArrayValue.isIntrinsicAndHasWidenedNumericProperty(O)) ||
+      (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && realm.isInPureScope())
+    ) {
       if (realm.isInPureScope()) {
         // If we're in pure scope, we can leak the object and leave an
         // assignment in place.
@@ -622,22 +664,24 @@ export class PropertiesImplementation {
     realm.recordModifiedProperty(prop);
     let desc = prop.descriptor;
     if (desc === undefined) {
-      let newVal = V;
-      if (!(V instanceof UndefinedValue) && !isWidenedValue(P)) {
-        // join V with sentinel, using a property name test as the condition
-        let cond = createTemplate(P);
-        let sentinel = AbstractValue.createFromType(realm, Value, "template for prototype member expression", [
-          Receiver,
-          P,
-        ]);
-        newVal = AbstractValue.createFromConditionalOp(realm, cond, V, sentinel);
+      if (!(V instanceof EmptyValue)) {
+        let newVal = V;
+        if (!isWidenedValue(P)) {
+          // join V with sentinel, using a property name test as the condition
+          let cond = createTemplate(P);
+          let sentinel = AbstractValue.createFromType(realm, Value, "template for prototype member expression", [
+            Receiver,
+            P,
+          ]);
+          newVal = AbstractValue.createFromConditionalOp(realm, cond, V, sentinel);
+        }
+        prop.descriptor = new PropertyDescriptor({
+          writable: true,
+          enumerable: true,
+          configurable: true,
+          value: newVal,
+        });
       }
-      prop.descriptor = new PropertyDescriptor({
-        writable: true,
-        enumerable: true,
-        configurable: true,
-        value: newVal,
-      });
     } else {
       invariant(
         desc instanceof PropertyDescriptor,
@@ -647,7 +691,7 @@ export class PropertiesImplementation {
       let oldVal = desc.value;
       invariant(oldVal);
       let newVal = oldVal;
-      if (!(V instanceof UndefinedValue)) {
+      if (!(V instanceof EmptyValue)) {
         if (isWidenedValue(P)) {
           newVal = V; // It will be widened later on
         } else {
@@ -1512,8 +1556,7 @@ export class PropertiesImplementation {
         realm,
         Value,
         [O._templateFor || O, propName],
-        createOperationDescriptor("ABSTRACT_PROPERTY"),
-        { isPure: true }
+        createOperationDescriptor("ABSTRACT_PROPERTY")
       );
       // TODO: We can't be sure what the descriptor will be, but the value will be abstract.
       return new PropertyDescriptor({ configurable: true, enumerable: true, value: absVal, writable: true });
@@ -2101,6 +2144,7 @@ export class PropertiesImplementation {
       throw new FatalError();
     });
     realm.callReportObjectGetOwnProperties(O);
+    realm.recordPersistentObjectKeyRead(O, "*");
     return keyArray;
   }
 }

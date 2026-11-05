@@ -647,7 +647,7 @@ export default class AbstractObjectValue extends AbstractValue {
         }
         return getEnvironmentProperty(this.$Realm, this, Receiver, P);
       }
-      let generateAbstractGet = () => {
+      let generateAbstractGet = (isPure: boolean) => {
         let ob = Receiver;
         if (this.kind === "explicit conversion to object") ob = this.args[0];
         let type = Value;
@@ -689,20 +689,19 @@ export default class AbstractObjectValue extends AbstractValue {
           createOperationDescriptor("ABSTRACT_OBJECT_GET", { propertyGetter }),
           {
             skipInvariant: true,
-            isPure: true,
+            isPure,
             shape: propertyShape,
           }
         );
         return propAbsVal;
       };
       if (this.isSimpleObject() && this.isIntrinsic()) {
-        return generateAbstractGet();
+        return generateAbstractGet(true);
       } else if (this.$Realm.isInPureScope()) {
-        // This object might have leaked to a getter.
+        // This object might be null/undefined or have a getter that throws or has side effects.
         Leak.value(this.$Realm, Receiver);
-        // The getter might throw anything.
         return this.$Realm.evaluateWithPossibleThrowCompletion(
-          generateAbstractGet,
+          () => generateAbstractGet(false),
           TypesDomain.topVal,
           ValuesDomain.topVal
         );
@@ -759,7 +758,7 @@ export default class AbstractObjectValue extends AbstractValue {
     if (!(P instanceof AbstractValue)) return this.$Get(P, Receiver);
     let keyVal: AbstractValue = P;
     if (this.values.isTop() || !this.isSimpleObject()) {
-      if (this.isSimpleObject() && this.isIntrinsic()) {
+      if (this.isSimpleObject() && this.isIntrinsic() && !P.mightBeObject()) {
         return AbstractValue.createTemporalFromBuildFunction(
           this.$Realm,
           Value,
@@ -813,12 +812,18 @@ export default class AbstractObjectValue extends AbstractValue {
         Leak.value(this.$Realm, Receiver);
         // Coercion can only have effects on anything reachable from the key.
         Leak.value(this.$Realm, P);
-        return AbstractValue.createTemporalFromBuildFunction(
-          this.$Realm,
-          Value,
-          [Receiver, P],
-          createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
-          { skipInvariant: true, isPure: true }
+        let propKey = P;
+        return this.$Realm.evaluateWithPossibleThrowCompletion(
+          () =>
+            AbstractValue.createTemporalFromBuildFunction(
+              this.$Realm,
+              Value,
+              [Receiver, propKey],
+              createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
+              { skipInvariant: true }
+            ),
+          TypesDomain.topVal,
+          ValuesDomain.topVal
         );
       }
       let error = new CompilerDiagnostic(

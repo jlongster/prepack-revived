@@ -241,7 +241,7 @@ export function CreateSetIterator(realm: Realm, set: Value, kind: IterationKind)
   iterator.$IteratedSet = set;
 
   // 5. Set iterator's [[SetNextIndex]] internal slot to 0.
-  iterator.$SetNextIndex = 0;
+  iterator.$SetNextIndex = new NumberValue(realm, 0);
 
   // 6. Set iterator's [[SetIterationKind]] internal slot to kind.
   iterator.$SetIterationKind = kind;

@@ -105,7 +105,6 @@ export class JoinImplementation {
     if (leftCompletion instanceof JoinedNormalAndAbruptCompletions) {
       if (rightCompletion instanceof JoinedNormalAndAbruptCompletions && leftCompletion.savedEffects !== undefined) {
         rightCompletion.composedWith = leftCompletion;
-        rightCompletion.pathConditionsAtCreation = leftCompletion.pathConditionsAtCreation;
         return rightCompletion;
       }
       let c = this.composeCompletions(leftCompletion.consequent, rightCompletion);
@@ -133,17 +132,19 @@ export class JoinImplementation {
 
   composeWithEffects(completion: Completion, normalEffects: Effects): Effects {
     if (completion instanceof JoinedNormalAndAbruptCompletions) {
+      let singleCompletion = completion.shallowClone();
+      singleCompletion.composedWith = undefined;
       let selectAbrupt = c => c instanceof AbruptCompletion && c.value !== c.value.$Realm.intrinsics.__bottomValue;
-      let composableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectAbrupt, completion);
+      let composableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectAbrupt, singleCompletion);
       let composedNormalCompletion = this.composeCompletions(composableCompletions, normalEffects.result);
       normalEffects.result = composedNormalCompletion;
 
       let selectNormal = c =>
         c instanceof SimpleNormalCompletion && c.value !== c.value.$Realm.intrinsics.__bottomValue;
-      let nonComposableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectNormal, completion);
-      let nonComposedEffects = construct_empty_effects(completion.value.$Realm, nonComposableCompletions);
+      let nonComposableCompletions = Completion.makeSelectedCompletionsInfeasibleInCopy(selectNormal, singleCompletion);
+      let nonComposedEffects = construct_empty_effects(singleCompletion.value.$Realm, nonComposableCompletions);
 
-      let joinCondition = AbstractValue.createJoinConditionForSelectedCompletions(selectNormal, completion);
+      let joinCondition = AbstractValue.createJoinConditionForSelectedCompletions(selectNormal, singleCompletion);
       return this.joinEffects(joinCondition, normalEffects, nonComposedEffects);
     } else if (completion instanceof AbruptCompletion) {
       return construct_empty_effects(completion.value.$Realm, completion);

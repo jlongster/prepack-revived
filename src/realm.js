@@ -99,6 +99,14 @@ import {
 import type { BabelNode, BabelNodeSourceLocation, BabelNodeLVal } from "@babel/types";
 export type BindingEntry = { hasLeaked: boolean, value: void | Value };
 export type Bindings = Map<Binding, BindingEntry>;
+export type PersistentReadTracker = {
+  entryPathConditions: PathConditions,
+  definitelyWrittenBindings: Set<Binding>,
+  definitelyWrittenGlobalProps: Set<string>,
+  readBindings: Set<Binding>,
+  readGlobalProps: Set<string>,
+  readObjectKeys: Map<ObjectValue, Set<string>>,
+};
 export type EvaluationResult = Completion | Reference;
 export type PropertyBindings = Map<PropertyBinding, void | Descriptor>;
 
@@ -402,6 +410,7 @@ export class Realm {
   abstractValueImpliesCounter: number;
   impliesCounterOverflowed: boolean;
   inSimplificationPath: boolean;
+  _implicationUsedLeaf: boolean;
   smtMode: SmtMode;
   smtQueries: number;
   smtAuditContext: void | string;
@@ -413,6 +422,8 @@ export class Realm {
   createdAbstracts: void | CreatedAbstracts;
   reportObjectGetOwnProperties: void | ((ObjectValue | AbstractObjectValue) => void);
   reportPropertyAccess: void | ((PropertyBinding, boolean) => void);
+  persistentReadTracker: void | PersistentReadTracker;
+  liveOuterBindings: void | Set<Binding>;
   savedCompletion: void | JoinedNormalAndAbruptCompletions;
 
   activeLexicalEnvironments: Set<LexicalEnvironment>;
@@ -936,6 +947,7 @@ export class Realm {
     let saved_createdObjects = this.createdObjects;
     let saved_createdAbstracts = this.createdAbstracts;
     let saved_completion = this.savedCompletion;
+    let saved_pathConditions = this.pathConditions;
     let saved_abstractValuesDefined = this._abstractValuesDefined;
     this.generator = new Generator(this, generatorName, this.pathConditions);
     this.createdObjects = new Set();
@@ -993,6 +1005,7 @@ export class Realm {
         } else {
           this.restoreBindings(this.modifiedBindings);
           this.restoreProperties(this.modifiedProperties);
+          this.pathConditions = saved_pathConditions;
           let completion = this.savedCompletion;
           while (completion !== undefined) {
             const { savedEffects } = completion;
@@ -1058,9 +1071,7 @@ export class Realm {
       };
       let effects = this.evaluateForEffects(f, undefined, "evaluateWithUndoForDiagnostic");
       this.applyEffects(effects);
-      let resultVal = effects.result;
-      if (resultVal instanceof AbruptCompletion) throw resultVal;
-      return resultVal.value;
+      return this.returnOrThrowCompletion(effects.result);
     } catch (e) {
       if (diagnostic !== undefined) return diagnostic;
       throw e;
@@ -1269,18 +1280,66 @@ export class Realm {
   composeWithSavedCompletion(completion: Completion): Completion {
     if (this.savedCompletion === undefined) {
       if (completion instanceof JoinedNormalAndAbruptCompletions) {
+        let savedPathConditions = this.pathConditions;
+        try {
+          this.pushPathConditionsLeadingToNormalCompletions(completion);
+        } catch (e) {
+          if (!(e instanceof InfeasiblePathError)) throw e;
+          this.pathConditions = savedPathConditions;
+          let abruptOnly = Completion.makeSelectedCompletionsInfeasibleInCopy(
+            c => c instanceof NormalCompletion,
+            completion
+          );
+          if (abruptOnly instanceof AbruptCompletion) return abruptOnly;
+        }
         this.savedCompletion = completion;
-        this.pushPathConditionsLeadingToNormalCompletions(completion);
         this.captureEffects(completion);
       }
       return completion;
     } else {
-      let cc = Join.composeCompletions(this.savedCompletion, completion);
+      let prevSavedCompletion = this.savedCompletion;
+      let savedPathConditions = this.pathConditions;
+      if (prevSavedCompletion.pathConditionsAtCreation !== undefined) {
+        this.pathConditions = prevSavedCompletion.pathConditionsAtCreation;
+      }
+      let cc;
+      try {
+        cc = Join.composeCompletions(prevSavedCompletion, completion);
+      } finally {
+        this.pathConditions = savedPathConditions;
+      }
       if (cc instanceof JoinedNormalAndAbruptCompletions) {
+        try {
+          this.pushPathConditionsLeadingToNormalCompletions(completion);
+        } catch (e) {
+          if (!(e instanceof InfeasiblePathError)) throw e;
+          this.pathConditions = savedPathConditions;
+          if (
+            completion instanceof JoinedNormalAndAbruptCompletions &&
+            completion.composedWith === prevSavedCompletion
+          ) {
+            completion.composedWith = undefined;
+          }
+          let abruptCompletion = Completion.makeSelectedCompletionsInfeasibleInCopy(
+            c => c instanceof NormalCompletion,
+            completion
+          );
+          if (prevSavedCompletion.savedEffects !== undefined) {
+            let incorporated = Functions.incorporateSavedCompletion(this, abruptCompletion);
+            invariant(incorporated instanceof Completion);
+            return incorporated;
+          }
+          this.savedCompletion = undefined;
+          return Join.composeCompletions(prevSavedCompletion, abruptCompletion);
+        }
         this.savedCompletion = cc;
-        this.pushPathConditionsLeadingToNormalCompletions(completion);
         if (cc.savedEffects === undefined) this.captureEffects(cc);
       } else {
+        if (prevSavedCompletion.savedEffects !== undefined) {
+          let incorporated = Functions.incorporateSavedCompletion(this, completion);
+          invariant(incorporated instanceof Completion);
+          return incorporated;
+        }
         this.savedCompletion = undefined;
       }
       return cc;
@@ -1624,6 +1683,36 @@ export class Realm {
   callReportPropertyAccess(binding: PropertyBinding, isWrite: boolean): void {
     if (this.reportPropertyAccess !== undefined) {
       this.reportPropertyAccess(binding, isWrite);
+    }
+  }
+
+  recordPersistentObjectKeyRead(ob: ObjectValue, key: string): void {
+    let tracker = this.persistentReadTracker;
+    if (tracker === undefined) return;
+    if (ob === this.$GlobalObject) {
+      if (key !== "*" && !tracker.definitelyWrittenGlobalProps.has(key)) {
+        tracker.readGlobalProps.add(key);
+      }
+      return;
+    }
+    if (ob.isIntrinsic()) return;
+    let keys = tracker.readObjectKeys.get(ob);
+    if (keys === undefined) {
+      keys = new Set();
+      tracker.readObjectKeys.set(ob, keys);
+    }
+    keys.add(key);
+  }
+
+  recordPersistentGlobalWrite(key: string): void {
+    let tracker = this.persistentReadTracker;
+    if (
+      tracker !== undefined &&
+      this.savedCompletion === undefined &&
+      this.pathConditions === tracker.entryPathConditions &&
+      !tracker.readGlobalProps.has(key)
+    ) {
+      tracker.definitelyWrittenGlobalProps.add(key);
     }
   }
 

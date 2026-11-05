@@ -311,8 +311,17 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
       throw realm.createErrorThrowCompletion(realm.intrinsics.ReferenceError, `${N} has not yet been initialized`);
     } else if (binding.mutable) {
       // 5. Else if the binding for N in envRec is a mutable binding, change its bound value to V.
-      if (binding.hasLeaked) {
-        Leak.value(realm, V);
+      let tracker = realm.persistentReadTracker;
+      if (
+        tracker !== undefined &&
+        realm.savedCompletion === undefined &&
+        realm.pathConditions === tracker.entryPathConditions &&
+        !tracker.readBindings.has(binding)
+      ) {
+        tracker.definitelyWrittenBindings.add(binding);
+      }
+      if (binding.hasLeaked || (realm.liveOuterBindings !== undefined && realm.liveOuterBindings.has(binding))) {
+        if (binding.hasLeaked) Leak.value(realm, V);
         invariant(realm.generator);
         realm.generator.emitBindingAssignment(binding, V);
       } else {
@@ -350,7 +359,16 @@ export class DeclarativeEnvironmentRecord extends EnvironmentRecord {
     }
 
     // 4. Return the value currently bound to N in envRec.
-    if (binding.hasLeaked && binding.mutable) {
+    if (
+      realm.persistentReadTracker !== undefined &&
+      !realm.persistentReadTracker.definitelyWrittenBindings.has(binding)
+    ) {
+      realm.persistentReadTracker.readBindings.add(binding);
+    }
+    if (
+      (binding.hasLeaked || (realm.liveOuterBindings !== undefined && realm.liveOuterBindings.has(binding))) &&
+      binding.mutable
+    ) {
       return deriveGetBinding(realm, binding);
     }
     invariant(binding.value);

@@ -34,6 +34,7 @@ import {
   GlobalEnvironmentRecord,
   ObjectEnvironmentRecord,
   leakBinding,
+  type Binding,
   type LexicalEnvironment,
 } from "../environment.js";
 import { cloneDescriptor, PropertyDescriptor } from "../descriptors.js";
@@ -741,7 +742,7 @@ function collectReadOnlyParams(
   realm: Realm,
   env: LexicalEnvironment,
   state: TransformState
-): Array<{ name: string, value: Value }> {
+): Array<{ name: string, value: Value, binding: Binding }> {
   let params = [];
   for (let name of state.freeNames) {
     if (state.assignedNames.has(name) || state.capturedByInnerFunction.has(name) || isReservedName(name)) continue;
@@ -760,7 +761,7 @@ function collectReadOnlyParams(
     if (binding === undefined || !binding.initialized || binding.hasLeaked) continue;
     let val = binding.value;
     if (val === undefined) continue;
-    params.push({ name, value: val });
+    params.push({ name, value: val, binding });
   }
   return params;
 }
@@ -920,8 +921,9 @@ export function residualizeLoop(
   let inGlobalCode = !realm.isInPureScope();
   let readOnlyCandidates = collectReadOnlyParams(realm, env, state);
   let shadowCandidates = collectShadowBindings(realm, env, state, transformed.loop);
+  let leakedCandidates: Set<string> = new Set();
   let attempt = (
-    params: Array<{ name: string, value: Value }>,
+    params: Array<{ name: string, value: Value, binding: Binding }>,
     shadows: Array<ShadowCandidate>,
     keepContainerTypes: boolean
   ) => {
@@ -938,7 +940,8 @@ export function residualizeLoop(
         reason,
         params,
         shadows,
-        keepContainerTypes
+        keepContainerTypes,
+        leakedCandidates
       );
       if (out.effects === undefined) realm.onDestroyScope(loopEnv);
       return out;
@@ -948,10 +951,18 @@ export function residualizeLoop(
     }
   };
 
-  let res = attempt(readOnlyCandidates, shadowCandidates, true);
-  if (res.effects === undefined && (readOnlyCandidates.length > 0 || shadowCandidates.length > 0)) {
-    // A helper or non-index mutation inside the loop may require full leaking of read-only containers or outer bindings.
-    res = attempt(readOnlyCandidates, shadowCandidates, false);
+  let currentCandidates = readOnlyCandidates;
+  let res = attempt(currentCandidates, shadowCandidates, true);
+  while (res.effects === undefined && leakedCandidates.size > 0) {
+    let remaining = currentCandidates.filter(p => !leakedCandidates.has(p.name));
+    if (remaining.length === currentCandidates.length) break;
+    currentCandidates = remaining;
+    res = attempt(currentCandidates, shadowCandidates, true);
+  }
+  if (res.effects === undefined && (currentCandidates.length > 0 || shadowCandidates.length > 0)) {
+    // A helper or non-index mutation inside the loop may require full leaking of read-only containers or outer
+    // bindings, or may have mutated an outer local binding that was not syntactically assigned.
+    res = attempt(currentCandidates, shadowCandidates, false);
     if (res.effects === undefined) {
       res = attempt([], [], false);
     }
@@ -1014,9 +1025,10 @@ function tryResidualLoop(
   loopEnv: LexicalEnvironment,
   labelSet: ?Array<string>,
   reason: string,
-  params: Array<{ name: string, value: Value }>,
+  params: Array<{ name: string, value: Value, binding: Binding }>,
   shadows: Array<ShadowCandidate>,
-  keepContainerTypes: boolean
+  keepContainerTypes: boolean,
+  leakedCandidates: Set<string>
 ): { effects?: Effects, loopEnv: LexicalEnvironment, failure?: string } {
   let state = transformed.state;
   let needsExitCode = state.usesReturn || state.exits.length > 0;
@@ -1070,6 +1082,16 @@ function tryResidualLoop(
           if (state.usesArguments) leakEnclosingFunctionBindings(realm, env);
           Leak.value(realm, wrapper);
           if (thisVal !== undefined) Leak.value(realm, thisVal);
+          let newlyLeaked = false;
+          for (let p of params) {
+            if (p.binding.hasLeaked && !leakedCandidates.has(p.name)) {
+              leakedCandidates.add(p.name);
+              newlyLeaked = true;
+            }
+          }
+          if (newlyLeaked) {
+            throw new FatalError("read-only loop parameter binding was leaked");
+          }
         }
 
         // Evaluate one abstract iteration to find out what the loop might modify.

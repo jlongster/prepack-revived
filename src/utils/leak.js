@@ -12,15 +12,69 @@
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import type { Realm } from "../realm.js";
 import { leakBinding } from "../environment.js";
-import { AbstractValue, ArrayValue, EmptyValue, ObjectValue, Value } from "../values/index.js";
-import { TestIntegrityLevel } from "../methods/index.js";
+import { AbstractValue, ArrayValue, EmptyValue, NumberValue, ObjectValue, Value } from "../values/index.js";
+import { IsArray, IsArrayIndex, TestIntegrityLevel } from "../methods/index.js";
 import type { BabelNodeSourceLocation } from "@babel/types";
 import invariant from "../invariant.js";
 import { HeapInspector } from "../utils/HeapInspector.js";
 import { Logger } from "../utils/logger.js";
 import { isReactElement } from "../react/utils.js";
 import { Reachability } from "../singletons.js";
-import { PropertyDescriptor } from "../descriptors.js";
+import { AbstractJoinedDescriptor, PropertyDescriptor } from "../descriptors.js";
+import type { Descriptor, PropertyBinding } from "../types.js";
+import { Generator } from "../utils/generator.js";
+
+function emitUnknownPropertyValueToGenerator(
+  realm: Realm,
+  gen: Generator,
+  object: ObjectValue,
+  absVal: AbstractValue,
+  onWrite?: AbstractValue => void
+): void {
+  if (absVal.kind === "widened property" || absVal.kind === "template for prototype member expression") return;
+  if (absVal.args.length !== 3) return;
+  let cond = absVal.args[0];
+  invariant(cond instanceof AbstractValue);
+  if (cond.kind === "template for property name condition") {
+    let P = cond.args[0];
+    invariant(P instanceof AbstractValue);
+    let V = absVal.args[1];
+    let earlier = absVal.args[2];
+    if (earlier instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, gen, object, earlier, onWrite);
+    gen.emitPropertyAssignment(object, P, V);
+    if (onWrite !== undefined) onWrite(absVal);
+  } else {
+    let consequent = absVal.args[1];
+    let alternate = absVal.args[2];
+    let g1 = new Generator(realm, "leakUnknownPropertyConsequent", gen.pathConditions);
+    let g2 = new Generator(realm, "leakUnknownPropertyAlternate", gen.pathConditions);
+    if (consequent instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, g1, object, consequent);
+    if (alternate instanceof AbstractValue) emitUnknownPropertyValueToGenerator(realm, g2, object, alternate);
+    if (!g1.empty() || !g2.empty()) gen.joinGenerators(cond, g1, g2);
+    if (onWrite !== undefined) onWrite(absVal);
+  }
+}
+
+function emitUnknownPropertyDescriptorToGenerator(
+  realm: Realm,
+  gen: Generator,
+  object: ObjectValue,
+  desc: void | Descriptor,
+  onWrite?: AbstractValue => void
+): void {
+  if (desc === undefined) return;
+  if (desc instanceof PropertyDescriptor) {
+    if (desc.value instanceof AbstractValue) {
+      emitUnknownPropertyValueToGenerator(realm, gen, object, desc.value, onWrite);
+    }
+  } else if (desc instanceof AbstractJoinedDescriptor) {
+    let g1 = new Generator(realm, "leakUnknownPropertyDesc1", gen.pathConditions);
+    let g2 = new Generator(realm, "leakUnknownPropertyDesc2", gen.pathConditions);
+    emitUnknownPropertyDescriptorToGenerator(realm, g1, object, desc.descriptor1);
+    emitUnknownPropertyDescriptorToGenerator(realm, g2, object, desc.descriptor2);
+    if (!g1.empty() || !g2.empty()) gen.joinGenerators(desc.joinCondition, g1, g2);
+  }
+}
 
 function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInspector?: () => HeapInspector): void {
   let generator = realm.generator;
@@ -37,11 +91,61 @@ function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInsp
   let getHeapInspector =
     getCachingHeapInspector || (() => new HeapInspector(realm, new Logger(realm, /*internalDebug*/ false)));
 
+  let isArray = IsArray(realm, object);
+  let maxAssignedArrayIndex = -1;
+
+  let unknownDesc = object.unknownProperty !== undefined ? object.unknownProperty.descriptor : undefined;
+  if (
+    unknownDesc instanceof PropertyDescriptor &&
+    unknownDesc.value instanceof AbstractValue &&
+    unknownDesc.value.kind === "widened property"
+  ) {
+    unknownDesc = undefined;
+  }
+  // Properties created after a write with an unknown name are emitted after that write, preserving enumeration order.
+  let createdAfterUnknownWrite = new Map();
+
   // TODO: We should emit current value and then reset value for all *internal slots*; this will require deep serializer support; or throw FatalError when we detect any non-initial values in internal slots.
   for (let [name, propertyBinding] of object.properties) {
     // ignore properties with their correct default values
     if (getHeapInspector().canIgnoreProperty(object, name)) continue;
+    if (
+      unknownDesc !== undefined &&
+      propertyBinding.createdAfterUnknownWrite !== undefined &&
+      propertyBinding.descriptor !== undefined
+    ) {
+      createdAfterUnknownWrite.set(name, propertyBinding);
+      continue;
+    }
+    emitProperty(name, propertyBinding);
+  }
 
+  if (unknownDesc !== undefined && generator !== undefined) {
+    emitUnknownPropertyDescriptorToGenerator(realm, generator, object, unknownDesc, value => {
+      for (let [name, propertyBinding] of createdAfterUnknownWrite) {
+        if (propertyBinding.createdAfterUnknownWrite !== value) continue;
+        createdAfterUnknownWrite.delete(name);
+        emitProperty(name, propertyBinding);
+      }
+    });
+  }
+  for (let [name, propertyBinding] of createdAfterUnknownWrite) emitProperty(name, propertyBinding);
+
+  if (isArray && generator !== undefined) {
+    let lenBinding = object.properties.get("length");
+    if (lenBinding !== undefined && lenBinding.descriptor instanceof PropertyDescriptor) {
+      let lenVal = lenBinding.descriptor.value;
+      if (
+        lenVal instanceof Value &&
+        !(lenVal instanceof AbstractValue && lenVal.kind === "widened property") &&
+        (!(lenVal instanceof NumberValue) || lenVal.value !== maxAssignedArrayIndex + 1)
+      ) {
+        generator.emitPropertyAssignment(object, "length", lenVal);
+      }
+    }
+  }
+
+  function emitProperty(name: string, propertyBinding: PropertyBinding): void {
     let descriptor = propertyBinding.descriptor;
     if (descriptor === undefined) {
       // TODO: This happens, e.g. test/serializer/pure-functions/ObjectAssign2.js
@@ -72,6 +176,9 @@ function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInsp
                 generator.emitDefineProperty(object, name, descriptor);
               } else {
                 generator.emitPropertyAssignment(object, name, value);
+                if (isArray && IsArrayIndex(realm, name) && !value.mightHaveBeenDeleted()) {
+                  maxAssignedArrayIndex = Math.max(maxAssignedArrayIndex, Number(name));
+                }
               }
             }
           }
@@ -117,6 +224,7 @@ export class LeakImplementation {
     } else {
       // This function decides what values are descended into by leaking
       function leakingFilter(val: Value) {
+        if (!val.mightBeObject()) return false;
         if (val instanceof AbstractValue) {
           // To ensure that we don't forget to provide arguments
           // that can be leaked, we require at least one argument.
@@ -142,7 +250,6 @@ export class LeakImplementation {
             (val.mightNotBeLeakedObject() &&
               objectsTrackedForLeaks.has(val) &&
               !TestIntegrityLevel(realm, val, "frozen"))) &&
-          val.mightBeObject() &&
           (!val.isIntrinsic() || (val instanceof ArrayValue && ArrayValue.isIntrinsicAndHasWidenedNumericProperty(val)))
         );
       }
