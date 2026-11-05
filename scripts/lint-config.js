@@ -64,7 +64,6 @@ module.exports = {
     Float32Array: true,
     Int32Array: true,
     // ES 6+
-    globalThis: true,
     BigInt: true,
     Promise: true,
     Map: true,
