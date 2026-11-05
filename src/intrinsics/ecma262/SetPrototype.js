@@ -47,9 +47,11 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 6. If value is -0, let value be +0.
-    value = value.throwIfNotConcrete();
-    if (value instanceof NumberValue && Object.is(value.value, -0)) {
-      value = realm.intrinsics.zero;
+    if (value.mightBeNumber()) {
+      value = value.throwIfNotConcrete();
+      if (value instanceof NumberValue && Object.is(value.value, -0)) {
+        value = realm.intrinsics.zero;
+      }
     }
 
     // 7. Append value as the last element of entries.

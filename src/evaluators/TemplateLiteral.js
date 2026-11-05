@@ -12,7 +12,8 @@
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import type { Value } from "../values/index.js";
-import { StringValue } from "../values/index.js";
+import { AbstractValue, StringValue } from "../values/index.js";
+import { computeBinary } from "./BinaryExpression.js";
 import { Environment, To } from "../singletons.js";
 import type { BabelNodeTemplateLiteral } from "@babel/types";
 
@@ -23,19 +24,24 @@ export default function(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
-  let str = "";
+  let acc: Value = realm.intrinsics.emptyString;
 
   for (let i = 0; i < ast.quasis.length; i++) {
-    // add quasi
     let elem = ast.quasis[i];
-    str += elem.value.cooked;
+    if (elem.value.cooked.length > 0) {
+      acc = computeBinary(realm, "+", acc, new StringValue(realm, elem.value.cooked));
+    }
 
-    // add expression
     let expr = ast.expressions[i];
     if (expr) {
-      str += To.ToStringPartial(realm, Environment.GetValue(realm, env.evaluate(expr, strictCode)));
+      let val = Environment.GetValue(realm, env.evaluate(expr, strictCode));
+      let strVal =
+        val instanceof AbstractValue && To.IsToStringPure(realm, val)
+          ? To.ToStringAbstract(realm, val)
+          : new StringValue(realm, To.ToStringPartial(realm, val));
+      acc = computeBinary(realm, "+", acc, strVal);
     }
   }
 
-  return new StringValue(realm, str);
+  return acc;
 }

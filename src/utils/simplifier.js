@@ -111,6 +111,10 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         if (!y.mightNotBeFalse()) return op === "||" ? x : realm.intrinsics.false;
       }
       if (op === "||") {
+        // (c && y) || y <=> y when y is guaranteed truthy (!y.mightBeFalse())
+        if (x instanceof AbstractValue && x.kind === "&&" && !y.mightBeFalse() && x.args[1].equals(y)) {
+          return y;
+        }
         if (y instanceof AbstractValue && y.kind === "||") {
           // x || x || y <=> x || y
           if (x.equals(y.args[0])) return y;
@@ -764,6 +768,19 @@ function simplifyEquality(realm: Realm, equality: AbstractValue, depth: number):
     if (!y.mightNotBeUndefined()) {
       let sx = simplifyUndefinedCheck(realm, op, x, depth + 1);
       if (sx !== undefined) return sx;
+    }
+  }
+  if (op === "===" || op === "!==" || op === "==" || op === "!=") {
+    // String prefix/suffix disjointness: `("prefix" + s) === "other"` is false when `!"other".startsWith("prefix")`
+    // (provided `s` is a known string so `+` is string concatenation with no coercion).
+    if (y instanceof StringValue && x instanceof AbstractValue && x.kind === "+" && x.args.length === 2) {
+      let [xa, xb] = x.args;
+      if (xa instanceof StringValue && xb.getType() === StringValue && !y.value.startsWith(xa.value)) {
+        return op[0] === "!" ? realm.intrinsics.true : realm.intrinsics.false;
+      }
+      if (xb instanceof StringValue && xa.getType() === StringValue && !y.value.endsWith(xb.value)) {
+        return op[0] === "!" ? realm.intrinsics.true : realm.intrinsics.false;
+      }
     }
   }
   if (op === "===") {
