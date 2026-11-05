@@ -53,7 +53,7 @@ import {
 import { TestIntegrityLevel } from "./integrity.js";
 import { Leak } from "../singletons.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
-import { createOperationDescriptor } from "../utils/generator.js";
+import { createOperationDescriptor, Generator, TemporalOperationEntry } from "../utils/generator.js";
 import invariant from "../invariant.js";
 import * as t from "@babel/types";
 import traverse from "@babel/traverse";
@@ -156,6 +156,16 @@ export function exitTryBlock(realm: Realm): void {
   tryDepths.set(realm, (tryDepths.get(realm) || 1) - 1);
 }
 
+export function isInTryBlock(realm: Realm): boolean {
+  return (tryDepths.get(realm) || 0) > 0;
+}
+
+let pureProbeDepth: WeakMap<Realm, number> = new WeakMap();
+
+export function isInsidePureProbe(realm: Realm): boolean {
+  return (pureProbeDepth.get(realm) || 0) > 0;
+}
+
 // Runs a call of F, keeping track of active calls so that re-entries can be detected.
 export function withActivation<T>(realm: Realm, F: FunctionValue, argsList: Array<Value>, f: () => T): T {
   if (!(F instanceof ECMAScriptSourceFunctionValue) || !realm.useAbstractInterpretation) return f();
@@ -197,11 +207,29 @@ export function tryResidualizeRecursiveCall(
   // Recursion is driven by abstract values if the re-entry happens on a path that is guarded by
   // conditions that were assumed after the enclosing call of F started.
   let top = stack[stack.length - 1];
-  if (realm.pathConditions === top.pathConditions) return undefined;
+  let formalLen = Math.max(1, F.$FormalParameters ? F.$FormalParameters.length : 1);
+  let relevantArgs = argsList.slice(0, formalLen);
+  let transitionedToUntypedAbstract =
+    !top.args.slice(0, formalLen).some(a => a instanceof AbstractValue) &&
+    relevantArgs.some(a => a instanceof AbstractValue && a.getType() === Value && a.kind !== "conditional");
+  if (realm.pathConditions === top.pathConditions && !transitionedToUntypedAbstract) return undefined;
   let abstractArgs = argsList.some(arg => arg instanceof AbstractValue);
   if (!abstractArgs && !sameConcreteArgs(top.args, argsList) && stack.length < CONCRETE_UNROLL_LIMIT) return undefined;
 
   return emitResidualCall(realm, F, thisArgument, argsList);
+}
+
+function generatorReferencesValue(gen: Generator, target: Value): boolean {
+  for (let entry of gen._entries) {
+    if (entry instanceof TemporalOperationEntry && entry.args.includes(target)) return true;
+    let deps = entry.getDependencies();
+    if (deps !== undefined) {
+      for (let dep of deps) {
+        if (generatorReferencesValue(dep, target)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 // The outermost call of a recursive function driven by abstract inputs is evaluated speculatively: if its
@@ -246,7 +274,13 @@ function speculateOutermostCall(
     bypass = undefined;
     realm.errorHandler = savedErrorHandler;
   }
-  if ((totalResidualizations.get(realm) || 0) === before) {
+  let leakedSelfWithStatements =
+    hasAbstractArg &&
+    realm.isInPureScope() &&
+    effects.generator._entries.length > 0 &&
+    (generatorReferencesValue(effects.generator, F) ||
+      realm.withEffectsAppliedInGlobalEnv(() => !F.mightNotBeLeakedObject(), effects));
+  if ((totalResidualizations.get(realm) || 0) === before && !leakedSelfWithStatements) {
     replayDiagnostics(realm, bufferedDiagnostics, true);
     realm.applyEffects(effects);
     return realm.returnOrThrowCompletion(effects.result);
@@ -268,6 +302,56 @@ function replayDiagnostics(
   } finally {
     realm.suppressDiagnostics = savedSuppress;
   }
+}
+
+// Attempts to emit a sound residual call to F in pure scope for size/inlining control.
+// Unlike emitResidualCall (which aborts with PP0050 when unbounded recursion cannot be safely residualized),
+// this helper rolls back cleanly and returns undefined so the caller falls back to normal inlining.
+export function tryEmitPureResidualCall(
+  realm: Realm,
+  F: ECMAScriptSourceFunctionValue,
+  thisArgument: Value,
+  argsList: Array<Value>
+): void | Value {
+  if (!realm.isInPureScope() || realm.instantRender.enabled) return undefined;
+  let clusterCheck = checkCluster(realm, F, thisArgument, argsList, true);
+  if (!clusterCheck.ok) return undefined;
+
+  let callArgs;
+  let descriptor;
+  if (thisArgument instanceof UndefinedValue || F.$ThisMode === "lexical") {
+    callArgs = [F, ...argsList];
+    descriptor = createOperationDescriptor("CALL_BAILOUT", { propRef: undefined, thisArg: undefined });
+  } else {
+    callArgs = [F, thisArgument, ...argsList];
+    descriptor = createOperationDescriptor("CALL_BAILOUT", { propRef: "call", thisArg: F });
+  }
+
+  let pureFailure;
+  let effects = realm.evaluateForEffects(
+    () => {
+      Leak.value(realm, F, realm.currentLocation);
+      for (let arg of argsList) Leak.value(realm, arg, realm.currentLocation);
+      if (callArgs.length > argsList.length + 1) Leak.value(realm, thisArgument, realm.currentLocation);
+      if (!pureProving.has(F)) {
+        pureFailure = verifyPureCallEffects(realm, F, thisArgument, argsList, clusterCheck.leakedFunctions);
+      }
+      if (pureFailure !== undefined) return realm.intrinsics.undefined;
+      return realm.evaluateWithPossibleThrowCompletion(
+        () => AbstractValue.createTemporalFromBuildFunction(realm, Value, callArgs, descriptor),
+        TypesDomain.topVal,
+        ValuesDomain.topVal
+      );
+    },
+    undefined,
+    "tryEmitPureResidualCall"
+  );
+
+  if (pureFailure !== undefined || !(effects.result instanceof SimpleNormalCompletion)) {
+    return undefined;
+  }
+  realm.applyEffects(effects);
+  return effects.result.value;
 }
 
 function emitResidualCall(
@@ -365,6 +449,7 @@ function verifyPureCallEffects(
   realm.suppressDiagnostics = false;
   pureProving.add(F);
   for (let fn of leakedFunctions) pureProving.add(fn);
+  pureProbeDepth.set(realm, (pureProbeDepth.get(realm) || 0) + 1);
   let rootEffects: Array<[ECMAScriptSourceFunctionValue, Effects]> = [];
   try {
     let fCall = F.$Call;
@@ -407,6 +492,7 @@ function verifyPureCallEffects(
     return `evaluating ${functionName(F)} with abstract arguments fails`;
   } finally {
     bypass = undefined;
+    pureProbeDepth.set(realm, (pureProbeDepth.get(realm) || 1) - 1);
     pureProving.delete(F);
     for (let fn of leakedFunctions) pureProving.delete(fn);
     realm.errorHandler = savedErrorHandler;

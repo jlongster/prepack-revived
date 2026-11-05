@@ -564,11 +564,8 @@ export class ToImplementation {
 
   IsToNumberPure(realm: Realm, val: numberOrValue): boolean {
     if (val instanceof Value) {
-      if (this.IsToPrimitivePure(realm, val)) {
-        let type = val.getType();
-        return type !== SymbolValue && type !== PrimitiveValue && type !== Value;
-      }
-      return false;
+      let type = this.GetToPrimitivePureResultType(realm, val);
+      return type !== undefined && type !== SymbolValue && type !== PrimitiveValue && type !== Value;
     }
     return true;
   }
@@ -626,6 +623,35 @@ export class ToImplementation {
   GetToPrimitivePureResultType(realm: Realm, input: Value): void | typeof Value {
     let type = input.getType();
     if (input instanceof PrimitiveValue) return type;
+    if (Value.isTypeCompatibleWith(type, PrimitiveValue) && type !== PrimitiveValue) return type;
+    if (input instanceof AbstractValue && !realm.pathConditions.isEmpty()) {
+      let pc: any = realm.pathConditions;
+      while (pc !== undefined) {
+        if (pc._assumedConditions !== undefined) {
+          for (let cond of pc._assumedConditions) {
+            if (cond instanceof AbstractValue && cond.kind === "===" && cond.args.length === 2) {
+              let [a, b] = cond.args;
+              let tagVal;
+              if (a instanceof AbstractValue && a.kind === "typeof" && a.args[0] === input && b instanceof StringValue)
+                tagVal = b.value;
+              else if (
+                b instanceof AbstractValue &&
+                b.kind === "typeof" &&
+                b.args[0] === input &&
+                a instanceof StringValue
+              )
+                tagVal = a.value;
+              if (tagVal === "number") return NumberValue;
+              if (tagVal === "string") return StringValue;
+              if (tagVal === "boolean") return BooleanValue;
+              if (tagVal === "undefined") return UndefinedValue;
+              if (tagVal === "symbol") return SymbolValue;
+            }
+          }
+        }
+        pc = pc._baseConditions;
+      }
+    }
     if (input instanceof AbstractValue && !input.mightBeObject()) return PrimitiveValue;
     return undefined;
   }
@@ -722,10 +748,8 @@ export class ToImplementation {
 
   IsToStringPure(realm: Realm, input: string | Value): boolean {
     if (input instanceof Value) {
-      if (this.IsToPrimitivePure(realm, input)) {
-        let type = input.getType();
-        return type !== SymbolValue && type !== PrimitiveValue && type !== Value;
-      }
+      let type = this.GetToPrimitivePureResultType(realm, input);
+      return type !== undefined && type !== SymbolValue && type !== PrimitiveValue && type !== Value;
     }
     return true;
   }

@@ -143,39 +143,41 @@ function getObjectKeys(obj: BabelNodeObjectExpression): string | false {
 export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGenerator: NameGenerator): void {
   let signatures = Object.create(null);
 
+  function collectObjectExpressions(stmt: BabelNodeStatement, holder, key: string | number): void {
+    let node = (holder: $FlowFixMe)[key];
+    if (!node || typeof node !== "object") return;
+    if (node.type === "ArrayExpression") {
+      for (let i = 0; i < node.elements.length; i++) {
+        if (node.elements[i]) collectObjectExpressions(stmt, node.elements, i);
+      }
+      return;
+    }
+    if (node.type === "ObjectExpression") {
+      for (let prop of node.properties) {
+        if (prop.type === "ObjectProperty") {
+          collectObjectExpressions(stmt, prop, "value");
+        }
+      }
+      let keys = getObjectKeys(node);
+      if (!keys) return;
+      let declars = (signatures[keys] = signatures[keys] || []);
+      declars.push({ stmt, declar: holder, initializerAstNodeName: key });
+    }
+  }
+
   for (let node of body) {
     switch (node.type) {
       case "VariableDeclaration":
         for (let declar of node.declarations) {
-          let { init } = declar;
-          if (!init) continue;
-          if (init.type !== "ObjectExpression") continue;
-
-          let keys = getObjectKeys(init);
-          if (!keys) continue;
-
-          let initializerAstNodeName = "init";
-          let declars = (signatures[keys] = signatures[keys] || []);
-          declars.push({ stmt: node, declar, initializerAstNodeName });
+          if (declar.init) collectObjectExpressions(node, declar, "init");
         }
         break;
 
       case "ExpressionStatement":
         const expr = node.expression;
-        if (expr.type !== "AssignmentExpression") {
-          break;
+        if (expr.type === "AssignmentExpression") {
+          collectObjectExpressions(node, expr, "right");
         }
-        const { right } = expr;
-        if (right.type !== "ObjectExpression") {
-          break;
-        }
-
-        let keys = getObjectKeys(right);
-        if (!keys) continue;
-
-        let initializerAstNodeName = "right";
-        let declars = (signatures[keys] = signatures[keys] || []);
-        declars.push({ stmt: node, declar: node.expression, initializerAstNodeName });
         break;
 
       default:
