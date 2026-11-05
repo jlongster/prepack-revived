@@ -45,6 +45,8 @@ export { default as NewExpression } from "./NewExpression.js";
 export { default as NullLiteral } from "./NullLiteral.js";
 export { default as NumericLiteral } from "./NumericLiteral.js";
 export { default as ObjectExpression } from "./ObjectExpression.js";
+export { default as OptionalCallExpression } from "./OptionalChain.js";
+export { default as OptionalMemberExpression } from "./OptionalChain.js";
 export { default as Program } from "./Program.js";
 export { default as RegExpLiteral } from "./RegExpLiteral.js";
 export { default as ReturnStatement } from "./ReturnStatement.js";

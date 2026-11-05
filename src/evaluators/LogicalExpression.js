@@ -15,12 +15,20 @@ import { SimpleNormalCompletion } from "../completions.js";
 import { InfeasiblePathError } from "../errors.js";
 import { construct_empty_effects } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import { AbstractValue, ConcreteValue, Value } from "../values/index.js";
+import { AbstractValue, ConcreteValue, NullValue, UndefinedValue, Value } from "../values/index.js";
 import { Reference } from "../environment.js";
 import { Environment } from "../singletons.js";
-import type { BabelNodeLogicalExpression } from "@babel/types";
+import type { BabelNodeLogicalExpression, BabelNodeSourceLocation } from "@babel/types";
 import invariant from "../invariant.js";
 import { Join, Path, To } from "../singletons.js";
+
+export function createIsNullishCondition(realm: Realm, val: AbstractValue, loc?: ?BabelNodeSourceLocation): Value {
+  let eqNull = AbstractValue.createFromBinaryOp(realm, "===", val, realm.intrinsics.null, loc);
+  let eqUndefined = AbstractValue.createFromBinaryOp(realm, "===", val, realm.intrinsics.undefined, loc);
+  if (!eqNull.mightNotBeFalse()) return eqUndefined;
+  if (!eqUndefined.mightNotBeFalse()) return eqNull;
+  return AbstractValue.createFromLogicalOp(realm, "||", eqNull, eqUndefined, loc, true);
+}
 
 export default function(
   ast: BabelNodeLogicalExpression,
@@ -30,6 +38,53 @@ export default function(
 ): Value | Reference {
   let lref = env.evaluate(ast.left, strictCode);
   let lval = Environment.GetValue(realm, lref);
+  let op: string = (ast.operator: any);
+
+  if (op === "??") {
+    if (lval instanceof ConcreteValue) {
+      if (lval instanceof NullValue || lval instanceof UndefinedValue) {
+        let rref = env.evaluate(ast.right, strictCode);
+        return Environment.GetValue(realm, rref);
+      }
+      return lval;
+    }
+    invariant(lval instanceof AbstractValue);
+    let isNullish = createIsNullishCondition(realm, lval, ast.loc);
+    if (!isNullish.mightNotBeFalse()) return lval;
+    if (!isNullish.mightNotBeTrue()) {
+      let rref = env.evaluate(ast.right, strictCode);
+      return Environment.GetValue(realm, rref);
+    }
+    invariant(isNullish instanceof AbstractValue);
+    let {
+      generator: generator1,
+      modifiedBindings: modifiedBindings1,
+      modifiedProperties: modifiedProperties1,
+      createdObjects: createdObjects1,
+      createdAbstracts: createdAbstracts1,
+    } = construct_empty_effects(realm);
+    let rightEffects;
+    try {
+      rightEffects = Path.withCondition(isNullish, () => realm.evaluateNodeForEffects(ast.right, strictCode, env));
+    } catch (e) {
+      if (e instanceof InfeasiblePathError) return lval;
+      throw e;
+    }
+    let joinedEffects = Join.joinEffects(
+      isNullish,
+      rightEffects,
+      new Effects(
+        new SimpleNormalCompletion(lval),
+        generator1,
+        modifiedBindings1,
+        modifiedProperties1,
+        createdObjects1,
+        createdAbstracts1
+      )
+    );
+    realm.applyEffects(joinedEffects);
+    return realm.returnOrThrowCompletion(joinedEffects.result);
+  }
 
   if (lval instanceof ConcreteValue) {
     let lbool = To.ToBoolean(realm, lval);

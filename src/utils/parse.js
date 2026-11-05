@@ -27,7 +27,15 @@ export default function(
   startLine: number = 1
 ): BabelNodeFile {
   try {
-    let plugins = ["objectRestSpread", "asyncGenerators"];
+    let plugins = [
+      "objectRestSpread",
+      "asyncGenerators",
+      "optionalCatchBinding",
+      "optionalChaining",
+      "nullishCoalescingOperator",
+      "numericSeparator",
+      "logicalAssignment",
+    ];
     if (realm.react.enabled) {
       plugins.push("jsx");
     }

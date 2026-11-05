@@ -292,7 +292,7 @@ function tryToEvaluateCallOrLeaveAsAbstract(
   return realm.returnOrThrowCompletion(effects.result);
 }
 
-function EvaluateCall(
+export function EvaluateCall(
   ref: Value | Reference,
   func: Value,
   ast: BabelNodeCallExpression,

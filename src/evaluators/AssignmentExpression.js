@@ -11,7 +11,7 @@
 
 import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
-import { Value, ObjectValue } from "../values/index.js";
+import { AbstractValue, ConcreteValue, NullValue, ObjectValue, UndefinedValue, Value } from "../values/index.js";
 import { Reference } from "../environment.js";
 import {
   DestructuringAssignmentEvaluation,
@@ -19,10 +19,11 @@ import {
   IsAnonymousFunctionDefinition,
   IsIdentifierRef,
 } from "../methods/index.js";
-import { Environment, Functions, Properties } from "../singletons.js";
+import { Environment, Functions, Properties, To } from "../singletons.js";
 import invariant from "../invariant.js";
 import type { BabelNodeAssignmentExpression, BabelBinaryOperator } from "@babel/types";
 import { computeBinary } from "./BinaryExpression.js";
+import { createIsNullishCondition } from "./LogicalExpression.js";
 
 // ECMA262 12.15 Assignment Operators
 export default function(
@@ -88,6 +89,77 @@ export default function(
 
     // 7. Return rval.
     return rval;
+  }
+
+  // Logical Assignment Operators: &&=, ||=, ??=
+  let rawOp: string = (AssignmentOperator: any);
+  if (rawOp === "&&=" || rawOp === "||=" || rawOp === "??=") {
+    let lref = env.evaluate(LeftHandSideExpression, strictCode);
+    let lval = Environment.GetValue(realm, lref);
+
+    let evaluateRightAndPut = (): Value => {
+      let rref = env.evaluate(AssignmentExpression, strictCode);
+      let rval = Environment.GetValue(realm, rref);
+      if (
+        IsAnonymousFunctionDefinition(realm, AssignmentExpression) &&
+        IsIdentifierRef(realm, LeftHandSideExpression)
+      ) {
+        invariant(rval instanceof ObjectValue);
+        let hasNameProperty = HasOwnProperty(realm, rval, "name");
+        if (!hasNameProperty) {
+          invariant(lref instanceof Reference);
+          Functions.SetFunctionName(realm, rval, Environment.GetReferencedName(realm, lref));
+        }
+      }
+      Properties.PutValue(realm, lref, rval);
+      return rval;
+    };
+
+    if (rawOp === "??=") {
+      if (lval instanceof ConcreteValue) {
+        if (lval instanceof NullValue || lval instanceof UndefinedValue) {
+          return evaluateRightAndPut();
+        }
+        return lval;
+      }
+      invariant(lval instanceof AbstractValue);
+      let isNullish = createIsNullishCondition(realm, lval, ast.loc);
+      if (!isNullish.mightNotBeFalse()) return lval;
+      if (!isNullish.mightNotBeTrue()) return evaluateRightAndPut();
+      invariant(isNullish instanceof AbstractValue);
+      return realm.evaluateWithAbstractConditional(
+        isNullish,
+        () => realm.evaluateForEffects(evaluateRightAndPut, null, "LogicalAssignment/??=/assign"),
+        () => realm.evaluateForEffects(() => lval, null, "LogicalAssignment/??=/keep")
+      );
+    }
+
+    if (lval instanceof ConcreteValue) {
+      let lbool = To.ToBoolean(realm, lval);
+      if (rawOp === "&&=") {
+        return lbool ? evaluateRightAndPut() : lval;
+      }
+      return lbool ? lval : evaluateRightAndPut();
+    }
+
+    invariant(lval instanceof AbstractValue);
+    if (rawOp === "&&=") {
+      if (!lval.mightNotBeFalse()) return lval;
+      if (!lval.mightNotBeTrue()) return evaluateRightAndPut();
+      return realm.evaluateWithAbstractConditional(
+        lval,
+        () => realm.evaluateForEffects(evaluateRightAndPut, null, "LogicalAssignment/&&=/assign"),
+        () => realm.evaluateForEffects(() => lval, null, "LogicalAssignment/&&=/keep")
+      );
+    } else {
+      if (!lval.mightNotBeFalse()) return evaluateRightAndPut();
+      if (!lval.mightNotBeTrue()) return lval;
+      return realm.evaluateWithAbstractConditional(
+        lval,
+        () => realm.evaluateForEffects(() => lval, null, "LogicalAssignment/||=/keep"),
+        () => realm.evaluateForEffects(evaluateRightAndPut, null, "LogicalAssignment/||=/assign")
+      );
+    }
   }
 
   // AssignmentExpression : LeftHandSideExpression AssignmentOperator AssignmentExpression

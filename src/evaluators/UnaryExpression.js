@@ -33,6 +33,7 @@ import invariant from "../invariant.js";
 import { IsCallable } from "../methods/index.js";
 import { Environment, To } from "../singletons.js";
 import type { BabelNodeUnaryExpression } from "@babel/types";
+import { evaluateOptionalChain } from "./OptionalChain.js";
 
 function isInstance(proto, Constructor): boolean {
   return proto instanceof Constructor || proto === Constructor.prototype;
@@ -67,8 +68,41 @@ function evaluateDeleteOperation(expr: Value | Reference, realm: Realm) {
 
     // b. Let baseObj be ! ToObject(GetBase(ref)).
     let base = Environment.GetBase(realm, ref);
-    // Constructing the reference checks that base is coercible to an object hence
-    invariant(base instanceof ConcreteValue || base instanceof AbstractObjectValue);
+    if (base instanceof AbstractValue) {
+      base = realm.simplifyAndRefineAbstractValue(base);
+    }
+    if (base instanceof AbstractValue && !(base instanceof AbstractObjectValue) && base.kind === "conditional") {
+      let [cond, left, right] = base.args;
+      invariant(cond instanceof AbstractValue);
+      return realm.evaluateWithAbstractConditional(
+        cond,
+        () =>
+          realm.evaluateForEffects(
+            () =>
+              evaluateDeleteOperation(
+                new Reference((left: any), Environment.GetReferencedName(realm, ref), ref.strict, ref.thisValue),
+                realm
+              ),
+            null,
+            "evaluateDeleteOperation/left"
+          ),
+        () =>
+          realm.evaluateForEffects(
+            () =>
+              evaluateDeleteOperation(
+                new Reference((right: any), Environment.GetReferencedName(realm, ref), ref.strict, ref.thisValue),
+                realm
+              ),
+            null,
+            "evaluateDeleteOperation/right"
+          )
+      );
+    }
+    if (!(base instanceof ConcreteValue || base instanceof AbstractObjectValue)) {
+      invariant(base instanceof AbstractValue);
+      AbstractValue.reportIntrospectionError(base, Environment.GetReferencedName(realm, ref));
+      throw new FatalError();
+    }
     let baseObj = To.ToObject(realm, base);
 
     // c. Let deleteStatus be ? baseObj.[[Delete]](GetReferencedName(ref)).
@@ -283,6 +317,12 @@ export default function(
   env: LexicalEnvironment,
   realm: Realm
 ): Value {
+  if (
+    ast.operator === "delete" &&
+    (ast.argument.type === "OptionalMemberExpression" || ast.argument.type === "OptionalCallExpression")
+  ) {
+    return evaluateOptionalChain(ast.argument, strictCode, env, realm, ref => evaluateDeleteOperation(ref, realm));
+  }
   let expr = env.evaluate(ast.argument, strictCode);
 
   if (ast.operator === "delete") {

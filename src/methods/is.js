@@ -285,7 +285,7 @@ export function IsIdentifierRef(realm: Realm, node: BabelNodeLVal): boolean {
 // 12.3.1.2 Static Semantics: IsFunctionDefinition
 // 12.15.2 Static Semantics: IsFunctionDefinition
 export function IsFunctionDefinition(realm: Realm, node: BabelNodeExpression): boolean {
-  switch (node.type) {
+  switch ((node.type: string)) {
     // 12.2.1.3 Static Semantics: IsFunctionDefinition
     case "ThisExpression":
     case "Identifier":
@@ -308,10 +308,14 @@ export function IsFunctionDefinition(realm: Realm, node: BabelNodeExpression): b
       return false;
     // 12.3.1.2 Static Semantics: IsFunctionDefinition
     case "MemberExpression":
+    case "OptionalMemberExpression":
     case "CallExpression":
+    case "OptionalCallExpression":
     case "NewExpression":
     case "MetaProperty":
     case "TaggedTemplateExpression":
+    case "YieldExpression":
+    case "AwaitExpression":
       return false;
     //12.5.1 Static Semantics: IsFunctionDefinition
     case "UnaryExpression":
