@@ -18,7 +18,38 @@ import { AbstractValue, BooleanValue, ConcreteValue, StringValue, Value } from "
 import { Path, To } from "../singletons.js";
 import EmptyValue from "../values/EmptyValue.js";
 import { createOperationDescriptor } from "./generator.js";
-import { NullValue, NumberValue, ObjectValue, PrimitiveValue, UndefinedValue } from "../values/index.js";
+import {
+  FunctionValue,
+  NullValue,
+  NumberValue,
+  ObjectValue,
+  PrimitiveValue,
+  ProxyValue,
+  SymbolValue,
+  UndefinedValue,
+} from "../values/index.js";
+import { IsCallable } from "../methods/index.js";
+
+function knownTypeofString(realm: Realm, val: Value): void | string {
+  let type = val.getType();
+  if (type === UndefinedValue) return "undefined";
+  if (type === NullValue) return "object";
+  if (type === StringValue) return "string";
+  if (type === BooleanValue) return "boolean";
+  if (Value.isTypeCompatibleWith(type, NumberValue)) return "number";
+  if (type === SymbolValue) return "symbol";
+  if (Value.isTypeCompatibleWith(type, FunctionValue)) return "function";
+  if (val instanceof ObjectValue && !(val instanceof ProxyValue)) {
+    return IsCallable(realm, val) ? "function" : "object";
+  }
+  let refined = To.GetToPrimitivePureResultType(realm, val);
+  if (refined === StringValue) return "string";
+  if (refined === NumberValue) return "number";
+  if (refined === BooleanValue) return "boolean";
+  if (refined === UndefinedValue) return "undefined";
+  if (refined === SymbolValue) return "symbol";
+  return undefined;
+}
 
 export default function simplifyAndRefineAbstractValue(
   realm: Realm,
@@ -213,6 +244,34 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       }
       if (x instanceof StringValue && x.value === "" && y.getType() === StringValue) return y;
       if (y instanceof StringValue && y.value === "" && x.getType() === StringValue) return x;
+      if (y instanceof StringValue && x instanceof AbstractValue && x.kind === "+" && x.args.length === 2) {
+        let [xl, xr] = x.args;
+        if (xr instanceof StringValue) {
+          return AbstractValue.createFromBinaryOp(
+            realm,
+            "+",
+            xl,
+            new StringValue(realm, xr.value + y.value),
+            loc,
+            undefined,
+            isCondition
+          );
+        }
+      }
+      if (x instanceof StringValue && y instanceof AbstractValue && y.kind === "+" && y.args.length === 2) {
+        let [yl, yr] = y.args;
+        if (yl instanceof StringValue) {
+          return AbstractValue.createFromBinaryOp(
+            realm,
+            "+",
+            new StringValue(realm, x.value + yl.value),
+            yr,
+            loc,
+            undefined,
+            isCondition
+          );
+        }
+      }
       let rebuilt =
         x.equals(x0) && y.equals(y0)
           ? value
@@ -239,6 +298,32 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       let folded = foldConditionalArithmetic(realm, value, op);
       if (folded !== value) return simplify(realm, folded, isCondition, depth + 1);
       return simplifyEquality(realm, value, depth + 1);
+    }
+    case "typeof": {
+      if (value.args.length !== 1) return value;
+      let x0 = value.args[0];
+      let x = simplify(realm, x0, false, depth + 1);
+      let known = knownTypeofString(realm, x);
+      if (known !== undefined) return new StringValue(realm, known);
+      if (x instanceof AbstractValue && x.kind === "conditional") {
+        let [cond, cons, alt] = x.args;
+        let tCons = knownTypeofString(realm, cons);
+        let tAlt = knownTypeofString(realm, alt);
+        if (tCons !== undefined || tAlt !== undefined) {
+          let consTypeVal =
+            tCons !== undefined
+              ? new StringValue(realm, tCons)
+              : AbstractValue.createFromUnaryOp(realm, "typeof", (cons: any), true, loc);
+          let altTypeVal =
+            tAlt !== undefined
+              ? new StringValue(realm, tAlt)
+              : AbstractValue.createFromUnaryOp(realm, "typeof", (alt: any), true, loc);
+          return AbstractValue.createFromConditionalOp(realm, cond, consTypeVal, altTypeVal, loc, isCondition);
+        }
+      }
+      return x.equals(x0)
+        ? value
+        : AbstractValue.createFromUnaryOp(realm, "typeof", (x: any), true, loc, isCondition, true);
     }
     case "conditional": {
       let [c0, x0, y0] = value.args;

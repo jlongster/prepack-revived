@@ -40,6 +40,7 @@ import type { FactoryFunctionInfo } from "./types.js";
 import { nullExpression } from "../utils/babelhelpers";
 
 function canShareFunctionBody(duplicateFunctionInfo: FactoryFunctionInfo): boolean {
+  if (duplicateFunctionInfo.isCurried) return false;
   if (duplicateFunctionInfo.anyContainingAdditionalFunction) {
     // If the function is referenced by an optimized function,
     // it may get emitted within that optimized function,

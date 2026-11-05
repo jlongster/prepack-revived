@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const vm = require("vm");
 const zlib = require("zlib");
@@ -8,6 +9,9 @@ const childProcess = require("child_process");
 const { makeSandbox, buildVmRunnerSource, buildNodeStandaloneScript } = require("./harness");
 
 const BENCH_NM = path.join(__dirname, "node_modules");
+const LARGE_BYTES_THRESHOLD = 750 * 1024;
+const GIANT_BYTES_THRESHOLD = 3 * 1024 * 1024;
+const TERSER_CHILD_THRESHOLD = 512 * 1024;
 
 function round(n, digits = 2) {
   const f = Math.pow(10, digits);
@@ -30,6 +34,17 @@ function summarizeSamples(samples) {
     min: round(sorted[0], 3),
     max: round(sorted[n - 1], 3),
   };
+}
+
+function adaptPerfRuns(bytes, requestedRuns = 30, requestedWarmup = 5, adapt = true) {
+  if (!adapt || bytes < LARGE_BYTES_THRESHOLD) {
+    return { runs: requestedRuns, warmup: requestedWarmup, adapted: false };
+  }
+  const capRuns = bytes >= GIANT_BYTES_THRESHOLD ? 12 : 15;
+  const capWarmup = 3;
+  const runs = requestedRuns > capRuns ? Math.max(10, capRuns) : requestedRuns;
+  const warmup = requestedWarmup > capWarmup ? capWarmup : requestedWarmup;
+  return { runs, warmup, adapted: runs !== requestedRuns || warmup !== requestedWarmup };
 }
 
 function measureNodeZeroBaseline(runs = 30, warmup = 5) {
@@ -67,7 +82,34 @@ function brotliSize(buf) {
   }).length;
 }
 
-async function measureSizes(code) {
+function minifyInChildProcess(code, timeoutMs = 300000, maxOldSpaceMb = 8192) {
+  const tmpBase = fs.existsSync("/tmp/opencode") ? "/tmp/opencode" : os.tmpdir();
+  const dir = fs.mkdtempSync(path.join(tmpBase, "pp-terser-"));
+  const inFile = path.join(dir, "in.js");
+  const outFile = path.join(dir, "out.json");
+  fs.writeFileSync(inFile, code, "utf8");
+  try {
+    const r = childProcess.spawnSync(
+      process.execPath,
+      [`--max-old-space-size=${maxOldSpaceMb}`, __filename, "--terser-child", inFile, outFile],
+      {
+        env: Object.assign({}, process.env, { TZ: "UTC", LANG: "C", LC_ALL: "C" }),
+        stdio: "ignore",
+        timeout: timeoutMs,
+      }
+    );
+    if (r.status !== 0 || !fs.existsSync(outFile)) {
+      return null;
+    }
+    return JSON.parse(fs.readFileSync(outFile, "utf8"));
+  } catch (_e) {
+    return null;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function measureSizes(code, opts = {}) {
   const rawBuf = Buffer.from(code, "utf8");
   const raw = rawBuf.length;
   const rawGzip = gzipSize(rawBuf);
@@ -76,19 +118,29 @@ async function measureSizes(code) {
   let terserBytes = null;
   let terserGzip = null;
   let terserBrotli = null;
-  const terser = loadTerser();
-  if (terser) {
-    const min = await terser.minify(code, {
-      ecma: 2020,
-      compress: true,
-      mangle: true,
-      output: { comments: false },
-    });
-    if (min && typeof min.code === "string") {
-      const minBuf = Buffer.from(min.code, "utf8");
-      terserBytes = minBuf.length;
-      terserGzip = gzipSize(minBuf);
-      terserBrotli = brotliSize(minBuf);
+
+  if (raw >= TERSER_CHILD_THRESHOLD) {
+    const childRes = minifyInChildProcess(code, opts.terserTimeoutMs || 300000, opts.terserMaxOldSpaceMb || 8192);
+    if (childRes && typeof childRes.terserBytes === "number") {
+      terserBytes = childRes.terserBytes;
+      terserGzip = childRes.terserGzip;
+      terserBrotli = childRes.terserBrotli;
+    }
+  } else {
+    const terser = loadTerser();
+    if (terser) {
+      const min = await terser.minify(code, {
+        ecma: 2020,
+        compress: true,
+        mangle: true,
+        output: { comments: false },
+      });
+      if (min && typeof min.code === "string") {
+        const minBuf = Buffer.from(min.code, "utf8");
+        terserBytes = minBuf.length;
+        terserGzip = gzipSize(minBuf);
+        terserBrotli = brotliSize(minBuf);
+      }
     }
   }
 
@@ -112,6 +164,7 @@ function subtractBaseline(stats, baseMedian) {
 
 function measureColdStartup(origCode, ppCode, smokeCode, expectedJson, workDir, opts) {
   const { runs, warmup } = opts;
+  const spawnTimeoutMs = opts.spawnTimeoutMs || 120000;
   const origFile = path.join(workDir, "orig-cold.js");
   const ppFile = path.join(workDir, "pp-cold.js");
   fs.writeFileSync(origFile, buildNodeStandaloneScript(origCode, smokeCode, { printDigest: false, expectedJson }), "utf8");
@@ -120,7 +173,7 @@ function measureColdStartup(origCode, ppCode, smokeCode, expectedJson, workDir, 
   const env = Object.assign({}, process.env, { TZ: "UTC", LANG: "C", LC_ALL: "C" });
   const spawnOnce = argv => {
     const t0 = process.hrtime.bigint();
-    const r = childProcess.spawnSync(process.execPath, argv, { env, stdio: "ignore", timeout: 30000 });
+    const r = childProcess.spawnSync(process.execPath, argv, { env, stdio: "ignore", timeout: spawnTimeoutMs });
     const dt = Number(process.hrtime.bigint() - t0) / 1e6;
     if (r.status !== 0) {
       throw new Error(`Cold startup benchmark failed (${argv.join(" ")} exited with ${r.status})`);
@@ -163,8 +216,48 @@ function measureColdStartup(origCode, ppCode, smokeCode, expectedJson, workDir, 
   };
 }
 
+function measureColdStartupOrigOnly(origCode, smokeCode, expectedJson, workDir, opts) {
+  const { runs, warmup } = opts;
+  const spawnTimeoutMs = opts.spawnTimeoutMs || 120000;
+  const origFile = path.join(workDir, "orig-cold.js");
+  fs.writeFileSync(origFile, buildNodeStandaloneScript(origCode, smokeCode, { printDigest: false, expectedJson }), "utf8");
+
+  const env = Object.assign({}, process.env, { TZ: "UTC", LANG: "C", LC_ALL: "C" });
+  const spawnOnce = argv => {
+    const t0 = process.hrtime.bigint();
+    const r = childProcess.spawnSync(process.execPath, argv, { env, stdio: "ignore", timeout: spawnTimeoutMs });
+    const dt = Number(process.hrtime.bigint() - t0) / 1e6;
+    if (r.status !== 0) {
+      throw new Error(`Cold startup benchmark failed (${argv.join(" ")} exited with ${r.status})`);
+    }
+    return dt;
+  };
+
+  for (let i = 0; i < warmup; i++) {
+    spawnOnce(["-e", "0"]);
+    spawnOnce([origFile]);
+  }
+
+  const zeroSamples = [];
+  const origSamples = [];
+  for (let i = 0; i < runs; i++) {
+    zeroSamples.push(spawnOnce(["-e", "0"]));
+    origSamples.push(spawnOnce([origFile]));
+  }
+
+  const localZero = summarizeSamples(zeroSamples);
+  const origRaw = summarizeSamples(origSamples);
+  const origNet = subtractBaseline(origRaw, localZero.median);
+
+  return {
+    baseline: localZero,
+    orig: { raw: origRaw, net: origNet },
+  };
+}
+
 function measureVmCodeCache(origCode, ppCode, smokeCode, expectedJson, opts) {
   const { runs, warmup } = opts;
+  const vmTimeoutMs = opts.vmTimeoutMs || 120000;
   const origSrc = buildVmRunnerSource(origCode, smokeCode);
   const ppSrc = buildVmRunnerSource(ppCode, smokeCode);
 
@@ -179,7 +272,7 @@ function measureVmCodeCache(origCode, ppCode, smokeCode, expectedJson, opts) {
     if (script.cachedDataRejected) {
       throw new Error(`V8 rejected cachedData for ${filename}`);
     }
-    const out = script.runInContext(ctx);
+    const out = script.runInContext(ctx, { timeout: vmTimeoutMs });
     const dt = Number(process.hrtime.bigint() - t0) / 1e6;
     if (out !== expectedJson) {
       throw new Error(`Digest mismatch in cachedData run for ${filename}`);
@@ -213,8 +306,43 @@ function measureVmCodeCache(origCode, ppCode, smokeCode, expectedJson, opts) {
   };
 }
 
+function measureVmCodeCacheOrigOnly(origCode, smokeCode, expectedJson, opts) {
+  const { runs, warmup } = opts;
+  const vmTimeoutMs = opts.vmTimeoutMs || 120000;
+  const origSrc = buildVmRunnerSource(origCode, smokeCode);
+  const origCachedData = new vm.Script(origSrc, { filename: "orig-cached.js" }).createCachedData();
+
+  const runCached = () => {
+    const ctx = vm.createContext(makeSandbox());
+    const t0 = process.hrtime.bigint();
+    const script = new vm.Script(origSrc, { filename: "orig-cached.js", cachedData: origCachedData });
+    if (script.cachedDataRejected) {
+      throw new Error("V8 rejected cachedData for orig-cached.js");
+    }
+    const out = script.runInContext(ctx, { timeout: vmTimeoutMs });
+    const dt = Number(process.hrtime.bigint() - t0) / 1e6;
+    if (out !== expectedJson) {
+      throw new Error("Digest mismatch in cachedData run for orig-cached.js");
+    }
+    return dt;
+  };
+
+  for (let i = 0; i < warmup; i++) {
+    runCached();
+  }
+
+  const origSamples = [];
+  for (let i = 0; i < runs; i++) {
+    origSamples.push(runCached());
+  }
+
+  const origStats = summarizeSamples(origSamples);
+  return Object.assign({}, origStats, { cachedDataBytes: origCachedData.length });
+}
+
 function measureVmExecOnly(origCode, ppCode, smokeCode, expectedJson, opts) {
   const { runs, warmup } = opts;
+  const vmTimeoutMs = opts.vmTimeoutMs || 120000;
   const origSrc = buildVmRunnerSource(origCode, smokeCode);
   const ppSrc = buildVmRunnerSource(ppCode, smokeCode);
 
@@ -224,7 +352,7 @@ function measureVmExecOnly(origCode, ppCode, smokeCode, expectedJson, opts) {
   const runExec = script => {
     const ctx = vm.createContext(makeSandbox());
     const t0 = process.hrtime.bigint();
-    const out = script.runInContext(ctx);
+    const out = script.runInContext(ctx, { timeout: vmTimeoutMs });
     const dt = Number(process.hrtime.bigint() - t0) / 1e6;
     if (out !== expectedJson) {
       throw new Error("Digest mismatch in VM exec-only run");
@@ -258,8 +386,39 @@ function measureVmExecOnly(origCode, ppCode, smokeCode, expectedJson, opts) {
   };
 }
 
+function measureVmExecOrigOnly(origCode, smokeCode, expectedJson, opts) {
+  const { runs, warmup } = opts;
+  const vmTimeoutMs = opts.vmTimeoutMs || 120000;
+  const origSrc = buildVmRunnerSource(origCode, smokeCode);
+  const origScript = new vm.Script(origSrc, { filename: "orig-exec.js" });
+
+  const runExec = () => {
+    const ctx = vm.createContext(makeSandbox());
+    const t0 = process.hrtime.bigint();
+    const out = origScript.runInContext(ctx, { timeout: vmTimeoutMs });
+    const dt = Number(process.hrtime.bigint() - t0) / 1e6;
+    if (out !== expectedJson) {
+      throw new Error("Digest mismatch in VM exec-only run");
+    }
+    return dt;
+  };
+
+  for (let i = 0; i < warmup; i++) {
+    runExec();
+  }
+
+  const origSamples = [];
+  for (let i = 0; i < runs; i++) {
+    origSamples.push(runExec());
+  }
+
+  return summarizeSamples(origSamples);
+}
+
 function measureNodeSnapshot(origCode, smokeCode, expectedJson, workDir, opts) {
-  const { runs, warmup, baselineMedian } = opts;
+  const { runs, warmup } = opts;
+  const buildTimeoutMs = opts.snapshotBuildTimeoutMs || 180000;
+  const runTimeoutMs = opts.spawnTimeoutMs || 120000;
   const snapEntry = path.join(workDir, "snap-entry.js");
   const snapBlob = path.join(workDir, "snapshot.blob");
   const smokeFile = path.join(workDir, "snap-smoke.js");
@@ -287,11 +446,18 @@ if (__out !== ${JSON.stringify(expectedJson)}) process.exit(3);
   const buildRes = childProcess.spawnSync(
     process.execPath,
     ["--snapshot-blob", snapBlob, "--build-snapshot", snapEntry],
-    { env, encoding: "utf8", timeout: 30000 }
+    { env, encoding: "utf8", timeout: buildTimeoutMs }
   );
   if (buildRes.status !== 0 || !fs.existsSync(snapBlob)) {
-    const errMsg = (buildRes.stderr || "").trim().split("\n").slice(0, 2).join(" | ");
-    return { supported: false, error: errMsg || `exit ${buildRes.status}` };
+    const errLines = (buildRes.stderr || "")
+      .trim()
+      .split("\n")
+      .filter(l => l && !l.includes("ExperimentalWarning") && !l.includes("trace-warnings"));
+    const errMsg = errLines.slice(0, 2).join(" | ") || (buildRes.stderr || "").trim().split("\n").slice(0, 2).join(" | ");
+    return {
+      supported: false,
+      error: errMsg || `exit ${buildRes.status}${buildRes.signal ? ` (${buildRes.signal})` : ""}`,
+    };
   }
 
   const blobBuf = fs.readFileSync(snapBlob);
@@ -303,7 +469,7 @@ if (__out !== ${JSON.stringify(expectedJson)}) process.exit(3);
     const r = childProcess.spawnSync(process.execPath, ["--snapshot-blob", snapBlob, smokeFile], {
       env,
       stdio: "ignore",
-      timeout: 30000,
+      timeout: runTimeoutMs,
     });
     const dt = Number(process.hrtime.bigint() - t0) / 1e6;
     if (r.status !== 0) return { ok: false, status: r.status };
@@ -350,6 +516,8 @@ async function benchmarkTimingsOnly(id, origCode, ppCode, smokeCode, expectedJso
       ? measureNodeSnapshot(origCode, smokeCode, expectedJson, workDir, opts)
       : null;
     return {
+      runs: opts.runs,
+      warmup: opts.warmup,
       coldProcess: cold,
       vmCodeCache: codeCache,
       vmExecOnly: vmExec,
@@ -360,8 +528,32 @@ async function benchmarkTimingsOnly(id, origCode, ppCode, smokeCode, expectedJso
   }
 }
 
-async function benchmarkSizesOnly(origCode, ppCode) {
-  const [origSizes, ppSizes] = await Promise.all([measureSizes(origCode), measureSizes(ppCode)]);
+async function benchmarkOriginalTimingsOnly(id, origCode, smokeCode, expectedJson, tmpRoot, opts) {
+  const workDir = path.join(tmpRoot, `orig-perf-${id}`);
+  fs.mkdirSync(workDir, { recursive: true });
+  try {
+    const cold = measureColdStartupOrigOnly(origCode, smokeCode, expectedJson, workDir, opts);
+    const codeCache = measureVmCodeCacheOrigOnly(origCode, smokeCode, expectedJson, opts);
+    const vmExec = measureVmExecOrigOnly(origCode, smokeCode, expectedJson, opts);
+    const snapshot = opts.enableSnapshot
+      ? measureNodeSnapshot(origCode, smokeCode, expectedJson, workDir, opts)
+      : null;
+    return {
+      runs: opts.runs,
+      warmup: opts.warmup,
+      coldProcess: cold,
+      vmCodeCache: codeCache,
+      vmExecOnly: vmExec,
+      nodeSnapshot: snapshot,
+    };
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+async function benchmarkSizesOnly(origCode, ppCode, opts = {}) {
+  const origSizes = await measureSizes(origCode, opts);
+  const ppSizes = await measureSizes(ppCode, opts);
   return {
     orig: origSizes,
     prepacked: ppSizes,
@@ -379,13 +571,45 @@ async function benchmarkSizesOnly(origCode, ppCode) {
 
 async function benchmarkLibrary(id, origCode, ppCode, smokeCode, expectedJson, tmpRoot, opts) {
   const timings = await benchmarkTimingsOnly(id, origCode, ppCode, smokeCode, expectedJson, tmpRoot, opts);
-  const sizes = await benchmarkSizesOnly(origCode, ppCode);
+  const sizes = await benchmarkSizesOnly(origCode, ppCode, opts);
   return Object.assign({ sizes }, timings);
 }
 
+if (require.main === module && process.argv[2] === "--terser-child") {
+  (async () => {
+    const inFile = process.argv[3];
+    const outFile = process.argv[4];
+    const code = fs.readFileSync(inFile, "utf8");
+    const terser = loadTerser();
+    if (!terser) process.exit(2);
+    const min = await terser.minify(code, {
+      ecma: 2020,
+      compress: true,
+      mangle: true,
+      output: { comments: false },
+    });
+    if (!min || typeof min.code !== "string") process.exit(3);
+    const minBuf = Buffer.from(min.code, "utf8");
+    fs.writeFileSync(
+      outFile,
+      JSON.stringify({
+        terserBytes: minBuf.length,
+        terserGzip: gzipSize(minBuf),
+        terserBrotli: brotliSize(minBuf),
+      }),
+      "utf8"
+    );
+  })().catch(() => process.exit(1));
+}
+
 module.exports = {
+  LARGE_BYTES_THRESHOLD,
+  GIANT_BYTES_THRESHOLD,
+  adaptPerfRuns,
   measureNodeZeroBaseline,
+  measureSizes,
   benchmarkTimingsOnly,
+  benchmarkOriginalTimingsOnly,
   benchmarkSizesOnly,
   benchmarkLibrary,
 };

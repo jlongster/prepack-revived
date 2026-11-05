@@ -586,6 +586,16 @@ export default class AbstractValue extends Value {
   promoteEmptyToUndefined(): Value {
     if (this.values.isTop()) return this;
     if (!this.mightBeEmpty) return this;
+    if (this.kind === "conditional") {
+      let [c, x, y] = this.args;
+      return AbstractValue.createFromConditionalOp(
+        this.$Realm,
+        c,
+        x.promoteEmptyToUndefined(),
+        y.promoteEmptyToUndefined(),
+        this.expressionLocation
+      );
+    }
     let cond = AbstractValue.createFromBinaryOp(this.$Realm, "===", this, this.$Realm.intrinsics.empty);
     let result = AbstractValue.createFromConditionalOp(this.$Realm, cond, this.$Realm.intrinsics.undefined, this);
     if (result instanceof AbstractValue) result.values = this.values.promoteEmptyToUndefined();
@@ -786,6 +796,39 @@ export default class AbstractValue extends Value {
     if (!condition.mightNotBeFalse()) return right || realm.intrinsics.undefined;
 
     let types = TypesDomain.joinValues(left, right);
+    if (types.isTop() && condition instanceof AbstractValue && left !== undefined && right !== undefined) {
+      let refinedType = (cond: AbstractValue, target: Value, truthy: boolean): typeof Value => {
+        let t0 = target.getType();
+        if (t0 !== Value) return t0;
+        if (cond.kind === "!" && cond.args[0] instanceof AbstractValue) {
+          return refinedType(cond.args[0], target, !truthy);
+        }
+        if ((cond.kind === "===" && truthy) || (cond.kind === "!==" && !truthy)) {
+          let [a, b] = cond.args;
+          let tag;
+          if (a instanceof AbstractValue && a.kind === "typeof" && a.args[0] === target && b instanceof StringValue)
+            tag = b.value;
+          else if (
+            b instanceof AbstractValue &&
+            b.kind === "typeof" &&
+            b.args[0] === target &&
+            a instanceof StringValue
+          )
+            tag = a.value;
+          if (tag === "string") return StringValue;
+          if (tag === "number") return NumberValue;
+          if (tag === "boolean") return BooleanValue;
+          if (tag === "undefined") return UndefinedValue;
+          if (tag === "symbol") return SymbolValue;
+        }
+        return t0;
+      };
+      let lt = refinedType(condition, left, true);
+      let rt = refinedType(condition, right, false);
+      if (lt !== Value && rt !== Value) {
+        types = new TypesDomain(lt).joinWith(rt);
+      }
+    }
     if (types.getType() === NullValue) return realm.intrinsics.null;
     if (types.getType() === UndefinedValue) return realm.intrinsics.undefined;
     let values = ValuesDomain.joinValues(realm, left, right);

@@ -211,7 +211,8 @@ export class Serializer {
             this.realm,
             this.logger,
             this.modules,
-            additionalFunctionValuesAndEffects
+            additionalFunctionValuesAndEffects,
+            this.options.lazyObjectsRuntime == null
           );
           statistics.deepTraversal.measure(() => residualHeapVisitor.visitRoots());
           return [residualHeapVisitor.toInfo(), residualHeapVisitor.generatorTree, residualHeapVisitor.inspector];
