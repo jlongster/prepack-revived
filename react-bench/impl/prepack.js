@@ -2,8 +2,10 @@
 
 // react-bench implementation: React SSR specialized by the revived Prepack (react-ssr/compiler.js).
 // prepare() runs Prepack once per app source and caches the generated program on disk (keyed by a
-// hash of the app source, the schema samples and the compiler/model sources), so later processes
-// only load the artifact. The generated program does not use React.
+// hash of the app source, the schema and the compiler/model/Prepack sources), so later processes
+// only load the artifact. The generated program does not use React. It checks that the data has
+// the schema inferred from the training inputs; data that does not falls back to
+// ReactDOMServer.renderToString (React is only loaded then).
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -27,52 +29,60 @@ function trainingSamples(opts) {
   return samples;
 }
 
-function cacheKey(appSource, schema) {
+function sha(...parts) {
   const hash = crypto.createHash("sha256");
-  hash.update(appSource);
-  hash.update(JSON.stringify(schema));
-  for (const f of ["compiler.js", "runtime.js", "helpers.js", "dom-tables.part.js"]) {
-    hash.update(fs.readFileSync(path.join(SSR_DIR, f)));
-  }
-  const prepackLib = path.join(ROOT, "lib");
-  for (const f of fs.readdirSync(prepackLib, { recursive: true }).sort()) {
-    if (typeof f === "string" && f.endsWith(".js")) hash.update(fs.statSync(path.join(prepackLib, f)).mtimeMs + f);
-  }
+  for (const p of parts) hash.update(p);
   return hash.digest("hex").slice(0, 24);
 }
 
-function instantiate(code) {
-  const sandbox = Object.create(globalThis);
-  new Function(code).call(sandbox);
-  return sandbox.__ssrRender;
+function cacheKey(appSource, schema) {
+  const parts = [appSource, JSON.stringify(schema)];
+  for (const f of ["compiler.js", "runtime.js", "helpers.js", "dom-tables.part.js"]) {
+    parts.push(fs.readFileSync(path.join(SSR_DIR, f)));
+  }
+  const lib = path.join(ROOT, "lib");
+  for (const f of fs.readdirSync(lib, { recursive: true }).sort()) {
+    if (typeof f === "string" && f.endsWith(".js")) parts.push(f + fs.statSync(path.join(lib, f)).mtimeMs);
+  }
+  return sha(...parts);
+}
+
+function reactFallback(appSource, opts) {
+  let render;
+  return data => {
+    if (render === undefined) {
+      const req = opts.require || require;
+      const React = opts.React || req("react");
+      const ReactDOMServer = opts.ReactDOMServer || req("react-dom/server");
+      const mod = { exports: {} };
+      new Function("module", "exports", "require", appSource)(mod, mod.exports, req);
+      render = d => ReactDOMServer.renderToString(React.createElement(mod.exports, { [opts.rootProp || "data"]: d }));
+    }
+    return render(data);
+  };
 }
 
 module.exports = {
   name: "prepack (react-ssr specialization)",
   prepare(appSource, opts = {}) {
     const compiler = require(path.join(SSR_DIR, "compiler.js"));
-    const rootProp = opts.rootProp || "data";
-    const schemaFile = path.join(CACHE_DIR, "schema-" + crypto.createHash("sha256").update(appSource).digest("hex").slice(0, 16) + ".json");
-    let schema;
-    if (fs.existsSync(schemaFile)) schema = JSON.parse(fs.readFileSync(schemaFile, "utf8"));
-    else schema = compiler.inferSchema(trainingSamples(opts));
-    const key = cacheKey(appSource, schema);
-    const artifact = path.join(CACHE_DIR, "render-" + key + ".js");
-    let code;
-    let stats = { cached: true };
+    const schemaFile = path.join(CACHE_DIR, "schema-" + sha(appSource) + ".json");
+    const schema = fs.existsSync(schemaFile)
+      ? JSON.parse(fs.readFileSync(schemaFile, "utf8"))
+      : compiler.inferSchema(trainingSamples(opts));
+    const artifact = path.join(CACHE_DIR, "render-" + cacheKey(appSource, schema) + ".js");
+    const fallback = reactFallback(appSource, opts);
     if (fs.existsSync(artifact)) {
-      code = fs.readFileSync(artifact, "utf8");
-    } else {
-      const result = compiler.compile(appSource, { schema, rootProp });
-      code = result.code;
-      stats = Object.assign({ cached: false }, result.stats);
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
-      fs.writeFileSync(schemaFile, JSON.stringify(schema));
-      fs.writeFileSync(artifact + ".tmp" + process.pid, code);
-      fs.renameSync(artifact + ".tmp" + process.pid, artifact);
+      const code = fs.readFileSync(artifact, "utf8");
+      const render = compiler.instantiate(code, fallback);
+      return { render, code, stats: { cached: true, fallback: "ReactDOMServer.renderToString (not counted in code size)" } };
     }
-    const render = instantiate(code);
-    if (typeof render !== "function") throw new Error("react-ssr: artifact did not define __ssrRender");
-    return { render, code, stats };
+    const result = compiler.compile(appSource, { schema, rootProp: opts.rootProp || "data", fallback });
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    fs.writeFileSync(schemaFile, JSON.stringify(schema));
+    const tmp = artifact + ".tmp" + process.pid;
+    fs.writeFileSync(tmp, result.code);
+    fs.renameSync(tmp, artifact);
+    return { render: result.render, code: result.code, stats: Object.assign({ cached: false }, result.stats) };
   },
 };

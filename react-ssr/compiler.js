@@ -290,6 +290,74 @@ function toShapeDescriptor(type) {
   }
 }
 
+// The schema as a runtime check. The specialized code is only valid for data of the schema it was
+// specialized for (it relies on the types of the values it reads), so the generated render function
+// first checks the data and falls back (to React, or an error) otherwise. Plain data is assumed:
+// objects and arrays without accessors or proxies, and arrays without holes.
+function validatorSource(schema) {
+  let counter = 0;
+  const fresh = () => "v" + counter++;
+  // Statements that return false unless the value of variable v has type `type`.
+  function check(type, v, indent) {
+    const fail = cond => `${indent}if (${cond}) return false;\n`;
+    switch (type.kind) {
+      case "undefined":
+        return fail(`${v} !== undefined`);
+      case "null":
+        return fail(`${v} !== null`);
+      case "string":
+      case "number":
+      case "boolean":
+        return fail(`typeof ${v} !== ${JSON.stringify(type.kind)}`);
+      case "array": {
+        if (type.element === undefined) return fail(`!Array.isArray(${v}) || ${v}.length !== 0`);
+        const i = fresh();
+        const e = fresh();
+        return (
+          fail(`!Array.isArray(${v})`) +
+          `${indent}for (var ${i} = 0; ${i} < ${v}.length; ${i}++) {\n` +
+          fail(`!(${i} in ${v})`).replace(indent, indent + "  ") +
+          `${indent}  var ${e} = ${v}[${i}];\n` +
+          check(type.element, e, indent + "  ") +
+          `${indent}}\n`
+        );
+      }
+      case "object": {
+        let out = fail(`typeof ${v} !== "object" || ${v} === null || Array.isArray(${v})`);
+        for (const k of Object.keys(type.properties)) {
+          const p = fresh();
+          out += `${indent}var ${p} = ${v}[${JSON.stringify(k)}];\n` + check(type.properties[k], p, indent);
+        }
+        return out;
+      }
+      case "union": {
+        // One function per variant; the value conforms if one of them accepts it.
+        // Scalar variants are tested inline.
+        const tests = type.variants.map(variant => {
+          switch (variant.kind) {
+            case "undefined":
+              return `${v} === undefined`;
+            case "null":
+              return `${v} === null`;
+            case "string":
+            case "number":
+            case "boolean":
+              return `typeof ${v} === ${JSON.stringify(variant.kind)}`;
+            default: {
+              const x = fresh();
+              return `(function (${x}) {\n${check(variant, x, indent + "  ")}${indent}  return true;\n${indent}})(${v})`;
+            }
+          }
+        });
+        return fail(`!(${tests.join(" || ")})`);
+      }
+      default:
+        throw new Error("react-ssr: unknown schema kind " + type.kind);
+    }
+  }
+  return `this.__ssrConforms = function (data) {\n${check(schema, "data", "  ")}  return true;\n};`;
+}
+
 // ------------------------------------------------------------------------------------------------
 // Prepack input assembly
 
@@ -399,18 +467,46 @@ __optimize(__ssrRender${argModel === undefined ? "" : ", " + JSON.stringify(argM
   }
   const optimized = options.optimizeOutput === false ? { code: result.code, mapJoins: 0 } : optimizeOutput(result.code, loadModelSources().helpers);
   const code = optimized.code;
+  const fullCode = schema === undefined ? code : code + "\n" + validatorSource(schema) + "\n";
   const sandbox = Object.create(globalThis);
   // The output assigns the specialized function to the global object it is run with.
-  new Function(code).call(sandbox);
-  const render = sandbox.__ssrRender;
-  if (typeof render !== "function") throw new Error("react-ssr: specialized output did not define __ssrRender");
+  new Function(fullCode).call(sandbox);
+  const render = guardedRender(sandbox, options.fallback);
   return {
-    code,
+    code: fullCode,
     render,
     diagnostics,
     schema,
-    stats: { compileMs: Date.now() - started, mappedChildren: rewritten, bytes: Buffer.byteLength(code) },
+    stats: {
+      compileMs: Date.now() - started,
+      mappedChildren: rewritten,
+      mapJoins: optimized.mapJoins,
+      bytes: Buffer.byteLength(fullCode),
+    },
   };
+}
+
+// The render function of a generated program run in sandbox: the specialized renderer for data of
+// the schema, fallback(data) otherwise (an error if there is no fallback).
+function guardedRender(sandbox, fallback) {
+  const specialized = sandbox.__ssrRender;
+  const conforms = sandbox.__ssrConforms;
+  if (typeof specialized !== "function") throw new Error("react-ssr: specialized output did not define __ssrRender");
+  if (typeof conforms !== "function") return specialized;
+  const render = data => {
+    if (conforms(data)) return specialized(data);
+    render.fallbacks++;
+    if (fallback) return fallback(data);
+    throw new Error("react-ssr: data does not conform to the schema the renderer was specialized for");
+  };
+  render.fallbacks = 0;
+  return render;
+}
+
+function instantiate(code, fallback) {
+  const sandbox = Object.create(globalThis);
+  new Function(code).call(sandbox);
+  return guardedRender(sandbox, fallback);
 }
 
 function formatLocation(loc) {
@@ -418,4 +514,4 @@ function formatLocation(loc) {
   return `(${loc.source || ""}:${loc.start.line}:${loc.start.column})`;
 }
 
-module.exports = { compile, interpret, inferSchema, toShapeDescriptor, transformApp };
+module.exports = { compile, instantiate, interpret, inferSchema, toShapeDescriptor, transformApp, validatorSource };
