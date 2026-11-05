@@ -25,6 +25,7 @@ import {
   PrimitiveValue,
   ProxyValue,
   StringValue,
+  SymbolValue,
   UndefinedValue,
   Value,
 } from "../values/index.js";
@@ -927,6 +928,16 @@ export function GetFromArrayWithWidenedNumericProperty(
     if (prototypeBinding !== undefined) {
       let descriptor = prototypeBinding.descriptor;
       // ensure we are accessing a built-in native function
+      if (descriptor instanceof PropertyDescriptor && descriptor.value instanceof NativeFunctionValue) {
+        return descriptor.value;
+      }
+    }
+  } else if (P instanceof SymbolValue) {
+    // Widened numeric properties never cover symbol keys, so built-in symbol methods
+    // such as Array.prototype[Symbol.iterator] come straight from the prototype.
+    let prototypeBinding = proto.symbols.get(P);
+    if (prototypeBinding !== undefined) {
+      let descriptor = prototypeBinding.descriptor;
       if (descriptor instanceof PropertyDescriptor && descriptor.value instanceof NativeFunctionValue) {
         return descriptor.value;
       }

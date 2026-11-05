@@ -97,7 +97,39 @@ After merging Track R3 (`revive`), we benchmarked R3's `Object.create(proto)` + 
 
 ---
 
-## 5. What Remains Unsolved & Next Steps
+## 5. Large Workloads: `three` and `@babel/standalone`
+
+Both were blocked by `FatalError PP0037` wrapping `PP0001` on `$ArrayBufferData` inside concrete init loops. The restorable `$ArrayBufferData` slots from §2.1 removed that blocker, and each workload then exposed a chain of further bugs (all fixed on this branch; see `git log revive..rwfix`).
+
+### 5.1 `three@0.187.0` (FAIL -> OK, digest-equal in `vm` and fresh `node`)
+
+After the loop fix, `three` compiled but its output was `WRONG` (`ReferenceError`, then `TypeError`). The causes were all in ES2015 class/generator serialization, which upstream Prepack barely supported:
+
+1. **Generator methods and `async` functions lost their kind** (`function.js`, `properties.js`, evaluators): `*[Symbol.iterator]() {}` class methods were created as ordinary methods, and generator/async flags were not carried into `t.classMethod` / `t.functionExpression`. `FunctionCreate`/`GeneratorFunctionCreate` now take an `isAsync` flag (async functions are non-constructors without `prototype`/`caller`), `PropertyDefinitionEvaluation` handles `kind: "method", generator: true`, and every place in `ResidualFunctions` that builds a function node passes `generator`/`async`. Calling an async function at init is a clean `PP0001` bail-out (the async/await machinery is not modeled), never a silent wrong result.
+2. **Class bodies are strict code** (`ClassDeclaration.js`, ECMA-262 10.2.1): methods were created sloppy, so they got own `caller`/`arguments` properties that the serializer then emitted as `Object.defineProperty(_x, "caller", ...)` against a class method (`ReferenceError: _15m`). Methods are now evaluated in `classScope` with `strictCode = true`.
+3. **Class method identity** (`ResidualHeapVisitor._visitClass`, `ResidualHeapSerializer._serializeClass`): a method is inlined into the class body only if it is the function stored under that exact key on that class (`homeKey`), with `$HomeObject` matching prototype vs. static. Symbol-keyed and static symbol members are now visited and serialized; setter-only/getter-only accessors no longer serialize the missing half as `undefined` (`withDescriptorValue`), which had produced `prototype.needsUpdate = void 0` and broke the setter. Non-inline prototype assignments are deferred until after the class definition.
+4. **Class definition order vs. captured instances** (`ResidualHeapSerializer._serializeValueFunction`): a class constructor's captured bindings may hold instances of the class itself (`var _m3 = new Matrix3()` used inside `Matrix3` methods), and those instances need `Class.prototype` at allocation time. Captured bindings of a class are now serialized *after* the class's insertion point is fixed, and a class waits for its superclass. Class-method residual scopes are initialized inside the method bodies.
+5. **Bounded lookup-table reads** (`get.js`): `lut[x & 255]` on a concrete 256-element array of primitives produced a 256-deep conditional expression per read. When `IntervalDomain` proves `0 <= idx < length`, every element is a present data property of a primitive type, and the array is local and unleaked, the read becomes one typed `OBJECT_GET_PARTIAL` and the array is marked final (any later mutation reports `PP0026` instead of silently diverging). Test: `test/serializer/abstract/BoundedLookupTableRead.js` (revive crashes on it).
+
+### 5.2 `@babel/standalone@7.29.13` (FAIL -> OK, digest-equal)
+
+| | revive (before) | rwfix |
+|---|---|---|
+| Result | `FAIL` (`PP0037`/`PP0001` after ~13 s, 1.05 GB) | **OK**, digest-equal |
+| Compile time (default profile) | — | ~51 s |
+| Peak RSS (default profile) | — | ~3.5 GB |
+| Output | — | 5.30 MB (input 5.25 MB) |
+
+Fixes beyond the loop/TypedArray work:
+
+1. **Annex B `__proto__` in object literals** (`ObjectExpression.js`): `{ __proto__: null, ... }` created an own `"__proto__"` key, so `for (k in legacyPluginAliases)` enumerated an extra `"null"` plugin (`pluginCount` 124 vs 123). (The `env` track landed the same fix; the merge kept a single implementation.)
+2. **Residual recursion probes with `null`/`undefined` arguments** (`recursion.js`): probing `f(null)` created an abstract argument of type `NullValue`, violating an `AbstractValue` invariant. Such arguments are now probed as `Value`.
+3. **Guarded DOM probes stay inside their guard** (`HeapInspector`/`ResidualHeapSerializer`, `properties.js`): `typeof document !== "undefined" && document.documentElement && ...` produced atemporal property reads on a partial object that the serializer hoisted into `var _yU = document.documentElement;` *outside* the `&&` guard, throwing in Node. Atemporal property reads created under a non-empty path condition get kind `property:?<name>` and are always serialized inline, never hoisted.
+4. **Objects rolled back during construction** (`ObjectValue` tracked-slot setter): writes to tracked internal slots while an object is still being constructed are no longer recorded as undoable modifications. Previously a speculative rollback could reset a still-reachable object's `_isLeaked` slot to `undefined` (crash in `leak.js` after ~4.5 min).
+5. **Call depth** (`realm.js`, hot shared file): the default `maxStackDepth` is now 160 instead of 112. Babel's init legitimately nests 121 calls deep (`new State()` inside parser plugin construction); the old limit raised `PP0045`, which then made the enclosing loop fall back to residualization and ended in an internal error. `test/error-handler/stackOverflow.js` still reports `PP0045`.
+6. **Visitor cost was quadratic** (`ResidualHeapVisitor._mark`): the heap visitor recorded one scope entry per (value, referencing residual function) pair, so values shared by thousands of Babel functions were revisited thousands of times (4.25 M visits and still running after 8 minutes). When there are no optimized functions and `--debugScopes` is off, a value already reachable from the global generator does not need further scopes from functions that are themselves reachable from the global generator: `_getTarget` flattens such function scopes back to the global generator, so the target body is unchanged. Visiting finishes in seconds.
+
+## 6. What Remains Unsolved & Next Steps
 
 1. **1-argument table-builder recomputation (`crc-32` `slice_by_16_tables(T0)`)**:
    `crc-32` now compiles and runs **2.49x faster** in VM exec (`3.11x` cold `node`), but materializes 4,352 32-bit CRC constants (`22.5 KB` gzip vs `0.8 KB` source) because Track R3's `recompute.js` currently tracks 0-argument factory calls (`signed_crc_table()`) and single-loop global array/object builders, whereas `slice_by_16_tables(T0)` is a 1-argument helper returning an array of 15 `Int32Array.subarray` views. Extending `FunctionRecomputeRecipe` to pure $k$-argument calls whose arguments are already residual values would let `crc-32` choose between `3.6 KB` source size and `2.5x` precomputed lookup speed.
