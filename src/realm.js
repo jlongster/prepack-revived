@@ -756,6 +756,14 @@ export class Realm {
     // We should then compose that with the saved completion and move on to the normal route.
     // Currently we just issue a recoverable error instead if this might matter.
     let value = f();
+    this.reportPossibleThrowInsideTry();
+    return value;
+  }
+
+  // Call this whenever residual code that might throw (e.g. a call to unknown code, or a property access on a
+  // leaked object, which might run a getter or setter) is emitted. Prepack does not model such throws yet, so
+  // if they could be caught by an enclosing try statement, the handler would be lost.
+  reportPossibleThrowInsideTry(): void {
     if (this.isInPureTryStatement) {
       let diag = new CompilerDiagnostic(
         "Possible throw inside try/catch is not yet supported",
@@ -765,7 +773,6 @@ export class Realm {
       );
       if (this.handleError(diag) !== "Recover") throw new FatalError();
     }
-    return value;
   }
 
   // Evaluate the given ast in a sandbox and return the evaluation results

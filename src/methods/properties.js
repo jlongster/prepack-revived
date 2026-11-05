@@ -269,6 +269,8 @@ export class PropertiesImplementation {
       // The receiver might leak to a getter so if it's not already leaked, we need to leak it.
       Leak.value(realm, Receiver);
       if (realm.generator !== undefined) {
+        // The assignment might invoke a setter that throws.
+        realm.reportPossibleThrowInsideTry();
         realm.generator.emitPropertyAssignment(Receiver, StringKey(P), V);
       }
       return true;
@@ -728,6 +730,7 @@ export class PropertiesImplementation {
       ensureIsNotFinal(realm, O, P);
       if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
         if (realm.generator !== undefined) {
+          realm.reportPossibleThrowInsideTry();
           realm.generator.emitPropertyDelete(O, StringKey(P));
         }
       }
@@ -741,6 +744,7 @@ export class PropertiesImplementation {
       ensureIsNotFinal(realm, O, P);
       if (O.mightBeLeakedObject()) {
         if (realm.generator !== undefined) {
+          realm.reportPossibleThrowInsideTry();
           realm.generator.emitPropertyDelete(O, StringKey(P));
         }
         return true;
@@ -873,6 +877,7 @@ export class PropertiesImplementation {
         if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
           leakDescriptor(realm, Desc);
           if (realm.generator !== undefined) {
+            realm.reportPossibleThrowInsideTry();
             realm.generator.emitDefineProperty(O, StringKey(P), Desc.throwIfNotConcrete(realm));
           }
           return true;
@@ -992,6 +997,7 @@ export class PropertiesImplementation {
       if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
         leakDescriptor(realm, Desc);
         if (realm.generator !== undefined) {
+          realm.reportPossibleThrowInsideTry();
           realm.generator.emitDefineProperty(O, StringKey(P), Desc);
         }
         return true;
@@ -1440,6 +1446,8 @@ export class PropertiesImplementation {
         }
       }
 
+      // The property might have a getter that throws.
+      realm.reportPossibleThrowInsideTry();
       let propName = P;
       if (typeof propName === "string") {
         propName = new StringValue(realm, propName);

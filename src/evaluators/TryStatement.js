@@ -21,7 +21,7 @@ import {
 import { UpdateEmpty } from "../methods/index.js";
 import { InfeasiblePathError } from "../errors.js";
 import { construct_empty_effects } from "../realm.js";
-import { Functions, Join, Path } from "../singletons.js";
+import { Join, Path } from "../singletons.js";
 import { AbstractValue, Value } from "../values/index.js";
 import type { BabelNodeTryStatement } from "@babel/types";
 import invariant from "../invariant.js";
@@ -63,10 +63,12 @@ function joinTryBlockWithHandlers(
   }
   // The end of the try block is a join point for the (conditional) abrupt completions that arise inside it.
   // Abrupt completions saved before the try statement was reached must not be seen by the handler.
-  let blockRes = realm.evaluateCompletionInSavedCompletionScope(() =>
-    env.evaluateCompletionDeref(ast.block, strictCode)
-  );
-  realm.isInPureTryStatement = savedIsInPureTryStatement;
+  let blockRes;
+  try {
+    blockRes = realm.evaluateCompletionInSavedCompletionScope(() => env.evaluateCompletionDeref(ast.block, strictCode));
+  } finally {
+    realm.isInPureTryStatement = savedIsInPureTryStatement;
+  }
 
   let result = blockRes;
   let handler = ast.handler;
