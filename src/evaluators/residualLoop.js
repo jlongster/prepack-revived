@@ -756,12 +756,15 @@ export function residualizeLoop(
     }
   };
 
-  let res = attempt(readOnlyCandidates);
-  if (res.effects === undefined && leakedCandidates.size > 0) {
-    let remaining = readOnlyCandidates.filter(p => !leakedCandidates.has(p.name));
-    res = attempt(remaining);
+  let currentCandidates = readOnlyCandidates;
+  let res = attempt(currentCandidates);
+  while (res.effects === undefined && leakedCandidates.size > 0) {
+    let remaining = currentCandidates.filter(p => !leakedCandidates.has(p.name));
+    if (remaining.length === currentCandidates.length) break;
+    currentCandidates = remaining;
+    res = attempt(currentCandidates);
   }
-  if (res.effects === undefined && readOnlyCandidates.length > 0 && leakedCandidates.size === 0) {
+  if (res.effects === undefined && currentCandidates.length > 0) {
     // A helper called inside the loop may have mutated an outer local binding that was not syntactically assigned.
     res = attempt([]);
   }
@@ -864,10 +867,14 @@ function tryResidualLoop(
           if (state.usesArguments) leakEnclosingFunctionBindings(realm, env);
           Leak.value(realm, wrapper);
           if (thisVal !== undefined) Leak.value(realm, thisVal);
+          let newlyLeaked = false;
           for (let p of params) {
-            if (p.binding.hasLeaked) leakedCandidates.add(p.name);
+            if (p.binding.hasLeaked && !leakedCandidates.has(p.name)) {
+              leakedCandidates.add(p.name);
+              newlyLeaked = true;
+            }
           }
-          if (leakedCandidates.size > 0) {
+          if (newlyLeaked) {
             throw new FatalError("read-only loop parameter binding was leaked");
           }
         }

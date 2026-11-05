@@ -66,6 +66,16 @@ export default function simplifyAndRefineAbstractValue(
   }
 }
 
+function containsTemporal(v: Value): boolean {
+  if (v.isTemporal()) return true;
+  if (v instanceof AbstractValue) {
+    for (let sub of v.args) {
+      if (containsTemporal(sub)) return true;
+    }
+  }
+  return false;
+}
+
 function simplify(realm, value: Value, isCondition: boolean = false, depth: number): Value {
   if (value instanceof ConcreteValue || depth > 5) return value;
   invariant(value instanceof AbstractValue);
@@ -293,6 +303,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       if (Path.implies(notc, depth + 1)) return y;
       if (!isCondition) {
         if (
+          !containsTemporal(x) &&
           cannotDifferOnlyByZeroSign(value, x) &&
           Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, x), depth + 1)
         )
@@ -302,6 +313,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         if (!y.mightBeNumber() && Path.implies(AbstractValue.createFromBinaryOp(realm, "!==", value, y), depth + 1))
           return x;
         if (
+          !containsTemporal(y) &&
           cannotDifferOnlyByZeroSign(value, y) &&
           Path.implies(AbstractValue.createFromBinaryOp(realm, "===", value, y), depth + 1)
         )
@@ -311,7 +323,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       if (x.equals(y)) return x;
       // If under c, y already simplifies to x, then (c ? x : y) <=> y; symmetrically for x under !c.
       if (depth <= 3) {
-        if (y instanceof AbstractValue && !y.isTemporal()) {
+        if (y instanceof AbstractValue && !containsTemporal(y)) {
           let yVal = y;
           try {
             let yWhenC = Path.withCondition(c, () => simplify(realm, yVal, isCondition, depth + 1));
@@ -321,7 +333,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
             throw e;
           }
         }
-        if (x instanceof AbstractValue && !x.isTemporal()) {
+        if (x instanceof AbstractValue && !containsTemporal(x)) {
           let xVal = x;
           try {
             let xWhenNotC = Path.withInverseCondition(c, () => simplify(realm, xVal, isCondition, depth + 1));
