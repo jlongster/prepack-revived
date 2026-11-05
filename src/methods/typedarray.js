@@ -172,13 +172,15 @@ export function IntegerIndexedElementSet(realm: Realm, O: ObjectValue, index: nu
   );
 
   let buffer = O.$ViewedArrayBuffer;
-  invariant(buffer);
+  let arrayLen = O.$ArrayLength;
+  invariant(buffer && typeof arrayLen === "number");
 
   if (buffer.mightBeLeakedObject()) {
     let coerced: Value;
     if (value instanceof AbstractValue) {
       if (To.IsToNumberPure(realm, value)) {
-        coerced = To.ToNumberAbstract(realm, value);
+        let numOrAbs = To.ToNumberOrAbstract(realm, value);
+        coerced = typeof numOrAbs === "number" ? new NumberValue(realm, numOrAbs) : numOrAbs;
       } else if (realm.isInPureScope() && !realm.instantRender.enabled) {
         realm.evaluateWithPossibleThrowCompletion(
           () => {
@@ -186,12 +188,7 @@ export function IntegerIndexedElementSet(realm: Realm, O: ObjectValue, index: nu
             if (IsDetachedBuffer(realm, buffer) === true) {
               throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "IsDetachedBuffer(buffer) is true");
             }
-            if (
-              IsInteger(realm, index) !== false &&
-              !Object.is(index, -0) &&
-              index >= 0 &&
-              index < (O.$ArrayLength: any)
-            ) {
+            if (IsInteger(realm, index) !== false && !Object.is(index, -0) && index >= 0 && index < arrayLen) {
               invariant(realm.generator !== undefined);
               realm.generator.emitPropertyAssignment(O, index + "", value);
             }
@@ -210,7 +207,7 @@ export function IntegerIndexedElementSet(realm: Realm, O: ObjectValue, index: nu
     if (IsDetachedBuffer(realm, buffer) === true) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "IsDetachedBuffer(buffer) is true");
     }
-    if (IsInteger(realm, index) === false || Object.is(index, -0) || index < 0 || index >= (O.$ArrayLength: any)) {
+    if (IsInteger(realm, index) === false || Object.is(index, -0) || index < 0 || index >= arrayLen) {
       return false;
     }
     invariant(realm.generator !== undefined);

@@ -10,6 +10,7 @@
 /* @flow */
 
 import type { Binding } from "../environment.js";
+import { FatalError } from "../errors.js";
 import type { Bindings, BindingEntry, PropertyBindings, CreatedAbstracts, CreatedObjects, Realm } from "../realm.js";
 import { construct_empty_effects, Effects } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
@@ -604,7 +605,11 @@ export class JoinImplementation {
         return dc;
       }
       if (d1 instanceof InternalSlotDescriptor && d2 instanceof InternalSlotDescriptor) {
-        return new InternalSlotDescriptor(this.joinValues(realm, d1.value, d2.value, getAbstractValue));
+        let v1 = d1.value;
+        let v2 = d2.value;
+        invariant(!(v1 instanceof Uint8Array) && typeof v1 !== "number" && v1 !== null);
+        invariant(!(v2 instanceof Uint8Array) && typeof v2 !== "number" && v2 !== null);
+        return new InternalSlotDescriptor(this.joinValues(realm, v1, v2, getAbstractValue));
       }
       return new AbstractJoinedDescriptor(joinCondition, d1, d2);
     }

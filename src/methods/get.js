@@ -838,7 +838,12 @@ export function GetFromArrayWithWidenedNumericProperty(
         createOperationDescriptor("UNKNOWN_ARRAY_LENGTH"),
         { skipInvariant: true, isPure: true }
       );
-      if (arr instanceof ArrayValue && !arr._widenedMutated && arr.mightNotBeLeakedObject()) {
+      if (
+        lenVal instanceof AbstractValue &&
+        arr instanceof ArrayValue &&
+        !arr._widenedMutated &&
+        arr.mightNotBeLeakedObject()
+      ) {
         arr._lastWidenedLength = lenVal;
       }
       return lenVal;
@@ -862,19 +867,21 @@ export function GetFromArrayWithWidenedNumericProperty(
     arr._lastWidenedLength !== undefined
   ) {
     let widenedType = ArrayValue.getWidenedElementType(arr);
-    if (widenedType !== Value) {
-      let lenVal = arr._lastWidenedLength;
+    let lenVal = arr._lastWidenedLength;
+    if (widenedType !== Value && lenVal !== undefined) {
+      const knownLen: AbstractValue = lenVal;
       if (typeof P === "string" && IsArrayIndex(realm, P)) {
         let idx = +P;
         let inBounds = realm.evaluateWithoutEffects(() =>
-          Path.implies(AbstractValue.createFromBinaryOp(realm, "<", new NumberValue(realm, idx), lenVal))
+          Path.implies(AbstractValue.createFromBinaryOp(realm, "<", new NumberValue(realm, idx), knownLen))
         );
         if (inBounds) elemType = widenedType;
       } else if (P instanceof AbstractValue && !P.mightNotBeNumber()) {
-        let range = IntervalDomain.of(P);
+        const keyAbs: AbstractValue = P;
+        let range = IntervalDomain.of(keyAbs);
         if (range !== undefined && range.integral && !range.mayBeNaN && range.lo >= 0) {
           let inBounds = realm.evaluateWithoutEffects(() =>
-            Path.implies(AbstractValue.createFromBinaryOp(realm, "<", P, lenVal))
+            Path.implies(AbstractValue.createFromBinaryOp(realm, "<", keyAbs, knownLen))
           );
           if (inBounds) elemType = widenedType;
         }

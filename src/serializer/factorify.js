@@ -10,8 +10,10 @@
 /* @flow strict-local */
 
 import * as t from "@babel/types";
-import type { BabelNodeStatement, BabelNodeObjectExpression, BabelNodeLVal } from "@babel/types";
+import type { BabelNodeExpression, BabelNodeStatement, BabelNodeObjectExpression, BabelNodeLVal } from "@babel/types";
 import { NameGenerator } from "../utils/NameGenerator";
+
+export const constructorSafeObjectExpressions: WeakSet<BabelNodeObjectExpression> = new WeakSet();
 
 function isLiteral(node) {
   switch (node.type) {
@@ -53,19 +55,32 @@ function isSameNode(left, right) {
   }
 
   if (type === "MemberExpression") {
-    return !left.computed && !right.computed && isSameNode(left.object, right.object) && isSameNode(left.property, right.property);
+    return (
+      !left.computed &&
+      !right.computed &&
+      isSameNode(left.object, right.object) &&
+      isSameNode(left.property, right.property)
+    );
   }
 
   return false;
 }
 
-function getStaticProtoCode(node): string | false {
+function getStaticProtoCode(node: BabelNodeExpression): string | false {
   if (node.type === "Identifier") return node.name;
-  if (node.type === "MemberExpression" && !node.computed && node.property.type === "Identifier") {
+  if (node.type === "MemberExpression" && node.computed !== true && node.property.type === "Identifier") {
     let base = getStaticProtoCode(node.object);
     if (base !== false) return `${base}.${node.property.name}`;
   }
   return false;
+}
+
+function cloneStaticProtoExpr(node: BabelNodeExpression): BabelNodeExpression {
+  if (node.type === "Identifier") return t.identifier(node.name);
+  if (node.type === "MemberExpression" && node.computed !== true && node.property.type === "Identifier") {
+    return t.memberExpression(cloneStaticProtoExpr(node.object), t.identifier(node.property.name), false);
+  }
+  return node;
 }
 
 function makeThisPropertyMember(key: string) {
@@ -102,11 +117,13 @@ function getObjectKeys(obj: BabelNodeObjectExpression): string | false {
     if (key.indexOf("|") >= 0) return false;
   }
 
-  if (keys.length >= 2 && keys[0] === "__proto__" && (obj: any)._canUseConstructorFactory === true) {
-    let firstProp: any = obj.properties[0];
-    let protoCode = getStaticProtoCode(firstProp.value);
-    if (protoCode !== false && protoCode.indexOf("|") < 0) {
-      return `@ctor:${protoCode}|` + keys.slice(1).join("|");
+  if (keys.length >= 2 && keys[0] === "__proto__" && constructorSafeObjectExpressions.has(obj)) {
+    let firstProp = obj.properties[0];
+    if (firstProp.type === "ObjectProperty") {
+      let protoCode = getStaticProtoCode(firstProp.value);
+      if (protoCode !== false && protoCode.indexOf("|") < 0) {
+        return `@ctor:${protoCode}|` + keys.slice(1).join("|");
+      }
     }
   }
 
@@ -176,7 +193,9 @@ export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGen
       let pipeIdx = signatureKey.indexOf("|");
       let keys = signatureKey.slice(pipeIdx + 1).split("|");
       let firstObj = declars[0].declar[declars[0].initializerAstNodeName];
-      let protoExpr = t.cloneDeep(firstObj.properties[0].value);
+      let firstProp = firstObj.properties[0];
+      if (firstProp.type !== "ObjectProperty") continue;
+      let protoExpr = cloneStaticProtoExpr(firstProp.value);
 
       let ctorParams: Array<BabelNodeLVal> = [];
       let ctorStmts: Array<BabelNodeStatement> = [];
@@ -203,7 +222,10 @@ export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGen
         let props = declar[initializerAstNodeName].properties;
         let args = [];
         for (let p = 1; p < props.length; p++) {
-          args.push((props[p]: any).value);
+          let propNode = props[p];
+          if (propNode.type === "ObjectProperty") {
+            args.push(propNode.value);
+          }
         }
         declar[initializerAstNodeName] = t.newExpression(t.identifier(ctorId.name), args);
       }
@@ -217,7 +239,9 @@ export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGen
           if (seen.has(declar2) || declar === declar2) continue;
           let sharedArgs = [];
           for (let i = 0; i < keys.length; i++) {
-            if (isSameNode(declar[initializerAstNodeName].arguments[i], declar2[initializerAstNodeName2].arguments[i])) {
+            if (
+              isSameNode(declar[initializerAstNodeName].arguments[i], declar2[initializerAstNodeName2].arguments[i])
+            ) {
               sharedArgs.push(i);
             }
           }
@@ -233,16 +257,16 @@ export function factorifyObjects(body: Array<BabelNodeStatement>, factoryNameGen
             pair.push({ declar: declar2, initializerAstNodeName: initializerAstNodeName2 });
           }
         }
-        let highestPairArgs;
+        let highestPairArgs = "";
         let highestPairCount = 0;
         for (let pairArgs in sharedPairs) {
           let pair = sharedPairs[pairArgs];
-          if (highestPairArgs === undefined || pair.length > highestPairCount) {
+          if (pair.length > highestPairCount) {
             highestPairCount = pair.length;
             highestPairArgs = pairArgs;
           }
         }
-        if (highestPairArgs === undefined || highestPairCount < 3) continue;
+        if (highestPairCount < 3) continue;
 
         let declarsSub = sharedPairs[highestPairArgs];
         let removeArgs = highestPairArgs.split(",");

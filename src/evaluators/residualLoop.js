@@ -662,7 +662,11 @@ function isGuaranteedNumericExpr(node: any): boolean {
   return false;
 }
 
-function inferNumericLoopBindingKind(loop: BabelNodeStatement, name: string, initVal: Value): "top" | "number" | "nonneg-int" {
+function inferNumericLoopBindingKind(
+  loop: BabelNodeStatement,
+  name: string,
+  initVal: Value
+): "top" | "number" | "nonneg-int" {
   let isInitNumber =
     initVal instanceof NumberValue ||
     (initVal instanceof AbstractValue && Value.isTypeCompatibleWith(initVal.getType(), NumberValue));

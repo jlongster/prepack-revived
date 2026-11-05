@@ -64,7 +64,7 @@ import { Logger } from "../utils/logger.js";
 import { Modules } from "../utils/modules.js";
 import { HeapInspector } from "../utils/HeapInspector.js";
 import { ResidualFunctions } from "./ResidualFunctions.js";
-import { factorifyObjects } from "./factorify.js";
+import { constructorSafeObjectExpressions, factorifyObjects } from "./factorify.js";
 import { voidExpression, emptyExpression, constructorExpression, protoExpression } from "../utils/babelhelpers.js";
 import { Emitter } from "./Emitter.js";
 import { ResidualHeapValueIdentifiers } from "./ResidualHeapValueIdentifiers.js";
@@ -1551,9 +1551,7 @@ export class ResidualHeapSerializer {
       for (let i = 0; i < wordCount; i++) {
         words[i] = t.numericLiteral(view.getUint32(i << 2, true));
       }
-      let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint32Array"), [
-        t.arrayExpression(words),
-      ]);
+      let consExpr = t.newExpression(this.preludeGenerator.memoizeReference("Uint32Array"), [t.arrayExpression(words)]);
       return t.memberExpression(consExpr, t.identifier("buffer"));
     } else {
       let elems = new Array(len);
@@ -1942,7 +1940,7 @@ export class ResidualHeapSerializer {
       protoForConstructorCheck !== undefined &&
       this._canConstructWithThisAssignments(protoForConstructorCheck, embeddedKeys)
     ) {
-      (objExpr: any)._canUseConstructorFactory = true;
+      constructorSafeObjectExpressions.add(objExpr);
     }
     return objExpr;
   }
@@ -2078,7 +2076,6 @@ export class ResidualHeapSerializer {
         let canUseLiteralProto =
           val.temporalAlias === undefined &&
           !this.realm.instantRender.enabled &&
-          this.constructor === ResidualHeapSerializer &&
           (_constructor !== undefined
             ? !this.emitter.getReasonToWaitForDependencies(_constructor)
             : !skipPrototype &&
@@ -2086,7 +2083,13 @@ export class ResidualHeapSerializer {
               (proto instanceof ObjectValue || proto === this.realm.intrinsics.null) &&
               !this.emitter.getReasonToWaitForDependencies(proto));
         if (canUseLiteralProto) {
-          return this.serializeValueRawObject(val, skipPrototype, emitIntegrityCommand, _constructor);
+          return ResidualHeapSerializer.prototype.serializeValueRawObject.call(
+            this,
+            val,
+            skipPrototype,
+            emitIntegrityCommand,
+            _constructor
+          );
         }
         let createViaAuxiliaryConstructor =
           val.temporalAlias === undefined &&

@@ -250,6 +250,8 @@ export default class ObjectValue extends ConcreteValue {
   // array buffer
   $ArrayBufferData: void | null | DataBlock;
   $ArrayBufferByteLength: void | number;
+  $ArrayBufferData_binding: void | PropertyBinding;
+  $ArrayBufferByteLength_binding: void | PropertyBinding;
 
   // generator
   $GeneratorState: void | "suspendedStart" | "executing";

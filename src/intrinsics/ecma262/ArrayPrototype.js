@@ -2059,7 +2059,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
       let pureBounds =
         (!start || start instanceof UndefinedValue || To.IsToNumberPure(realm, start)) &&
         (!end || end instanceof UndefinedValue || To.IsToNumberPure(realm, end));
-      if (realm.isInPureScope() || (nonObjElems && pureBounds && !(O instanceof ObjectValue && O.properties.has("constructor")))) {
+      if (
+        realm.isInPureScope() ||
+        (nonObjElems && pureBounds && !(O instanceof ObjectValue && O.properties.has("constructor")))
+      ) {
         let newArgs = [O, new StringValue(realm, "slice"), start, end];
         return ArrayValue.createTemporalWithWidenedNumericProperty(
           realm,

@@ -254,8 +254,7 @@ export default class IntegerIndexedExotic extends ObjectValue {
       this.$Realm.generator !== undefined
     ) {
       let range = IntervalDomain.of(P);
-      let inBounds =
-        range !== undefined && range.integral && !range.mayBeNaN && range.lo >= 0 && range.hi < length;
+      let inBounds = range !== undefined && range.integral && !range.mayBeNaN && range.lo >= 0 && range.hi < length;
       return AbstractValue.createTemporalFromBuildFunction(
         this.$Realm,
         inBounds ? NumberValue : Value,
@@ -279,7 +278,11 @@ export default class IntegerIndexedExotic extends ObjectValue {
       To.IsToNumberPure(this.$Realm, V) &&
       this.$Realm.generator !== undefined
     ) {
-      let coerced = V instanceof AbstractValue ? To.ToNumberAbstract(this.$Realm, V) : V;
+      let coerced: Value = V;
+      if (V instanceof AbstractValue) {
+        let numOrAbs = To.ToNumberOrAbstract(this.$Realm, V);
+        coerced = typeof numOrAbs === "number" ? new NumberValue(this.$Realm, numOrAbs) : numOrAbs;
+      }
       this.$Realm.generator.emitPropertyAssignment(this, P, coerced);
       return true;
     }

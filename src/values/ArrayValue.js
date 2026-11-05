@@ -389,11 +389,12 @@ export default class ArrayValue extends ObjectValue {
     this._widenedMutated = true;
     this._widenedIsDense = false;
     const prop = this.unknownProperty;
-    if (prop !== undefined && prop.descriptor instanceof PropertyDescriptor && prop.descriptor.value instanceof AbstractValue) {
-      let cur = prop.descriptor.value;
+    const propDesc = prop !== undefined ? prop.descriptor : undefined;
+    if (prop !== undefined && propDesc instanceof PropertyDescriptor && propDesc.value instanceof AbstractValue) {
+      let cur = propDesc.value;
       if (cur.kind === "widened numeric property" && cur.getType() !== Value) {
         this.$Realm.recordModifiedProperty(prop);
-        let desc = new PropertyDescriptor(prop.descriptor);
+        let desc = new PropertyDescriptor(propDesc);
         desc.value = AbstractValue.createFromType(this.$Realm, Value, "widened numeric property", cur.args);
         prop.descriptor = desc;
       }
