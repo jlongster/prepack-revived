@@ -15,7 +15,9 @@
 })();
 
 inspect = function() {
-  return [main("a"), main("x"), main("z")].map(function(r) {
-    return r.map(String).join(":");
-  }).join(",");
+  return [main("a"), main("x"), main("z")]
+    .map(function(r) {
+      return r.map(String).join(":");
+    })
+    .join(",");
 };

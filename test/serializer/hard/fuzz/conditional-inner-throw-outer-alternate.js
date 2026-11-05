@@ -17,15 +17,7 @@
 })();
 
 inspect = function() {
-  var cases = [
-    [false, false],
-    [false, true],
-    [0, 0],
-    ["", 1],
-    [true, true],
-    [1, "yes"],
-    [true, false],
-  ];
+  var cases = [[false, false], [false, true], [0, 0], ["", 1], [true, true], [1, "yes"], [true, false]];
   return cases
     .map(function(c) {
       try {

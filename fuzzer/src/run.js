@@ -24,7 +24,7 @@
 const path = require("path");
 const vm = require("vm");
 
-const EXEC_TIMEOUT = 2000;
+const EXEC_TIMEOUT = 4000;
 
 function execute(code) {
   let result;
@@ -125,6 +125,9 @@ function runProgram(code, opts = {}) {
 
   const actual = execute(serialized.code);
   Object.assign(base, { actual: actual.value, output: serialized.code });
+  if (actual.timeout) {
+    return Object.assign(base, { status: "timeout", detail: "residual execution timed out" });
+  }
   if (errors.length > 0) {
     // Only reachable with `recover`.
     const detail = `${errors[0].errorCode}: ${firstLine(errors[0].message)}`;

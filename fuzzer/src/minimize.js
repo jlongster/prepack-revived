@@ -42,6 +42,21 @@ function collectEdits(ast, coarse) {
     enter(path) {
       const node = path.node;
       const parent = path.parent;
+      // Keep the inspect() harness (fmt, fns, try/catch) intact; only shrink the `args` tuples inside it.
+      if (t.isAssignmentExpression(node) && t.isIdentifier(node.left, { name: "inspect" })) {
+        path.traverse({
+          VariableDeclarator(vp) {
+            if (t.isIdentifier(vp.node.id, { name: "args" }) && t.isArrayExpression(vp.node.init)) {
+              for (const elem of vp.get("init.elements")) {
+                edits.push(() => elem.remove());
+              }
+            }
+            vp.skip();
+          },
+        });
+        path.skip();
+        return;
+      }
       // Removals of list elements.
       if (path.listKey && (path.listKey === "body" || path.listKey === "consequent" || path.listKey === "cases")) {
         if (t.isStatement(node) || t.isSwitchCase(node)) edits.push(() => path.remove());
