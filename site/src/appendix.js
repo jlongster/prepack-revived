@@ -19,7 +19,8 @@ module.exports = c => {
 
 <p>Every code panel shows the unedited output of a real tool run, produced by
 <code>site/scripts/run-examples.js</code> from the inputs in <code>site/examples/</code>. Long outputs are trimmed only
-where a panel says so. The script then runs the original program and each output in a fresh Node process and
+where a panel says so, and long lines in the two React panels wrap; the Prepack fragment there also has line breaks
+added at <code>?</code> and <code>:</code>. The script then runs the original program and each output in a fresh Node process and
 evaluates the expression shown in the “Run” table, so every “differs” mark is measured.</p>
 
 <ul class="methods">

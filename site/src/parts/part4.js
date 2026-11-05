@@ -125,7 +125,7 @@ is probed against React at build time. Each branch the training data never took 
 <code>shipsAtSec</code>, <code>$p1</code> is <code>stock</code>); <code>$tn</code> emits a text child after checking its
 type; <code>$L</code> tracks whether React would insert a <code>&lt;!-- --&gt;</code> separator.</figcaption><div class="panes">
 <div class="pane"><div class="pane-head"><span class="pane-label">Input</span><span class="pane-file">StockBadge in app.jsx</span></div>${code(react.component)}</div>
-<div class="pane" data-status="ok"><div class="pane-head"><span class="pane-label">Hybrid</span><span class="pane-sub">traced template</span></div>${code(react.hybridTemplate)}</div>
+<div class="pane" data-status="ok"><div class="pane-head"><span class="pane-label">Hybrid</span><span class="pane-sub">traced template</span></div>${code(react.hybridTemplate, { cls: "wrap" })}</div>
 </div></figure>
 
 <p>On the 500-input check corpus the output is byte-identical to React (500/500, re-checked for this article). Two of

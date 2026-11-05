@@ -146,7 +146,7 @@ on unknown values, is what the cases above measure.</p>
 forward and join them later. The original design spread that across ten completion classes, host exceptions, and a
 piece of mutable state on the realm. The fuzzer’s 2018 bugs live here:</p>
 
-${example("joins-2354", { caption: "#2354, found by the original fuzzer. The 2018 repro used booleans; with other falsy values 0.2.54 still returns <code>null</code> where the program returns <code>false</code>." })}
+${example("joins-2354", { caption: "#2354, found by the original fuzzer. The 2018 repro used booleans; with other falsy values 0.2.54 still returns <code>NaN</code> where the program returns <code>false</code>." })}
 
 ${example("joins-2355", { caption: "#2355: <code>if (a) return true; return false;</code> must return a boolean." })}
 

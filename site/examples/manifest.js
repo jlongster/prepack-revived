@@ -33,7 +33,7 @@ module.exports = [
       P(
         'fn({text:"ab\\n\\ncd"}, 4), fn({}, null), fn({text:"a\\n\\n\\nb"}, 4)',
         "",
-        'JSON.stringify([fn({ text: "ab\\n\\ncd" }, 4), fn({}, null), fn({ text: "a\\n\\n\\nb" }, 4)])'
+        '[fn({ text: "ab\\n\\ncd" }, 4), fn({}, null), fn({ text: "a\\n\\n\\nb" }, 4)]'
       ),
     ],
   },
@@ -59,7 +59,7 @@ module.exports = [
   {
     id: "joins-2355",
     input: "joins-2355.js",
-    probes: [P('[1, 0, "", "x", null, NaN].map(main)', "", 'JSON.stringify([1, 0, "", "x", null, NaN].map(main))')],
+    probes: [P('[1, 0, "", "x", null, NaN].map(main)', "", '[1, 0, "", "x", null, NaN].map(main)')],
   },
   {
     id: "joins-labeled",
@@ -69,7 +69,7 @@ module.exports = [
   {
     id: "joins-switch-1378",
     input: "joins-switch-1378.js",
-    probes: [P('[0, 1, 2, 3, 4, 5, "1"].map(weight)', "", 'JSON.stringify([0, 1, 2, 3, 4, 5, "1"].map(weight))')],
+    probes: [P('[0, 1, 2, 3, 4, 5, "1"].map(weight)', "", '[0, 1, 2, 3, 4, 5, "1"].map(weight)')],
   },
   {
     id: "joins-try-2120",
@@ -100,12 +100,12 @@ module.exports = [
   {
     id: "paths-negation",
     input: "paths-negation.js",
-    probes: [P('[0, "", false, NaN, null, 1].map(main)', "", 'JSON.stringify([0, "", false, NaN, null, 1].map(main))')],
+    probes: [P('[0, "", false, NaN, null, 1].map(main)', "", '[0, "", false, NaN, null, 1].map(main)')],
   },
   {
     id: "env-window",
     input: "env-window.js",
-    probes: [P("in a browser (window === this, fetch defined)", "var window = this; this.fetch = function () {};", "JSON.stringify(api)")],
+    probes: [P("in a browser (window === this, fetch defined)", "var window = this; this.fetch = function () {};", "api")],
   },
   {
     id: "env-process",
@@ -114,7 +114,7 @@ module.exports = [
       P(
         'in Node with NODE_ENV=production, DEBUG=1',
         'globalThis.process = { env: { NODE_ENV: "production", DEBUG: "1" } };',
-        "JSON.stringify(config)"
+        "config"
       ),
     ],
   },
@@ -168,8 +168,8 @@ module.exports = [
     input: "hyb-guard.js",
     tools: ["hybrid"],
     probes: [
-      P("browser-like host (window, no process)", "delete globalThis.process; globalThis.window = globalThis;", "JSON.stringify(Settings)"),
-      P("Node (process present)", "", "JSON.stringify(Settings)"),
+      P("browser-like host (window, no process)", "delete globalThis.process; globalThis.window = globalThis;", "Settings"),
+      P("Node (process present)", "", "Settings"),
     ],
   },
   {

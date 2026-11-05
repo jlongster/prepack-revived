@@ -9,13 +9,11 @@ const proc = process;
 const job = JSON.parse(fs.readFileSync(proc.argv[2], "utf8"));
 proc.on("unhandledRejection", () => {});
 
+// Strings print as-is; everything else the way Node's REPL shows it, so NaN, -0 and
+// undefined stay distinguishable.
 function fmt(v) {
   if (typeof v === "string") return v;
-  try {
-    return JSON.stringify(v);
-  } catch (e) {
-    return String(v);
-  }
+  return require("util").inspect(v, { breakLength: Infinity, depth: 6 });
 }
 
 let out;
