@@ -9,6 +9,7 @@ const DATA = path.join(__dirname, "..", "data");
 const examples = JSON.parse(fs.readFileSync(path.join(DATA, "examples.json"), "utf8"));
 const scoreboard = JSON.parse(fs.readFileSync(path.join(DATA, "scoreboard.json"), "utf8"));
 const react = JSON.parse(fs.readFileSync(path.join(DATA, "react.json"), "utf8"));
+const reactExamples = JSON.parse(fs.readFileSync(path.join(DATA, "react-examples.json"), "utf8"));
 
 const LABELS = {
   input: "Input",
@@ -158,6 +159,58 @@ function example(id, opts = {}) {
   return `<figure class="cmp cols-${cols}${opts.wide ? " wide" : ""}" id="ex-${id}">${caption}<div class="panes">${panes.join("")}</div>${probes}</figure>`;
 }
 
+// Keeps only the given line ranges of a generated program. Each range is [start, end, extra]:
+// the first line (after the previous range) containing `start`, through the first line containing
+// `end`, plus `extra` more lines. Omitted runs are shown as gaps outside the code.
+function excerpt(src, ranges, opts = {}) {
+  const lines = src.replace(/\s+$/, "").split("\n");
+  const keep = [];
+  let from = 0;
+  for (const [start, end, extra] of ranges) {
+    const i = lines.findIndex((l, k) => k >= from && l.includes(start));
+    if (i < 0) throw new Error("excerpt: start not found: " + start);
+    const j = lines.findIndex((l, k) => k >= i && l.includes(end));
+    if (j < 0) throw new Error("excerpt: end not found: " + end);
+    keep.push([i, j + (extra || 0)]);
+    from = j + (extra || 0) + 1;
+  }
+  const gap = n => `<div class="gap" role="note">… ${n.toLocaleString("en-US")} lines omitted …</div>`;
+  let html = "";
+  let pos = 0;
+  for (const [i, j] of keep) {
+    if (i > pos) html += gap(i - pos);
+    const chunk = lines.slice(i, j + 1);
+    const indent = Math.min(...chunk.filter(l => l.trim()).map(l => l.match(/^ */)[0].length));
+    html += `<pre class="code excerpt${opts.wrap ? " wrap" : ""}"><code>${highlight(chunk.map(l => l.slice(indent)).join("\n"))}</code></pre>`;
+    pos = j + 1;
+  }
+  if (pos < lines.length) html += gap(lines.length - pos);
+  return html;
+}
+
+// A React component next to an excerpt of the renderer Prepack generated for it.
+function reactExample(id, opts) {
+  const ex = reactExamples[id];
+  if (!ex) throw new Error("unknown react example " + id);
+  const p = ex.perf;
+  const check = `Checked against <code>renderToString</code> on the benchmark’s ${ex.check.inputs} check inputs:
+${ex.check.identical}/${ex.check.inputs} byte-identical, ${ex.check.fallbacks} fallbacks. This component alone renders
+${p.bareSpeedup.toFixed(1)}× faster than <code>renderToString</code> (${p.speedup.toFixed(1)}× including the per-request
+schema check).`;
+  return `<figure class="cmp cols-2" id="ex-${id}"><figcaption>${opts.caption} ${check}</figcaption><div class="panes">
+<div class="pane pane-input"><div class="pane-head"><span class="pane-label">Input</span><span class="pane-file">${esc(
+    opts.file
+  )}</span></div>${code(ex.root + "\n\n" + ex.input)}</div>
+<div class="pane" data-status="ok"><div class="pane-head"><span class="pane-label">Revived Prepack</span><span class="pane-sub">generated renderer, trimmed</span></div><div class="pane-status"><span class="st-icon" aria-hidden="true">✓</span> ${
+    ex.check.identical
+  }/${ex.check.inputs} byte-identical to React</div>${excerpt(ex.code, opts.ranges, { wrap: true })}<div class="pane-meta">${ex.code
+    .split("\n")
+    .length.toLocaleString("en-US")} lines · ${Buffer.byteLength(ex.code).toLocaleString("en-US")} bytes in total, including the schema check · compiled in ${(
+    ex.stats.compileMs / 1000
+  ).toFixed(1)} s</div></div>
+</div></figure>`;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Quotes and notes
 
@@ -265,6 +318,9 @@ function pipeline(steps) {
 module.exports = {
   code,
   example,
+  reactExample,
+  excerpt,
+  reactExamples,
   quote,
   note,
   waffle,

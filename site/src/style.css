@@ -203,6 +203,7 @@ h3 {
   margin: 3.75rem 0 1rem;
 }
 h4 { font-family: var(--sans); font-weight: 600; font-size: 1.08rem; line-height: 1.3; margin: 0 0 0.6rem; }
+.grid > h4 { font-size: 1.15rem; margin: 2.75rem 0 0.75rem; }
 em { font-style: italic; }
 sup { line-height: 0; }
 
@@ -474,6 +475,7 @@ pre.code {
 }
 pre.code code { font-size: inherit; }
 pre.code.wrap { white-space: pre-wrap; word-break: break-all; }
+pre.code.excerpt { max-height: none; }
 .gap { font-family: var(--sans); font-size: 0.75rem; color: var(--muted); padding: 0.35rem 0.9rem; border-top: 1px dashed var(--rule-strong); border-bottom: 1px dashed var(--rule-strong); background: var(--bg); }
 .no-output { font-family: var(--sans); font-size: 0.85rem; color: var(--muted); padding: 1rem 0.9rem; font-style: italic; }
 .diag { border-top: 1px dashed var(--rule-strong); padding: 0.55rem 0.9rem 0.6rem; }

@@ -2,7 +2,7 @@
 const { ISSUE } = require("../quotes.js");
 
 module.exports = c => {
-  const { example, quote, note, stackedBars, folderTable, summary, react, code } = c;
+  const { example, quote, note, folderTable, summary, react, code, reactExample, reactExamples, esc } = c;
   const I = n => `<a href="${ISSUE(n)}">#${n}</a>`;
   const o = summary("orig");
   const r = summary("revived");
@@ -291,7 +291,86 @@ is gone: the result is string concatenation with the branches the data needs.</f
 <div class="pane" data-status="ok"><div class="pane-head"><span class="pane-label">Revived Prepack</span><span class="pane-sub">react-ssr specialization</span></div>${code(react.prepackFragment.replace(/ \? /g, "\n  ? ").replace(/ : /g, "\n  : "), { cls: "wrap" })}<div class="pane-meta">line breaks added at <code>?</code> and <code>:</code> for reading</div></div>
 </div></figure>
 
-<p>On the benchmark’s fixed 500-input check corpus the output is byte-identical to
+<p>The examples below are bigger. Each is a small app built from real components of the same page, compiled on its
+own with the same compiler and training inputs, so the renderer Prepack generated for those components can be read in
+one place. The inputs are the components exactly as they appear in <code>app.jsx</code>, plus a few lines of wrapper;
+the outputs are excerpts of the generated code, with the omitted lines marked.</p>
+
+<h4 id="react-list">A list of unknown length</h4>
+
+<p>In 2018 this is where the React compiler stopped: components with loops were excluded from compilation, and a
+<code>map()</code> callback over unknown data was left unevaluated, dragging the original component into the bundle
+(${I(2141)}, ${I(2142)}). Here the callback is specialized once and run by a residual loop
+(<code>__ssrMapJoin</code>). Each item becomes a single string expression: the badge conditions turn into
+ternaries, the title is escaped at runtime, and React’s <code>&lt;!-- --&gt;</code> separators around the stock count
+appear exactly where React puts them.</p>
+
+${reactExample("react-list", {
+  file: "ProductList, ProductBadges",
+  caption: "A product list with per-item badges and stock state (<code>StockBadge</code> is the component shown above).",
+  ranges: [
+    ["var _1 = function (data) {", "var _$B = _$4.originalPrice;"],
+    ["var _3G = 1 + (_3J - _$S);", 'return "<ul class=', 1],
+    ["var _43 = function (value) {", "};"],
+  ],
+})}
+
+<h4 id="react-cart">Context and <code>useMemo</code></h4>
+
+<p>Contexts are pure plumbing at render time, so the providers and <code>useContext</code> calls fold away entirely:
+the locale becomes a plain read of <code>data.locale</code>. <code>useMemo</code> runs once per server render, so its
+body is specialized in place. The loop that totals the cart becomes a residual loop over the items, and the
+digit-grouping loop inside <code>formatMoney</code> stays as a small residual function. Everything else is arithmetic
+and string building.</p>
+
+${reactExample("react-cart", {
+  file: "CartSummaryAside, CartLineItem",
+  caption: "The cart summary: two contexts, a <code>useMemo</code> over the cart, locale-aware money formatting and a list of line items.",
+  ranges: [
+    ["var _1 = function (data) {", "var _A7 = function (_$4V, _$4W) {"],
+    ['return "<li class=\\"ns-cart-item', "};"],
+    ["var _$0 = data.locale;", "var _$V = _$T + _$U;"],
+    ["var _$4R = _9a(_$O, true);", 'return "<aside class=', 1],
+  ],
+})}
+
+<h4 id="react-filters"><code>useId</code> inside nested lists</h4>
+
+<p>React 18’s ids depend on a component’s position in the tree, and they have to match React’s format exactly.
+Outside a list the position is known at build time, so <code>:R0:</code> and <code>:R0H1:</code> are folded straight into
+the HTML. Inside a list of unknown length it isn’t, so the generated code carries React’s tree-id arithmetic and
+computes each option’s <code>:R…:</code> id at runtime. Boolean attributes (<code>disabled</code>, <code>hidden</code>,
+and <code>checked</code> from <code>defaultChecked</code>) become conditional pieces of the attribute string.</p>
+
+${reactExample("react-filters", {
+  file: "FilterSidebar, FilterGroup, FilterOption",
+  caption: "The filter sidebar: groups of checkboxes, each with a <code>useId</code> label, nested in two lists of unknown length.",
+  ranges: [
+    ["var _1 = function (data) {", "var _$N = _$L.value;"],
+    ["var _2w = _4d(15, _$6, _$9);", 'return "<aside class=', 1],
+  ],
+})}
+
+<h4 id="react-banner">Fragments, text separators and raw HTML</h4>
+
+<p><code>dangerouslySetInnerHTML</code> is inserted as is, without escaping. The keyed fragments in the breadcrumb list
+flatten into adjacent <code>&lt;li&gt;</code> elements, and the <code>{" "}(Min. order …)</code> text run gets the
+<code>&lt;!-- --&gt;</code> separators React emits between adjacent text nodes. A <code>null</code> promo removes the
+whole section.</p>
+
+${reactExample("react-banner", {
+  file: "AnnouncementBanner, Breadcrumbs",
+  caption: "An announcement banner with raw HTML and a minimum-order note, and a breadcrumb list built from keyed fragments.",
+  ranges: [
+    ["var _2z = function (_$m, _$n) {", "};"],
+    ["var _$0 = data.locale;", "var _$8 = _8.minOrder;"],
+    ["var _$h = _8.code;", "return (_$1 === null", 1],
+  ],
+})}
+
+<p>The per-component timings are in-process, warm, on a shared machine, and the schema check validates the whole
+request on every call, which dominates for one small component. The page-level numbers below are the meaningful
+ones. On the full page, over the benchmark’s fixed 500-input check corpus, the output is byte-identical to
 <code>ReactDOMServer.renderToString</code> (re-checked for this article: 500/500). It renders 4–5.5× faster than React
 with the JIT and about 9–10× faster with <code>--jitless</code>, within 1.4–2× of a page specialized by hand. Data
 that doesn’t match the inferred schema falls back to React.</p>
@@ -309,5 +388,30 @@ that doesn’t match the inferred schema falls back to React.</p>
 <p>The generated program is 83.8 KB (20.6 KB gzipped) and doesn’t load React at all. The
 <a href="https://jamesbox.exe.xyz/northstar/">Northstar Supply demo</a> serves the same page rendered by plain React
 and by the specialized code.</p>
+
+<h4 id="react-limits">What still breaks</h4>
+
+<p>Two app shapes still produce broken output; both turned up while building the Northstar store. One is a list reached
+through an object that may be <code>null</code> (<code>listing.products</code>, where <code>listing</code> is either
+<code>null</code> or an object). The other is a loop and a <code>.map</code> over the same array inside one
+conditional branch. In both cases Prepack doesn’t recognize the array as a list of unknown length, falls back to a
+generic path that is broken, and the build still succeeds. The generated code contains a residual
+<code>__bailout</code> call and throws on the requests that render the list. It never returns wrong HTML, but the
+compiler should refuse instead of shipping code that throws. The Northstar store works around both by keeping its
+collections at the top level of the data and computing listing stats outside the view branch.</p>
+
+<figure class="cmp cols-2"><figcaption>Both shapes, compiled from 200 synthetic training requests and run on 200 more
+(<code>site/scripts/run-react-examples.js</code>).</figcaption><div class="panes">
+${["limit-nullable-list", "limit-loop-and-map"]
+  .map(id => {
+    const l = reactExamples[id];
+    return `<div class="pane" data-status="wrong"><div class="pane-head"><span class="pane-label">Input</span><span class="pane-sub">${
+      id === "limit-nullable-list" ? "a list behind a nullable object" : "a loop and a map in one branch"
+    }</span></div><div class="pane-status"><span class="st-icon" aria-hidden="true">✗</span> Builds, then throws on ${l.threw} of ${
+      l.inputs
+    } requests (<code>${esc(l.firstError)}</code>); ${l.identical} render correctly</div>${code(l.source, { cls: "wrap" })}</div>`;
+  })
+  .join("")}
+</div></figure>
 `;
 };

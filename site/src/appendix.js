@@ -31,6 +31,11 @@ evaluates the expression shown in the “Run” table, so every “differs” ma
   <li>Everything ran on Node v26.7.0 on Linux x64, on November 5, 2026. Prepack runs with <code>TZ=UTC</code>.</li>
   <li>The corpus results below come from <code>node scripts/hard-scoreboard.js</code> run against each build on the same
   194 programs. The serializer suite count (3,744 of 3,744) is from <code>yarn test-serializer</code> on the same build.</li>
+  <li>The React component examples come from <code>site/scripts/run-react-examples.js</code>: it builds each small app
+  from components of the react-bench page (<code>app.jsx</code>), compiles it with <code>react-ssr/compiler.js</code> on
+  the benchmark’s 440 training inputs, compares it with <code>renderToString</code> on the 500 check inputs, and times
+  both warm, in one process (median of 7 rounds). The two failing shapes are compiled and run on seeded synthetic data
+  by the same script.</li>
   <li>Quotes were copied from the GitHub and Hacker News APIs; each links to the specific comment, issue, gist or
   source line. The fuzzing, Z3 and size statistics come from the design notes in
   <code>docs/revive/</code>.</li>
