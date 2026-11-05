@@ -24,6 +24,7 @@ import type {
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
   NativeFunctionValue,
@@ -171,6 +172,7 @@ export default class ObjectValue extends ConcreteValue {
 
   $ParameterMap: void | ObjectValue; // undefined when the property is "missing"
   $SymbolData: void | SymbolValue | AbstractValue;
+  $BigIntData: void | BigIntValue | AbstractValue;
   $StringData: void | StringValue | AbstractValue;
   $NumberData: void | NumberValue | AbstractValue;
   $BooleanData: void | BooleanValue | AbstractValue;
@@ -440,6 +442,7 @@ export default class ObjectValue extends ConcreteValue {
   getKind(): ObjectKind {
     // we can deduce the natural prototype by checking whether the following internal slots are present
     if (this.$SymbolData !== undefined) return "Symbol";
+    if (this.$BigIntData !== undefined) return "BigInt";
     if (this.$StringData !== undefined) return "String";
     if (this.$NumberData !== undefined) return "Number";
     if (this.$BooleanData !== undefined) return "Boolean";

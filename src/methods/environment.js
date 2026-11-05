@@ -15,6 +15,7 @@ import type { PropertyKeyValue } from "../types.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   ECMAScriptFunctionValue,
   IntegralValue,
@@ -198,6 +199,7 @@ export class EnvironmentImplementation {
       type === BooleanValue ||
       type === StringValue ||
       type === SymbolValue ||
+      type === BigIntValue ||
       type === NumberValue ||
       type === IntegralValue
     );

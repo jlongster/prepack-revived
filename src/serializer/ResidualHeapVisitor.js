@@ -1016,6 +1016,12 @@ export class ResidualHeapVisitor {
         invariant(dateValue !== undefined);
         this.visitValue(dateValue);
         return;
+      case "BigInt": {
+        let bigIntData = val.$BigIntData;
+        invariant(bigIntData !== undefined);
+        this.visitValue(bigIntData);
+        return;
+      }
       case "Float32Array":
       case "Float64Array":
       case "Int8Array":

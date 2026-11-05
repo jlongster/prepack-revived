@@ -14,6 +14,7 @@ import type { Descriptor, PropertyBinding } from "../types.js";
 import { IsArray, Get } from "../methods/index.js";
 import {
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   BoundFunctionValue,
   ECMAScriptSourceFunctionValue,
@@ -2385,6 +2386,13 @@ export class ResidualHeapSerializer {
         let serializedDateValue = this.serializeValue(dateValue);
         this._emitObjectProperties(val);
         return t.newExpression(this.preludeGenerator.memoizeReference("Date"), [serializedDateValue]);
+      case "BigInt": {
+        let bigIntData = val.$BigIntData;
+        invariant(bigIntData !== undefined);
+        let serializedBigInt = this.serializeValue(bigIntData);
+        this._emitObjectProperties(val);
+        return t.callExpression(this.preludeGenerator.memoizeReference("Object"), [serializedBigInt]);
+      }
       case "Float32Array":
       case "Float64Array":
       case "Int8Array":
@@ -2535,6 +2543,13 @@ export class ResidualHeapSerializer {
       return voidExpression;
     } else if (val instanceof StringValue) {
       return this._serializeStringValue(val.value);
+    } else if (val instanceof BigIntValue) {
+      let s = val.value.toString();
+      let neg = s.startsWith("-");
+      let digits = neg ? s.slice(1) : s;
+      let node: any = (t: any).bigIntLiteral(digits);
+      node.extra = { rawValue: digits, raw: digits + "n" };
+      return neg ? t.unaryExpression("-", node, true) : node;
     } else if (HeapInspector.isLeaf(val)) {
       return t.valueToNode(val.serialize());
     } else if (val instanceof ObjectValue) {

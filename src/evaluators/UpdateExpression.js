@@ -14,7 +14,7 @@ import type { LexicalEnvironment } from "../environment.js";
 import type { Value } from "../values/index.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { Add } from "../methods/index.js";
-import { AbstractValue, NumberValue, IntegralValue } from "../values/index.js";
+import { AbstractValue, BigIntValue, ConcreteValue, HostBigInt, NumberValue, IntegralValue } from "../values/index.js";
 import type { BabelNodeUpdateExpression } from "@babel/types";
 import { Environment, Leak, Properties, To } from "../singletons.js";
 import invariant from "../invariant.js";
@@ -35,6 +35,16 @@ export default function(
   // Let oldValue be ? ToNumber(? GetValue(expr)).
   let oldExpr = Environment.GetValue(realm, expr);
   if (oldExpr instanceof AbstractValue) {
+    if (oldExpr.getType() === BigIntValue) {
+      let diag = new CompilerDiagnostic(
+        "Abstract BigInt update expressions are not supported",
+        ast.loc,
+        "PP0001",
+        "FatalError"
+      );
+      realm.handleError(diag);
+      throw new FatalError();
+    }
     invariant(ast.operator === "++" || ast.operator === "--"); // As per BabelNodeUpdateExpression
     let op = ast.operator === "++" ? "+" : "-";
     let newAbstractValue = AbstractValue.createFromBinaryOp(realm, op, oldExpr, new NumberValue(realm, 1), ast.loc);
@@ -72,7 +82,15 @@ export default function(
       return oldExpr;
     }
   }
-  let oldValue = To.ToNumber(realm, oldExpr);
+  invariant(oldExpr instanceof ConcreteValue);
+  let oldNumeric = To.ToNumeric(realm, oldExpr);
+  if (oldNumeric instanceof BigIntValue) {
+    let one = HostBigInt(1);
+    let newBi = new BigIntValue(realm, ast.operator === "++" ? oldNumeric.value + one : oldNumeric.value - one);
+    Properties.PutValue(realm, expr, newBi);
+    return ast.prefix ? newBi : oldNumeric;
+  }
+  let oldValue = oldNumeric.value;
 
   if (ast.prefix === true) {
     if (ast.operator === "++") {

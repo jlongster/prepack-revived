@@ -16,6 +16,7 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import {
   AbstractObjectValue,
+  BigIntValue,
   Value,
   BooleanValue,
   ConcreteValue,
@@ -170,7 +171,7 @@ function tryToEvaluateOperationOrLeaveAsAbstract(
       () =>
         AbstractValue.createTemporalFromBuildFunction(
           realm,
-          ast.operator === "~" ? IntegralValue : NumberValue,
+          val.getType() === BigIntValue ? BigIntValue : ast.operator === "~" ? IntegralValue : NumberValue,
           [val],
           createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: ast.operator, prefix: ast.prefix }),
           { isPure: true }
@@ -222,6 +223,16 @@ function evaluateOperation(
       // Symbols never implicitly coerce to primitives.
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
     }
+    if (value.getType() === BigIntValue) {
+      let diag = new CompilerDiagnostic(
+        "Abstract BigInt unary operations are not supported",
+        ast.loc,
+        "PP0001",
+        "FatalError"
+      );
+      realm.handleError(diag);
+      throw new FatalError();
+    }
     let error = new CompilerDiagnostic(
       "might be a symbol or an object with an unknown valueOf or toString or Symbol.toPrimitive method",
       ast.argument.loc,
@@ -240,6 +251,9 @@ function evaluateOperation(
     // 2. Return ? ToNumber(? GetValue(expr)).
     let value = Environment.GetValue(realm, expr);
     if (value instanceof AbstractValue) {
+      if (value.getType() === BigIntValue) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Cannot convert a BigInt value to a number");
+      }
       if (!To.IsToNumberPure(realm, value)) reportError(value);
       return AbstractValue.createFromUnaryOp(realm, "+", value);
     }
@@ -252,14 +266,18 @@ function evaluateOperation(
     // 1. Let expr be the result of evaluating UnaryExpression.
     expr;
 
-    // 2. Let oldValue be ? ToNumber(? GetValue(expr)).
+    // 2. Let oldValue be ? ToNumeric(? GetValue(expr)).
     let value = Environment.GetValue(realm, expr);
     if (value instanceof AbstractValue) {
       if (!To.IsToNumberPure(realm, value)) reportError(value);
       return AbstractValue.createFromUnaryOp(realm, "-", value);
     }
     invariant(value instanceof ConcreteValue);
-    let oldValue = To.ToNumber(realm, value);
+    let numeric = To.ToNumeric(realm, value);
+    if (numeric instanceof BigIntValue) {
+      return new BigIntValue(realm, -numeric.value);
+    }
+    let oldValue = numeric.value;
 
     // 3. If oldValue is NaN, return NaN.
     if (isNaN(oldValue)) {
@@ -274,14 +292,18 @@ function evaluateOperation(
     // 1. Let expr be the result of evaluating UnaryExpression.
     expr;
 
-    // 2. Let oldValue be ? ToInt32(? GetValue(expr)).
+    // 2. Let oldValue be ? ToNumeric(? GetValue(expr)).
     let value = Environment.GetValue(realm, expr);
     if (value instanceof AbstractValue) {
       if (!To.IsToNumberPure(realm, value)) reportError(value);
       return AbstractValue.createFromUnaryOp(realm, "~", value);
     }
     invariant(value instanceof ConcreteValue);
-    let oldValue = To.ToInt32(realm, value);
+    let numeric = To.ToNumeric(realm, value);
+    if (numeric instanceof BigIntValue) {
+      return new BigIntValue(realm, ~numeric.value);
+    }
+    let oldValue = To.ToInt32(realm, numeric);
 
     // 3. Return the result of applying bitwise complement to oldValue. The result is a signed 32-bit integer.
     return IntegralValue.createFromNumberValue(realm, ~oldValue);
@@ -343,6 +365,8 @@ function evaluateOperation(
       return new StringValue(realm, "number");
     } else if (isInstance(proto, SymbolValue)) {
       return new StringValue(realm, "symbol");
+    } else if (isInstance(proto, BigIntValue)) {
+      return new StringValue(realm, "bigint");
     } else if (isInstance(proto, ObjectValue)) {
       if (IsCallable(realm, val)) {
         return new StringValue(realm, "function");

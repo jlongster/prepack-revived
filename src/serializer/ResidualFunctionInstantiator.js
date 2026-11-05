@@ -129,6 +129,8 @@ export class ResidualFunctionInstantiator<
       case "NumericLiteral":
       case "StringLiteral":
         return !!((node: any): BabelNodeBooleanLiteral | BabelNodeNumericLiteral | BabelNodeStringLiteral).value;
+      case "BigIntLiteral":
+        return (node: any).value !== "0";
       case "Identifier": {
         let replacement = this.identifierReplacements.get(node);
         if (replacement !== undefined) return replacement.truthiness;

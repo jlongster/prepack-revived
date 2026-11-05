@@ -60,6 +60,11 @@ function transformWithBabel(code, plugins, presets) {
 function lintCompiledSource(source) {
   let linter = new Linter();
   let errors = linter.verify(source, lintConfig);
+  if (errors.length > 0 && errors.some(e => e.fatal)) {
+    let babelEslint = require("babel-eslint");
+    linter.defineParser("babel-eslint", babelEslint);
+    errors = linter.verify(source, Object.assign({}, lintConfig, { parser: "babel-eslint" }));
+  }
   if (errors.length > 0) {
     console.log("\nTest output failed lint due to:\n");
     for (let error of errors) {

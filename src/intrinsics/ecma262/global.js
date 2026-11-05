@@ -84,7 +84,7 @@ export default function(realm: Realm): void {
     "JSON",
   ];
   if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile"))
-    typeNames = typeNames.concat("Symbol", "Promise", "WeakSet", "Proxy", "Reflect");
+    typeNames = typeNames.concat("Symbol", "BigInt", "Promise", "WeakSet", "Proxy", "Reflect");
   for (let name of typeNames) {
     // need to check if the property exists (it may not due to --compatibility)
     if (realm.intrinsics[name]) {
@@ -99,7 +99,12 @@ export default function(realm: Realm): void {
       );
     } else {
       invariant(
-        name === "Symbol" || name === "Promise" || name === "WeakSet" || name === "Proxy" || name === "Reflect"
+        name === "Symbol" ||
+          name === "BigInt" ||
+          name === "Promise" ||
+          name === "WeakSet" ||
+          name === "Proxy" ||
+          name === "Reflect"
       );
       invariant(realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) || realm.isCompatibleWith("mobile"));
     }

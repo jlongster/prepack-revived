@@ -25,9 +25,12 @@ import type { Realm } from "../realm.js";
 import { To } from "../singletons.js";
 import {
   AbstractValue,
+  BigIntValue,
+  bigIntPow,
   BooleanValue,
   ConcreteValue,
   EmptyValue,
+  HostBigInt,
   NumberValue,
   IntegralValue,
   ObjectValue,
@@ -155,9 +158,118 @@ export default class ValuesDomain {
         return new StringValue(realm, lstr + rstr);
       }
 
+      if (lprim instanceof BigIntValue || rprim instanceof BigIntValue) {
+        if (!(lprim instanceof BigIntValue && rprim instanceof BigIntValue)) {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Cannot mix BigInt and other types, use explicit conversions"
+          );
+        }
+        return new BigIntValue(realm, lprim.value + rprim.value);
+      }
+
       let lnum = To.ToNumber(realm, lprim);
       let rnum = To.ToNumber(realm, rprim);
       return Add(realm, lnum, rnum);
+    } else if (
+      op === "-" ||
+      op === "*" ||
+      op === "/" ||
+      op === "%" ||
+      op === "**" ||
+      op === "<<" ||
+      op === ">>" ||
+      op === ">>>" ||
+      op === "&" ||
+      op === "|" ||
+      op === "^"
+    ) {
+      let lprim = lval instanceof ObjectValue ? To.ToPrimitiveOrAbstract(realm, lval, "number") : lval;
+      let rprim = rval instanceof ObjectValue ? To.ToPrimitiveOrAbstract(realm, rval, "number") : rval;
+      if (lprim instanceof BigIntValue || rprim instanceof BigIntValue) {
+        if (lprim instanceof AbstractValue || rprim instanceof AbstractValue) {
+          throw new FatalError();
+        }
+        if (!(lprim instanceof BigIntValue && rprim instanceof BigIntValue)) {
+          // Ensure symbol still throws TypeError via ToNumeric on the non-BigInt operand first if needed
+          if (!(lprim instanceof BigIntValue)) To.ToNumeric(realm, lprim);
+          if (!(rprim instanceof BigIntValue)) To.ToNumeric(realm, rprim);
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "Cannot mix BigInt and other types, use explicit conversions"
+          );
+        }
+        let a = lprim.value;
+        let b = rprim.value;
+        if (op === ">>>") {
+          throw realm.createErrorThrowCompletion(
+            realm.intrinsics.TypeError,
+            "BigInts have no unsigned right shift, use >> instead"
+          );
+        }
+        if ((op === "/" || op === "%") && b === HostBigInt(0)) {
+          throw realm.createErrorThrowCompletion(realm.intrinsics.RangeError, "Division by zero");
+        }
+        if (op === "**" && b < HostBigInt(0)) {
+          throw realm.createErrorThrowCompletion(realm.intrinsics.RangeError, "Exponent must be positive");
+        }
+        try {
+          if (op === "-") return new BigIntValue(realm, a - b);
+          if (op === "*") return new BigIntValue(realm, a * b);
+          if (op === "/") return new BigIntValue(realm, a / b);
+          if (op === "%") return new BigIntValue(realm, a % b);
+          if (op === "**") return new BigIntValue(realm, bigIntPow(a, b));
+          if (op === "<<") return new BigIntValue(realm, a << b);
+          if (op === ">>") return new BigIntValue(realm, a >> b);
+          if (op === "&") return new BigIntValue(realm, a & b);
+          if (op === "|") return new BigIntValue(realm, a | b);
+          if (op === "^") return new BigIntValue(realm, a ^ b);
+        } catch (e) {
+          if (e instanceof RangeError) {
+            throw realm.createErrorThrowCompletion(realm.intrinsics.RangeError, e.message);
+          }
+          throw e;
+        }
+      }
+      lval = lprim instanceof ConcreteValue ? lprim : lval;
+      rval = rprim instanceof ConcreteValue ? rprim : rval;
+      if (op === ">>>") {
+        let lnum = To.ToUint32(realm, lprim);
+        let rnum = To.ToUint32(realm, rprim);
+        return IntegralValue.createFromNumberValue(realm, lnum >>> rnum);
+      } else if (op === "<<" || op === ">>") {
+        let lnum = To.ToInt32(realm, lprim);
+        let rnum = To.ToUint32(realm, rprim);
+        return IntegralValue.createFromNumberValue(realm, op === "<<" ? lnum << rnum : lnum >> rnum);
+      } else if (op === "**") {
+        let base = To.ToNumberOrAbstract(realm, lprim);
+        let exponent = To.ToNumberOrAbstract(realm, rprim);
+        if (base instanceof AbstractValue || exponent instanceof AbstractValue) {
+          const baseVal = base instanceof AbstractValue ? base : new NumberValue(realm, base);
+          const exponentVal = exponent instanceof AbstractValue ? exponent : new NumberValue(realm, exponent);
+          return AbstractValue.createFromBinaryOp(realm, op, baseVal, exponentVal);
+        }
+        return new NumberValue(realm, Math.pow(base, exponent));
+      } else if (op === "&" || op === "|" || op === "^") {
+        let lnum: number = To.ToInt32(realm, lprim);
+        let rnum: number = To.ToInt32(realm, rprim);
+        if (op === "&") return IntegralValue.createFromNumberValue(realm, lnum & rnum);
+        if (op === "|") return IntegralValue.createFromNumberValue(realm, lnum | rnum);
+        return IntegralValue.createFromNumberValue(realm, lnum ^ rnum);
+      } else {
+        let lnum = To.ToNumberOrAbstract(realm, lprim);
+        let rnum = To.ToNumberOrAbstract(realm, rprim);
+        if (lnum instanceof AbstractValue || rnum instanceof AbstractValue) {
+          const lnumVal = lnum instanceof AbstractValue ? lnum : new NumberValue(realm, lnum);
+          const rnumVal = rnum instanceof AbstractValue ? rnum : new NumberValue(realm, rnum);
+          return AbstractValue.createFromBinaryOp(realm, op, lnumVal, rnumVal);
+        }
+        if (isNaN(rnum) || isNaN(lnum)) return realm.intrinsics.NaN;
+        if (op === "-") return Add(realm, lnum, rnum, true);
+        if (op === "%") return new NumberValue(realm, lnum % rnum);
+        if (op === "/") return new NumberValue(realm, lnum / rnum);
+        return new NumberValue(realm, lnum * rnum);
+      }
     } else if (op === "<" || op === ">" || op === ">=" || op === "<=") {
       // ECMA262 12.10.3
       if (op === "<") {
@@ -193,100 +305,12 @@ export default class ValuesDomain {
           return realm.intrinsics.true;
         }
       }
-    } else if (op === ">>>") {
-      // ECMA262 12.9.5.1
-      let lnum = To.ToUint32(realm, lval);
-      let rnum = To.ToUint32(realm, rval);
-
-      return IntegralValue.createFromNumberValue(realm, lnum >>> rnum);
-    } else if (op === "<<" || op === ">>") {
-      let lnum = To.ToInt32(realm, lval);
-      let rnum = To.ToUint32(realm, rval);
-
-      if (op === "<<") {
-        // ECMA262 12.9.3.1
-        return IntegralValue.createFromNumberValue(realm, lnum << rnum);
-      } else if (op === ">>") {
-        // ECMA262 12.9.4.1
-        return IntegralValue.createFromNumberValue(realm, lnum >> rnum);
-      }
-    } else if (op === "**") {
-      // ECMA262 12.6.3
-
-      // 5. Let base be ? ToNumber(leftValue).
-      let base = To.ToNumberOrAbstract(realm, lval);
-
-      // 6. Let exponent be ? ToNumber(rightValue).
-      let exponent = To.ToNumberOrAbstract(realm, rval);
-
-      if (base instanceof AbstractValue || exponent instanceof AbstractValue) {
-        const baseVal = base instanceof AbstractValue ? base : new NumberValue(realm, base);
-        const exponentVal = exponent instanceof AbstractValue ? exponent : new NumberValue(realm, exponent);
-        return AbstractValue.createFromBinaryOp(realm, op, baseVal, exponentVal);
-      }
-
-      // 7. Return the result of Applying the ** operator with base and exponent as specified in 12.7.3.4.
-      return new NumberValue(realm, Math.pow(base, exponent));
-    } else if (op === "%" || op === "/" || op === "*" || op === "-") {
-      // ECMA262 12.7.3
-      let lnum = To.ToNumberOrAbstract(realm, lval);
-      let rnum = To.ToNumberOrAbstract(realm, rval);
-      if (lnum instanceof AbstractValue || rnum instanceof AbstractValue) {
-        const lnumVal = lnum instanceof AbstractValue ? lnum : new NumberValue(realm, lnum);
-        const rnumVal = rnum instanceof AbstractValue ? rnum : new NumberValue(realm, rnum);
-        return AbstractValue.createFromBinaryOp(realm, op, lnumVal, rnumVal);
-      }
-
-      if (isNaN(rnum)) return realm.intrinsics.NaN;
-      if (isNaN(lnum)) return realm.intrinsics.NaN;
-
-      if (op === "-") {
-        return Add(realm, lnum, rnum, true);
-      } else if (op === "%") {
-        // The sign of the result equals the sign of the dividend.
-        // If the dividend is an infinity, or the divisor is a zero, or both, the result is NaN.
-        // If the dividend is finite and the divisor is an infinity, the result equals the dividend.
-        // If the dividend is a zero and the divisor is nonzero and finite, the result is the same as the dividend.
-        return new NumberValue(realm, lnum % rnum);
-      } else if (op === "/") {
-        // The sign of the result is positive if both operands have the same sign, negative if the operands have different signs.
-        // Division of an infinity by an infinity results in NaN.
-        // Division of an infinity by a zero results in an infinity. The sign is determined by the rule already stated above.
-        // Division of an infinity by a nonzero finite value results in a signed infinity. The sign is determined by the rule already stated above.
-        // Division of a finite value by an infinity results in zero. The sign is determined by the rule already stated above.
-        // Division of a zero by a zero results in NaN; division of zero by any other finite value results in zero, with the sign determined by the rule already stated above.
-        // Division of a nonzero finite value by a zero results in a signed infinity. The sign is determined by the rule already stated above.
-        return new NumberValue(realm, lnum / rnum);
-      } else if (op === "*") {
-        // The sign of the result is positive if both operands have the same sign, negative if the operands have different signs.
-        // Multiplication of an infinity by a zero results in NaN.
-        // Multiplication of an infinity by an infinity results in an infinity. The sign is determined by the rule already stated above.
-        // Multiplication of an infinity by a finite nonzero value results in a signed infinity. The sign is determined by the rule already stated above.
-        return new NumberValue(realm, lnum * rnum);
-      }
     } else if (op === "!==") {
       return new BooleanValue(realm, !StrictEqualityComparison(realm, lval, rval));
     } else if (op === "===") {
       return new BooleanValue(realm, StrictEqualityComparison(realm, lval, rval));
     } else if (op === "!=" || op === "==") {
       return AbstractEqualityComparison(realm, lval, rval, op);
-    } else if (op === "&" || op === "|" || op === "^") {
-      // ECMA262 12.12.3
-
-      // 5. Let lnum be ? ToInt32(lval).
-      let lnum: number = To.ToInt32(realm, lval);
-
-      // 6. Let rnum be ? ToInt32(rval).
-      let rnum: number = To.ToInt32(realm, rval);
-
-      // 7. Return the result of applying the bitwise operator @ to lnum and rnum. The result is a signed 32 bit integer.
-      if (op === "&") {
-        return IntegralValue.createFromNumberValue(realm, lnum & rnum);
-      } else if (op === "|") {
-        return IntegralValue.createFromNumberValue(realm, lnum | rnum);
-      } else if (op === "^") {
-        return IntegralValue.createFromNumberValue(realm, lnum ^ rnum);
-      }
     } else if (op === "in") {
       // ECMA262 12.10.3
 

@@ -316,6 +316,7 @@ export function IsFunctionDefinition(realm: Realm, node: BabelNodeExpression): b
     case "TaggedTemplateExpression":
     case "YieldExpression":
     case "AwaitExpression":
+    case "BigIntLiteral":
       return false;
     //12.5.1 Static Semantics: IsFunctionDefinition
     case "UnaryExpression":

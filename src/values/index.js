@@ -36,6 +36,7 @@ export { default as IntegerIndexedExotic } from "./IntegerIndexedExotic.js";
 export { default as BooleanValue } from "./BooleanValue.js";
 export { default as StringValue } from "./StringValue.js";
 export { default as SymbolValue } from "./SymbolValue.js";
+export { default as BigIntValue, HostBigInt, bigIntPow } from "./BigIntValue.js";
 
 export { default as AbstractValue } from "./AbstractValue.js";
 export type { AbstractValueKind } from "./AbstractValue.js";

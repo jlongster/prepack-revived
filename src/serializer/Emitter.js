@@ -372,6 +372,12 @@ export class Emitter {
           result = recurse(val.$DateValue);
           if (result !== undefined) return result;
           break;
+        case "BigInt":
+          if (val.$BigIntData instanceof Value) {
+            result = recurse(val.$BigIntData);
+            if (result !== undefined) return result;
+          }
+          break;
         case "Promise":
           if (val.$PromiseResult instanceof Value) {
             result = recurse(val.$PromiseResult);

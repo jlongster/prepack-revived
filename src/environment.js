@@ -27,6 +27,7 @@ import { CompilerDiagnostic, FatalError } from "./errors.js";
 import { ExecutionContext } from "./realm.js";
 import {
   AbstractValue,
+  BigIntValue,
   NullValue,
   SymbolValue,
   BooleanValue,
@@ -1414,6 +1415,7 @@ export type BaseValue =
   | SymbolValue
   | NumberValue
   | IntegralValue
+  | BigIntValue
   | EnvironmentRecord;
 export type ReferenceName = string | SymbolValue;
 
@@ -1431,6 +1433,7 @@ export function mightBecomeAnObject(base: Value): boolean {
     type === BooleanValue ||
     type === StringValue ||
     type === SymbolValue ||
+    type === BigIntValue ||
     type === NumberValue ||
     type === IntegralValue
   );

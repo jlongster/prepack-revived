@@ -10,7 +10,7 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { NativeFunctionValue, NumberValue } from "../../values/index.js";
+import { BigIntValue, NativeFunctionValue, NumberValue, ObjectValue } from "../../values/index.js";
 import { Create, To } from "../../singletons.js";
 
 export default function(realm: Realm): NativeFunctionValue {
@@ -21,6 +21,14 @@ export default function(realm: Realm): NativeFunctionValue {
     // 1. If no arguments were passed to this function invocation, let n be +0.
     if (argCount === 0) {
       n = realm.intrinsics.zero;
+    } else if (value instanceof BigIntValue) {
+      n = new NumberValue(realm, Number(value.value));
+    } else if (value instanceof ObjectValue) {
+      let prim = To.ToPrimitiveOrAbstract(realm, value, "number");
+      n =
+        prim instanceof BigIntValue
+          ? new NumberValue(realm, Number(prim.value))
+          : new NumberValue(realm, To.ToNumber(realm, prim));
     } else {
       // 2. Else, let n be ? ToNumber(value).
       n = new NumberValue(realm, To.ToNumber(realm, value));

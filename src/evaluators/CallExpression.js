@@ -17,6 +17,7 @@ import { TypesDomain, ValuesDomain } from "../domains/index.js";
 import {
   AbstractValue,
   AbstractObjectValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
   FunctionValue,
@@ -77,6 +78,8 @@ function getPrimitivePrototypeFromType(realm: Realm, value: AbstractValue): void
       return realm.intrinsics.BooleanPrototype;
     case SymbolValue:
       return realm.intrinsics.SymbolPrototype;
+    case BigIntValue:
+      return realm.intrinsics.BigIntPrototype;
     default:
       return undefined;
   }

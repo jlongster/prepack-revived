@@ -17,6 +17,7 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
   NullValue,
@@ -195,11 +196,21 @@ export function computeBinary(
     }
   }
 
-  let resultType;
+  let resultType = Value;
   const compute = () => {
     let lvalIsAbstract = lval instanceof AbstractValue;
     let rvalIsAbstract = rval instanceof AbstractValue;
     if (lvalIsAbstract || rvalIsAbstract) {
+      if (lval.getType() === BigIntValue || rval.getType() === BigIntValue) {
+        let diag = new CompilerDiagnostic(
+          "Abstract BigInt binary operations are not supported",
+          loc || lloc || rloc,
+          "PP0001",
+          "FatalError"
+        );
+        realm.handleError(diag);
+        throw new FatalError();
+      }
       // If the left-hand side of an instanceof operation is a primitive,
       // and the right-hand side is a simple object (it does not have [Symbol.hasInstance]),
       // then the result should always compute to `false`.

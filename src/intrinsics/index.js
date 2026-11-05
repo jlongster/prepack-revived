@@ -70,6 +70,8 @@ import initializeRegExpPrototype from "./ecma262/RegExpPrototype.js";
 
 import initializeSymbol from "./ecma262/Symbol.js";
 import initializeSymbolPrototype from "./ecma262/SymbolPrototype.js";
+import initializeBigInt from "./ecma262/BigInt.js";
+import initializeBigIntPrototype from "./ecma262/BigIntPrototype.js";
 
 import initializeString from "./ecma262/String.js";
 import initializeStringPrototype from "./ecma262/StringPrototype.js";
@@ -184,6 +186,9 @@ export function initialize(i: Intrinsics, realm: Realm): Intrinsics {
   i.parseInt = initializeParseInt(realm);
 
   i.SymbolPrototype = new ObjectValue(realm, i.ObjectPrototype, "Symbol.prototype");
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    i.BigIntPrototype = new ObjectValue(realm, i.ObjectPrototype, "BigInt.prototype");
+  }
 
   // initialize common symbols
   i.SymbolIsConcatSpreadable = new SymbolValue(
@@ -277,6 +282,9 @@ export function initialize(i: Intrinsics, realm: Realm): Intrinsics {
   initializeBooleanPrototype(realm, i.BooleanPrototype);
   initializeNumberPrototype(realm, i.NumberPrototype);
   initializeSymbolPrototype(realm, i.SymbolPrototype);
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    initializeBigIntPrototype(realm, i.BigIntPrototype);
+  }
   initializeErrorPrototype(realm, i.ErrorPrototype);
   initializeTypeErrorPrototype(realm, i.TypeErrorPrototype);
   initializeRangeErrorPrototype(realm, i.RangeErrorPrototype);
@@ -323,6 +331,9 @@ export function initialize(i: Intrinsics, realm: Realm): Intrinsics {
   i.Boolean = initializeBoolean(realm);
   i.Number = initializeNumber(realm);
   i.Symbol = initializeSymbol(realm);
+  if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
+    i.BigInt = initializeBigInt(realm);
+  }
   i.JSON = initializeJSON(realm);
   i.Proxy = initializeProxy(realm);
   if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile"))
@@ -397,7 +408,7 @@ export function initialize(i: Intrinsics, realm: Realm): Intrinsics {
     "ArrayBuffer",
   ];
   if (!realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) && !realm.isCompatibleWith("mobile")) {
-    builtins = builtins.concat(["WeakSet", "TypedArray"]);
+    builtins = builtins.concat(["WeakSet", "TypedArray", "BigInt"]);
   }
 
   for (let name of builtins) {

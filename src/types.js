@@ -13,6 +13,7 @@ import type {
   AbstractObjectValue,
   AbstractValue,
   ArrayValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
   ECMAScriptFunctionValue,
@@ -234,6 +235,8 @@ export type Intrinsics = {
   NumberPrototype: ObjectValue,
   Symbol: NativeFunctionValue,
   SymbolPrototype: ObjectValue,
+  BigInt: NativeFunctionValue,
+  BigIntPrototype: ObjectValue,
   StringPrototype: ObjectValue,
   Object: NativeFunctionValue,
   Function: NativeFunctionValue,
@@ -344,6 +347,7 @@ export type ObjectKind =
   | "Array"
   | "Function"
   | "Symbol"
+  | "BigInt"
   | "String"
   | "Number"
   | "Boolean"
@@ -986,6 +990,8 @@ export type ToType = {
 
   // ECMA262 7.1.3
   ToNumber(realm: Realm, val: numberOrValue): number,
+  ToNumeric(realm: Realm, val: ConcreteValue): NumberValue | BigIntValue,
+  ToBigInt(realm: Realm, val: Value): BigIntValue,
 
   ToNumberOrAbstract(realm: Realm, val: numberOrValue): number | AbstractValue,
 

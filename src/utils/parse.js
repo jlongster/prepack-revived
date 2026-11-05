@@ -34,6 +34,7 @@ export default function(
       "optionalCatchBinding",
       "optionalChaining",
       "nullishCoalescingOperator",
+      "bigInt",
       "numericSeparator",
       "logicalAssignment",
       "classProperties",

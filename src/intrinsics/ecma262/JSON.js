@@ -14,6 +14,7 @@ import {
   AbstractObjectValue,
   AbstractValue,
   ArrayValue,
+  BigIntValue,
   BooleanValue,
   NullValue,
   NumberValue,
@@ -23,7 +24,15 @@ import {
   UndefinedValue,
   Value,
 } from "../../values/index.js";
-import { Call, EnumerableOwnProperties, Get, HasSomeCompatibleType, IsArray, IsCallable } from "../../methods/index.js";
+import {
+  Call,
+  EnumerableOwnProperties,
+  Get,
+  GetV,
+  HasSomeCompatibleType,
+  IsArray,
+  IsCallable,
+} from "../../methods/index.js";
 import { InternalizeJSONProperty } from "../../methods/json.js";
 import { ValuesDomain } from "../../domains/index.js";
 import { FatalError } from "../../errors.js";
@@ -212,10 +221,10 @@ function SerializeJSONProperty(realm: Realm, key: StringValue, holder: ObjectVal
   // 1. Let value be ? Get(holder, key).
   let value = Get(realm, holder, key).throwIfNotConcrete();
 
-  // 2. If Type(value) is Object, then
-  if (value instanceof ObjectValue) {
-    // a. Let toJSON be ? Get(value, "toJSON").
-    let toJSON = Get(realm, value, "toJSON");
+  // 2. If Type(value) is Object or BigInt, then
+  if (value instanceof ObjectValue || value instanceof BigIntValue) {
+    // a. Let toJSON be ? GetV(value, "toJSON").
+    let toJSON = GetV(realm, value, "toJSON");
 
     // b. If IsCallable(toJSON) is true, then
     if (IsCallable(realm, toJSON)) {
@@ -244,6 +253,8 @@ function SerializeJSONProperty(realm: Realm, key: StringValue, holder: ObjectVal
       // e. Else if value has a [[BooleanData]] internal slot, then
       // f. Let value be the value of the [[BooleanData]] internal slot of value.
       value = value.$BooleanData;
+    } else if (value.$BigIntData) {
+      value = value.$BigIntData.throwIfNotConcrete();
     }
   }
 
@@ -268,6 +279,10 @@ function SerializeJSONProperty(realm: Realm, key: StringValue, holder: ObjectVal
       // b. Else, return "null".
       return "null";
     }
+  }
+
+  if (value instanceof BigIntValue) {
+    throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Do not know how to serialize a BigInt");
   }
 
   // 10. If Type(value) is Object and IsCallable(value) is false, then

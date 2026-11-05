@@ -13,6 +13,7 @@ export { default as ArrayExpression } from "./ArrayExpression.js";
 export { default as ArrowFunctionExpression } from "./ArrowFunctionExpression.js";
 export { default as AssignmentExpression } from "./AssignmentExpression.js";
 export { default as AwaitExpression } from "./AwaitExpression.js";
+export { default as BigIntLiteral } from "./BigIntLiteral.js";
 export { default as BinaryExpression } from "./BinaryExpression.js";
 export { default as BlockStatement } from "./BlockStatement.js";
 export { default as BooleanLiteral } from "./BooleanLiteral.js";

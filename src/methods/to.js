@@ -22,8 +22,10 @@ import { SameValue, SameValueZero } from "./abstract.js";
 import {
   AbstractObjectValue,
   AbstractValue,
+  BigIntValue,
   BooleanValue,
   ConcreteValue,
+  HostBigInt,
   NullValue,
   NumberValue,
   IntegralValue,
@@ -402,6 +404,10 @@ export class ToImplementation {
       let obj = new ObjectValue(realm, realm.intrinsics.SymbolPrototype);
       obj.$SymbolData = arg;
       return obj;
+    } else if (arg instanceof BigIntValue) {
+      let obj = new ObjectValue(realm, realm.intrinsics.BigIntPrototype);
+      obj.$BigIntData = arg;
+      return obj;
     } else if (arg instanceof ObjectValue) {
       return arg;
     }
@@ -430,6 +436,11 @@ export class ToImplementation {
       case SymbolValue:
         obj = new ObjectValue(realm, realm.intrinsics.SymbolPrototype);
         obj.$SymbolData = arg;
+        break;
+
+      case BigIntValue:
+        obj = new ObjectValue(realm, realm.intrinsics.BigIntPrototype);
+        obj.$BigIntData = arg;
         break;
 
       case UndefinedValue:
@@ -557,15 +568,44 @@ export class ToImplementation {
       return Number(val.value);
     } else if (val instanceof SymbolValue) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+    } else if (val instanceof BigIntValue) {
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Cannot convert a BigInt value to a number");
     } else {
       invariant(false, "unexpected type of value");
     }
   }
 
+  ToNumeric(realm: Realm, val: ConcreteValue): NumberValue | BigIntValue {
+    let primValue = this.ToPrimitive(realm, val, "number");
+    if (primValue instanceof BigIntValue) {
+      return primValue;
+    }
+    return new NumberValue(realm, this.ToNumber(realm, primValue));
+  }
+
+  ToBigInt(realm: Realm, argument: Value): BigIntValue {
+    let prim = this.ToPrimitive(realm, argument.throwIfNotConcrete(), "number");
+    if (prim instanceof BigIntValue) return prim;
+    if (prim instanceof BooleanValue) return new BigIntValue(realm, HostBigInt(prim.value ? 1 : 0));
+    if (prim instanceof StringValue) {
+      try {
+        return new BigIntValue(realm, HostBigInt(prim.value));
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, e.message);
+        }
+        throw e;
+      }
+    }
+    throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Cannot convert value to a BigInt");
+  }
+
   IsToNumberPure(realm: Realm, val: numberOrValue): boolean {
     if (val instanceof Value) {
       let type = this.GetToPrimitivePureResultType(realm, val);
-      return type !== undefined && type !== SymbolValue && type !== PrimitiveValue && type !== Value;
+      return (
+        type !== undefined && type !== SymbolValue && type !== BigIntValue && type !== PrimitiveValue && type !== Value
+      );
     }
     return true;
   }
@@ -646,6 +686,7 @@ export class ToImplementation {
               if (tagVal === "boolean") return BooleanValue;
               if (tagVal === "undefined") return UndefinedValue;
               if (tagVal === "symbol") return SymbolValue;
+              if (tagVal === "bigint") return BigIntValue;
             }
           }
         }
@@ -736,6 +777,8 @@ export class ToImplementation {
       return "null";
     } else if (val instanceof SymbolValue) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+    } else if (val instanceof BigIntValue) {
+      return val.value.toString();
     } else if (val instanceof BooleanValue) {
       return val.value ? "true" : "false";
     } else if (val instanceof ObjectValue) {
@@ -817,6 +860,8 @@ export class ToImplementation {
       return true;
     } else if (val instanceof SymbolValue) {
       return true;
+    } else if (val instanceof BigIntValue) {
+      return val.value !== HostBigInt(0);
     } else {
       invariant(!(val instanceof AbstractValue));
       throw realm.createErrorThrowCompletion(
