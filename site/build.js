@@ -89,10 +89,10 @@ const cover = `
   <div class="cover-text">
     <p class="kicker">A report from the Prepack revival · November 2026</p>
     <h1 id="title">Prepack, revived</h1>
-    <p class="dek">Facebook set down its JavaScript partial evaluator in 2018, leaving behind problems its own
+  </div>
+  <p class="dek">Facebook set down its JavaScript partial evaluator in 2018, leaving behind problems its own
     authors called hard, undecidable and “a bridge too far.” We went back in with AI agents, an SMT solver and a
     fuzzer, and then tried a second, simpler idea. This is what worked, what didn’t, and what each one costs.</p>
-  </div>
   <figure class="cover-fig">
     <div class="waffles">
       <div class="waffle-col">
