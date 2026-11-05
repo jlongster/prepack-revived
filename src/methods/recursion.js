@@ -196,7 +196,7 @@ export function tryResidualizeRecursiveCall(
   argsList: Array<Value>
 ): void | Value {
   if (!(F instanceof ECMAScriptSourceFunctionValue) || F.$FunctionKind !== "normal") return undefined;
-  if (!realm.useAbstractInterpretation || realm.instantRender.enabled || !realm.residualCallHeuristics) {
+  if (!realm.useAbstractInterpretation || realm.instantRender.enabled || realm.residualCallHeuristics !== true) {
     return undefined;
   }
   if (bypass === F) {

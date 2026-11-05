@@ -3,44 +3,36 @@
 // reference each other and built-ins), and must compute exactly what the corresponding model code
 // in runtime.js computes.
 
-// escapeHtml from react-dom (same output, single pass).
+// escapeHtml from react-dom (same output: each of "&'<> is replaced independently).
+var __ssrEscapeTest = /["'&<>]/;
+var __ssrEscapeAll = /["'&<>]/g;
+function __ssrEscapeChar(c) {
+  switch (c) {
+    case '"':
+      return "&quot;";
+    case "&":
+      return "&amp;";
+    case "'":
+      return "&#x27;";
+    case "<":
+      return "&lt;";
+    default:
+      return "&gt;";
+  }
+}
 function __ssrEscape(value) {
   var str = "" + value;
-  var length = str.length;
-  var index = 0;
-  for (; index < length; index++) {
-    var code = str.charCodeAt(index);
-    if (code === 34 || code === 38 || code === 39 || code === 60 || code === 62) break;
-  }
-  if (index === length) return str;
+  return __ssrEscapeTest.test(str) ? str.replace(__ssrEscapeAll, __ssrEscapeChar) : str;
+}
+
+// array.map(f).join("") without the intermediate array (and without flattening the result):
+// map calls f only for present indices, and join("") turns holes into "". f returns strings.
+function __ssrMapJoin(array, f) {
   var html = "";
-  var lastIndex = 0;
-  for (; index < length; index++) {
-    var escape;
-    switch (str.charCodeAt(index)) {
-      case 34:
-        escape = "&quot;";
-        break;
-      case 38:
-        escape = "&amp;";
-        break;
-      case 39:
-        escape = "&#x27;";
-        break;
-      case 60:
-        escape = "&lt;";
-        break;
-      case 62:
-        escape = "&gt;";
-        break;
-      default:
-        continue;
-    }
-    if (lastIndex !== index) html += str.substring(lastIndex, index);
-    lastIndex = index + 1;
-    html += escape;
+  for (var i = 0, n = array.length; i < n; i++) {
+    if (i in array) html += f(array[i], i, array);
   }
-  return lastIndex !== index ? html + str.substring(lastIndex, index) : html;
+  return html;
 }
 
 // A non-number CSS value: escapeTextForBrowser(('' + value).trim()).

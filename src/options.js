@@ -88,7 +88,9 @@ export type RealmOptions = {
   arrayNestedOptimizedFunctionsEnabled?: boolean,
   // When false, calls are always evaluated (inlined) rather than turned into residual calls by
   // the size and recursion heuristics (src/methods/inlining.js, src/methods/recursion.js).
-  residualCallHeuristics?: boolean,
+  // "loops" only turns pure calls with primitive arguments and result whose specialization would
+  // contain a residual loop into residual calls.
+  residualCallHeuristics?: boolean | "loops",
   reactFailOnUnsupportedSideEffects?: boolean,
   removeModuleFactoryFunctions?: boolean,
   closedWorld?: boolean,

@@ -73,6 +73,123 @@ function isCreateElementCall(node) {
 }
 
 // ------------------------------------------------------------------------------------------------
+// Output post-processing (pure syntactic rewrites that preserve JavaScript semantics):
+//  - `var a = xs.map(f); ... a.join("")` (a used once) becomes a single string accumulating loop,
+//    which avoids the intermediate array and the flattening of every item string by join;
+//  - string concatenations are reassociated to the left and adjacent literals are merged.
+
+function isKnownString(node) {
+  return (
+    t.isStringLiteral(node) ||
+    t.isTemplateLiteral(node) ||
+    (t.isBinaryExpression(node, { operator: "+" }) && (isKnownString(node.left) || isKnownString(node.right)))
+  );
+}
+
+function optimizeOutput(code, helpers) {
+  const ast = babelParser.parse(code, { sourceType: "script" });
+  let mapJoins = 0;
+  traverse(ast, {
+    VariableDeclarator(p) {
+      const init = p.node.init;
+      if (
+        !t.isIdentifier(p.node.id) ||
+        !t.isCallExpression(init) ||
+        init.arguments.length !== 1 ||
+        !t.isMemberExpression(init.callee) ||
+        init.callee.computed ||
+        !t.isIdentifier(init.callee.property, { name: "map" }) ||
+        !t.isIdentifier(init.arguments[0])
+      ) {
+        return;
+      }
+      const binding = p.scope.getBinding(p.node.id.name);
+      if (!binding || !binding.constant || binding.referencePaths.length !== 1) return;
+      const ref = binding.referencePaths[0];
+      const member = ref.parentPath;
+      const call = member && member.parentPath;
+      if (
+        !member.isMemberExpression() ||
+        member.node.computed ||
+        !t.isIdentifier(member.node.property, { name: "join" }) ||
+        !call.isCallExpression() ||
+        call.node.callee !== member.node ||
+        call.node.arguments.length !== 1 ||
+        !t.isStringLiteral(call.node.arguments[0], { value: "" })
+      ) {
+        return;
+      }
+      p.node.init = t.callExpression(t.identifier("__ssrMapJoin"), [init.callee.object, init.arguments[0]]);
+      call.replaceWith(t.identifier(p.node.id.name));
+      mapJoins++;
+    },
+  });
+  traverse(ast, {
+    BinaryExpression: {
+      exit(p) {
+        let node = p.node;
+        if (node.operator !== "+") return;
+        let changed = true;
+        while (changed) {
+          changed = false;
+          const right = node.right;
+          // A + (B + C) === (A + B) + C when B is a string, or A and C are strings.
+          if (
+            t.isBinaryExpression(right, { operator: "+" }) &&
+            (isKnownString(right.left) || (isKnownString(node.left) && isKnownString(right.right)))
+          ) {
+            node = t.binaryExpression("+", t.binaryExpression("+", node.left, right.left), right.right);
+            changed = true;
+            continue;
+          }
+          // (X + "a") + "b" === X + "ab"; "a" + "b" === "ab"
+          if (t.isStringLiteral(node.right)) {
+            if (t.isStringLiteral(node.left)) {
+              node = t.stringLiteral(node.left.value + node.right.value);
+              break;
+            }
+            if (t.isBinaryExpression(node.left, { operator: "+" }) && t.isStringLiteral(node.left.right)) {
+              node = t.binaryExpression(
+                "+",
+                node.left.left,
+                t.stringLiteral(node.left.right.value + node.right.value)
+              );
+              changed = true;
+            }
+          }
+          if (t.isBinaryExpression(node, { operator: "+" }) && t.isBinaryExpression(node.left, { operator: "+" })) {
+            // Normalize the left operand too (it may have become reassociable).
+            const left = node.left;
+            if (
+              t.isBinaryExpression(left.right, { operator: "+" }) &&
+              (isKnownString(left.right.left) || (isKnownString(left.left) && isKnownString(left.right.right)))
+            ) {
+              node = t.binaryExpression(
+                "+",
+                t.binaryExpression("+", t.binaryExpression("+", left.left, left.right.left), left.right.right),
+                node.right
+              );
+              changed = true;
+            }
+          }
+        }
+        if (node !== p.node) p.replaceWith(node);
+      },
+    },
+  });
+  let output = generate(ast, { compact: false, jsescOption: { minimal: true } }).code;
+  if (mapJoins > 0) output = helperSource(helpers, "__ssrMapJoin") + "\n" + output;
+  return { code: output, mapJoins };
+}
+
+// The source of one self-contained helper function from helpers.js.
+function helperSource(helpers, name) {
+  const ast = babelParser.parse(helpers, { sourceType: "script" });
+  const decl = ast.program.body.find(n => t.isFunctionDeclaration(n) && n.id.name === name);
+  return generate(decl).code;
+}
+
+// ------------------------------------------------------------------------------------------------
 // Schemas. A schema is a JSON type description:
 //   { kind: "string" | "number" | "boolean" | "undefined" | "null" }
 //   { kind: "object", properties: { name: schema } }
@@ -262,7 +379,7 @@ __optimize(__ssrRender${argModel === undefined ? "" : ", " + JSON.stringify(argM
     result = prepack.prepackSources([{ filePath: "react-ssr-input.js", fileContents: source }], {
       compatibility: "browser",
       arrayNestedOptimizedFunctionsEnabled: true,
-      residualCallHeuristics: false,
+      residualCallHeuristics: "loops",
       errorHandler: diagnostic => {
         diagnostics.push(diagnostic);
         return diagnostic.severity === "Warning" || diagnostic.severity === "Information" ? "Recover" : "Fail";
@@ -280,7 +397,8 @@ __optimize(__ssrRender${argModel === undefined ? "" : ", " + JSON.stringify(argM
     err.cause = e;
     throw err;
   }
-  const code = result.code;
+  const optimized = options.optimizeOutput === false ? { code: result.code, mapJoins: 0 } : optimizeOutput(result.code, loadModelSources().helpers);
+  const code = optimized.code;
   const sandbox = Object.create(globalThis);
   // The output assigns the specialized function to the global object it is run with.
   new Function(code).call(sandbox);

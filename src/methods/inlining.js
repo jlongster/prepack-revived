@@ -13,7 +13,19 @@ import type { Realm } from "../realm.js";
 import type { CompilerDiagnostic, ErrorHandlerResult } from "../errors.js";
 import { FatalError } from "../errors.js";
 import { PropertyDescriptor } from "../descriptors.js";
-import { AbstractValue, ECMAScriptSourceFunctionValue, FunctionValue, ObjectValue, Value } from "../values/index.js";
+import {
+  AbstractValue,
+  BooleanValue,
+  ECMAScriptSourceFunctionValue,
+  FunctionValue,
+  NumberValue,
+  ObjectValue,
+  PrimitiveValue,
+  StringValue,
+  UndefinedValue,
+  Value,
+} from "../values/index.js";
+import { SimpleNormalCompletion } from "../completions.js";
 import { Generator, TemporalOperationEntry } from "../utils/generator.js";
 import { isInsidePureProbe, tryEmitPureResidualCall } from "./recursion.js";
 import traverseFast from "../utils/traverse-fast.js";
@@ -59,13 +71,11 @@ export function isRetainedOnGlobalObject(realm: Realm, fn: FunctionValue): boole
 
 function generatorContainsResidualLoop(gen: Generator): boolean {
   for (let entry of gen._entries) {
-    if (entry instanceof TemporalOperationEntry) {
-      if (entry.operationDescriptor.type === "FOR_STATEMENT_FUNC") return true;
-      let deps = entry.getDependencies();
-      if (deps !== undefined) {
-        for (let dep of deps) {
-          if (generatorContainsResidualLoop(dep)) return true;
-        }
+    if (entry instanceof TemporalOperationEntry && entry.operationDescriptor.type === "FOR_STATEMENT_FUNC") return true;
+    let deps = entry.getDependencies();
+    if (deps !== undefined) {
+      for (let dep of deps) {
+        if (generatorContainsResidualLoop(dep)) return true;
       }
     }
   }
@@ -94,7 +104,7 @@ export function tryAvoidInliningExplosion(
 ): void | Value {
   if (
     !realm.useAbstractInterpretation ||
-    !realm.residualCallHeuristics ||
+    realm.residualCallHeuristics === false ||
     !realm.isInPureScope() ||
     realm.instantRender.enabled ||
     realm.react.enabled ||
@@ -110,6 +120,7 @@ export function tryAvoidInliningExplosion(
   if (F === optRoot || realm.getRunningContext().function === undefined) {
     return undefined;
   }
+  if (realm.residualCallHeuristics === "loops") return tryResidualizeLoopingCall(realm, F, thisArgument, argsList);
 
   let hasAbstractArg = argsList.some(arg => arg instanceof AbstractValue);
   if (!hasAbstractArg) return undefined;
@@ -203,4 +214,57 @@ export function tryAvoidInliningExplosion(
   }
 
   return undefined;
+}
+
+function isPrimitiveValue(value: Value): boolean {
+  if (value instanceof AbstractValue) return Value.isTypeCompatibleWith(value.getType(), PrimitiveValue);
+  return value instanceof PrimitiveValue;
+}
+
+// A call with primitive arguments (at least one abstract) whose specialization would contain a
+// residual loop becomes a residual call of F, if F is pure and always returns a primitive of one
+// type: the loop then runs inside the original function instead of a specialized copy of it (with
+// its own closure and leaked variables) at every call site. The result keeps the type established
+// by the speculative evaluation.
+function tryResidualizeLoopingCall(
+  realm: Realm,
+  F: ECMAScriptSourceFunctionValue,
+  thisArgument: Value,
+  argsList: Array<Value>
+): void | Value {
+  if (!(thisArgument instanceof UndefinedValue) && F.$ThisMode !== "lexical") return undefined;
+  if (!argsList.every(isPrimitiveValue) || !argsList.some(arg => arg instanceof AbstractValue)) return undefined;
+  let call = F.$Call;
+  invariant(call !== undefined);
+  let savedErrorHandler = realm.errorHandler;
+  realm.errorHandler = (diagnostic): ErrorHandlerResult =>
+    diagnostic.severity === "Information" || diagnostic.severity === "Warning" ? "Recover" : "Fail";
+  speculativeInlineSet.add(F);
+  let effects;
+  try {
+    effects = realm.evaluateForEffects(() => call(thisArgument, argsList), undefined, "speculative loop check");
+  } catch (e) {
+    if (e instanceof FatalError) return undefined;
+    throw e;
+  } finally {
+    speculativeInlineSet.delete(F);
+    realm.errorHandler = savedErrorHandler;
+  }
+  let result = effects.result;
+  let resultType = result instanceof SimpleNormalCompletion ? result.value.getType() : undefined;
+  if (
+    resultType !== undefined &&
+    !Value.isTypeCompatibleWith(resultType, ObjectValue) &&
+    generatorContainsResidualLoop(effects.generator)
+  ) {
+    let residual = tryEmitPureResidualCall(realm, F, thisArgument, argsList);
+    if (residual instanceof AbstractValue) {
+      let precise =
+        resultType === StringValue || resultType === BooleanValue || Value.isTypeCompatibleWith(resultType, NumberValue);
+      return precise ? AbstractValue.createShapeView(realm, residual, resultType, undefined) : residual;
+    }
+  }
+  // Use the speculative evaluation as the evaluation of the call.
+  realm.applyEffects(effects);
+  return realm.returnOrThrowCompletion(result);
 }

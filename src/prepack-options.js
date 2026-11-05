@@ -71,7 +71,7 @@ export type PrepackOptions = {|
   onParse?: BabelNodeFile => void,
   onExecute?: (Realm, Map<FunctionValue, Generator>) => void,
   arrayNestedOptimizedFunctionsEnabled?: boolean,
-  residualCallHeuristics?: boolean,
+  residualCallHeuristics?: boolean | "loops",
   reactFailOnUnsupportedSideEffects?: boolean,
   closedWorld?: boolean,
   unknownGlobals?: UnknownGlobalsMode,
