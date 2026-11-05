@@ -16,6 +16,8 @@ const traverse = require("@babel/traverse").default;
 const generate = require("@babel/generator").default;
 const t = require("@babel/types");
 
+const { guardedRender, instantiate } = require("./instantiate.js");
+
 const RUNTIME_PATH = path.join(__dirname, "runtime.js");
 const HELPERS_PATH = path.join(__dirname, "helpers.js");
 const TABLES_PATH = path.join(__dirname, "dom-tables.part.js");
@@ -492,29 +494,6 @@ __optimize(__ssrRender${argModel === undefined ? "" : ", " + JSON.stringify(argM
       bytes: Buffer.byteLength(fullCode),
     },
   };
-}
-
-// The render function of a generated program run in sandbox: the specialized renderer for data of
-// the schema, fallback(data) otherwise (an error if there is no fallback).
-function guardedRender(sandbox, fallback) {
-  const specialized = sandbox.__ssrRender;
-  const conforms = sandbox.__ssrConforms;
-  if (typeof specialized !== "function") throw new Error("react-ssr: specialized output did not define __ssrRender");
-  if (typeof conforms !== "function") return specialized;
-  const render = data => {
-    if (conforms(data)) return specialized(data);
-    render.fallbacks++;
-    if (fallback) return fallback(data);
-    throw new Error("react-ssr: data does not conform to the schema the renderer was specialized for");
-  };
-  render.fallbacks = 0;
-  return render;
-}
-
-function instantiate(code, fallback) {
-  const sandbox = Object.create(globalThis);
-  new Function(code).call(sandbox);
-  return guardedRender(sandbox, fallback);
 }
 
 function formatLocation(loc) {

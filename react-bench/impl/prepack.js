@@ -37,13 +37,11 @@ function sha(...parts) {
 
 function cacheKey(appSource, schema) {
   const parts = [appSource, JSON.stringify(schema)];
-  for (const f of ["compiler.js", "runtime.js", "helpers.js", "dom-tables.part.js"]) {
+  for (const f of ["compiler.js", "instantiate.js", "runtime.js", "helpers.js", "dom-tables.part.js"]) {
     parts.push(fs.readFileSync(path.join(SSR_DIR, f)));
   }
-  const lib = path.join(ROOT, "lib");
-  for (const f of fs.readdirSync(lib, { recursive: true }).sort()) {
-    if (typeof f === "string" && f.endsWith(".js")) parts.push(f + fs.statSync(path.join(lib, f)).mtimeMs);
-  }
+  // `yarn build-prepack` rewrites every file of lib/, so one of them stands for the build.
+  parts.push(String(fs.statSync(path.join(ROOT, "lib", "prepack-node.js")).mtimeMs));
   return sha(...parts);
 }
 
@@ -65,19 +63,18 @@ function reactFallback(appSource, opts) {
 module.exports = {
   name: "prepack (react-ssr specialization)",
   prepare(appSource, opts = {}) {
-    const compiler = require(path.join(SSR_DIR, "compiler.js"));
     const schemaFile = path.join(CACHE_DIR, "schema-" + sha(appSource) + ".json");
     const schema = fs.existsSync(schemaFile)
       ? JSON.parse(fs.readFileSync(schemaFile, "utf8"))
-      : compiler.inferSchema(trainingSamples(opts));
+      : require(path.join(SSR_DIR, "compiler.js")).inferSchema(trainingSamples(opts));
     const artifact = path.join(CACHE_DIR, "render-" + cacheKey(appSource, schema) + ".js");
     const fallback = reactFallback(appSource, opts);
     if (fs.existsSync(artifact)) {
       const code = fs.readFileSync(artifact, "utf8");
-      const render = compiler.instantiate(code, fallback);
+      const render = require(path.join(SSR_DIR, "instantiate.js")).instantiate(code, fallback);
       return { render, code, stats: { cached: true, fallback: "ReactDOMServer.renderToString (not counted in code size)" } };
     }
-    const result = compiler.compile(appSource, { schema, rootProp: opts.rootProp || "data", fallback });
+    const result = require(path.join(SSR_DIR, "compiler.js")).compile(appSource, { schema, rootProp: opts.rootProp || "data", fallback });
     fs.mkdirSync(CACHE_DIR, { recursive: true });
     fs.writeFileSync(schemaFile, JSON.stringify(schema));
     const tmp = artifact + ".tmp" + process.pid;
