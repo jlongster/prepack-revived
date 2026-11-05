@@ -9,7 +9,8 @@
 
 /* @flow */
 
-import type { Realm } from "../realm.js";
+import { Effects, type Realm } from "../realm.js";
+import { evaluateSpeculatively, residualizeLoop } from "./residualLoop.js";
 import type { LexicalEnvironment } from "../environment.js";
 import { BreakCompletion, SimpleNormalCompletion } from "../completions.js";
 import { DeclarativeEnvironmentRecord } from "../environment.js";
@@ -40,8 +41,26 @@ function reportError(realm: Realm, loc: ?BabelNodeSourceLocation) {
   throw new FatalError();
 }
 
-// ECMA262 13.7.5.11
 export default function(
+  ast: BabelNodeForInStatement,
+  strictCode: boolean,
+  env: LexicalEnvironment,
+  realm: Realm,
+  labelSet: ?Array<string>
+): Value {
+  if (!realm.isInPureScope() || realm.instantRender.enabled)
+    return evaluateForIn(ast, strictCode, env, realm, labelSet);
+  // In pure scope, fall back to a residual loop if the loop cannot be unrolled.
+  let effects = evaluateSpeculatively(realm, () =>
+    realm.evaluateForEffects(() => evaluateForIn(ast, strictCode, env, realm, labelSet), undefined, "ForInStatement")
+  );
+  if (!(effects instanceof Effects)) return residualizeLoop(realm, ast, strictCode, env, labelSet, effects.failure);
+  realm.applyEffects(effects);
+  return realm.returnOrThrowCompletion(effects.result);
+}
+
+// ECMA262 13.7.5.11
+function evaluateForIn(
   ast: BabelNodeForInStatement,
   strictCode: boolean,
   env: LexicalEnvironment,

@@ -747,6 +747,11 @@ export class ResidualHeapVisitor {
         };
         // Queue up visiting of global binding exactly once in the globalGenerator scope.
         this._enqueueWithUnrelatedScope(this.globalGenerator, () => {
+          let declBindings = (this.globalEnvironmentRecord.$DeclarativeRecord: any).bindings;
+          if (declBindings && declBindings[name] && declBindings[name].hasLeaked) {
+            residualFunctionBinding.hasLeaked = true;
+            return;
+          }
           let value = this.realm.getGlobalLetBinding(name);
           if (value !== undefined) residualFunctionBinding.value = this.visitEquivalentValue(value);
         });

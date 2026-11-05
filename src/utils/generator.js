@@ -169,6 +169,7 @@ export type OperationDescriptorData = {
   templateSource?: string, // used by ABSTRACT_FROM_TEMPLATE
   typeComparisons?: Set<typeof Value>, // used by FULL_INVARIANT_ABSTRACT
   usesThis?: boolean, // used by FOR_STATEMENT_FUNC
+  usesArguments?: boolean, // used by FOR_STATEMENT_FUNC
   value?: Value, // used by DO_WHILE, CONDITIONAL_PROPERTY_ASSIGNMENT, LOGICAL_PROPERTY_ASSIGNMENT, LOCAL_ASSIGNMENT, CONDITIONAL_THROW, EMIT_PROPERTY_ASSIGNMENT
   violationConditionOperationDescriptor?: OperationDescriptor, // used by INVARIANT
 };
