@@ -9,7 +9,7 @@
 
 /* @flow */
 
-import type { Realm } from "../realm.js";
+import { Effects, type Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import { FatalError } from "../errors.js";
 import { Value } from "../values/index.js";
@@ -17,9 +17,9 @@ import { EmptyValue } from "../values/index.js";
 import { UpdateEmpty } from "../methods/index.js";
 import { LoopContinues, InternalGetResultValue } from "./ForOfStatement.js";
 import { AbruptCompletion, BreakCompletion, SimpleNormalCompletion } from "../completions.js";
-import { Environment, To } from "../singletons.js";
+import { Environment, To, Widen } from "../singletons.js";
 import invariant from "../invariant.js";
-import { residualizeLoop } from "./residualLoop.js";
+import { evaluateSpeculatively, residualizeLoop } from "./residualLoop.js";
 import type { BabelNodeDoWhileStatement } from "@babel/types";
 
 export default function(
@@ -90,20 +90,45 @@ export default function(
     let testResult = Environment.GetConditionValue(realm, exprRef);
     return [testResult, bodyResult];
   };
-  let result = realm.evaluateForFixpointEffects(iteration);
-  if (result !== undefined) {
-    let [outsideEffects, insideEffects, cond] = result;
-    let rval = outsideEffects.result;
-    let bodyGenerator = insideEffects.generator;
-    realm.applyEffects(outsideEffects);
-    let generator = realm.generator;
-    invariant(generator !== undefined);
-    generator.emitDoWhileStatement(cond, bodyGenerator);
-    invariant(rval instanceof SimpleNormalCompletion, "todo: handle loops that throw exceptions or return");
-    return rval.value;
+  let savedWiden = (Widen: any).beginFixpoint();
+  let fixpointEffects = evaluateSpeculatively(realm, () =>
+    realm.evaluateForEffects(
+      () => {
+        let result = realm.evaluateForFixpointEffects(iteration);
+        if (result === undefined) throw new FatalError("fixpoint failed");
+        let [outsideEffects, insideEffects, cond] = result;
+        let rval = outsideEffects.result;
+        let bodyGenerator = insideEffects.generator;
+        realm.applyEffects(outsideEffects);
+        let generator = realm.generator;
+        invariant(generator !== undefined);
+        generator.emitDoWhileStatement(cond, bodyGenerator);
+        invariant(rval instanceof SimpleNormalCompletion, "todo: handle loops that throw exceptions or return");
+        return rval.value;
+      },
+      undefined,
+      "DoWhileFixpoint"
+    )
+  );
+  let fixpointSucceeded = fixpointEffects instanceof Effects;
+  (Widen: any).endFixpoint(savedWiden, fixpointSucceeded);
+  if (fixpointSucceeded) {
+    invariant(fixpointEffects instanceof Effects);
+    realm.applyEffects(fixpointEffects);
+    return realm.returnOrThrowCompletion(fixpointEffects.result);
   }
 
-  // If we get here the fixpoint computation failed as well. Report the diagnostic from the unrolling and throw.
+  // If we get here the fixpoint computation failed as well. Fall back to a residual loop if possible.
+  if (realm.useAbstractInterpretation && !realm.instantRender.enabled) {
+    return residualizeLoop(
+      realm,
+      ast,
+      strictCode,
+      env,
+      labelSet,
+      `${resultOrDiagnostic.errorCode}: ${resultOrDiagnostic.message}`
+    );
+  }
   realm.handleError(resultOrDiagnostic);
   throw new FatalError();
 }

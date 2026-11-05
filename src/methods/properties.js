@@ -506,7 +506,7 @@ export class PropertiesImplementation {
 
     // We assume that simple objects have no getter/setter properties and
     // that all properties are writable.
-    if (!O.isSimpleObject()) {
+    if (!O.isSimpleObject() || (!realm.ignoreLeakLogic && O.mightBeLeakedObject() && realm.isInPureScope())) {
       if (realm.isInPureScope()) {
         // If we're in pure scope, we can leak the object and leave an
         // assignment in place.

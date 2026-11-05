@@ -900,11 +900,11 @@ export class ResidualOperationSerializer {
 
   _serializeForFunctionCall(
     { usesThis }: OperationDescriptorData,
-    [func, thisExpr]: Array<BabelNodeExpression>
+    [func, ...argNodes]: Array<BabelNodeExpression>
   ): BabelNodeExpression {
     return usesThis
-      ? t.callExpression(t.memberExpression(func, t.identifier("call")), [thisExpr])
-      : t.callExpression(func, []);
+      ? t.callExpression(t.memberExpression(func, t.identifier("call")), argNodes)
+      : t.callExpression(func, argNodes);
   }
 
   _serializeNewExpression(

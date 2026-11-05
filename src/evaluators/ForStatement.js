@@ -214,7 +214,7 @@ export default function(
   labelSet: ?Array<string>
 ): Value {
   // Trial iterations created by residualLoop.js must not be residualized themselves.
-  if (realm.isInPureScope() && !realm.instantRender.enabled && !(ast: any).prepackTrialLoop) {
+  if (realm.useAbstractInterpretation && !realm.instantRender.enabled && !(ast: any).prepackTrialLoop) {
     return tryToEvaluateForStatementOrLeaveAsAbstract(ast, strictCode, env, realm, labelSet);
   } else {
     return evaluateForStatement(ast, strictCode, env, realm, labelSet);

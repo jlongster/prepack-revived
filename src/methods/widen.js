@@ -34,6 +34,24 @@ import invariant from "../invariant.js";
 import { InternalSlotDescriptor } from "../descriptors.js";
 
 export class WidenImplementation {
+  _newlyWidenedBindings: Array<Binding> = [];
+  _newlyWidenedProperties: Array<PropertyBinding> = [];
+
+  beginFixpoint(): [Array<Binding>, Array<PropertyBinding>] {
+    let saved = [this._newlyWidenedBindings, this._newlyWidenedProperties];
+    this._newlyWidenedBindings = [];
+    this._newlyWidenedProperties = [];
+    return saved;
+  }
+
+  endFixpoint(saved: [Array<Binding>, Array<PropertyBinding>], succeeded: boolean): void {
+    if (!succeeded) {
+      for (let b of this._newlyWidenedBindings) delete b.phiNode;
+      for (let pb of this._newlyWidenedProperties) delete pb.pathNode;
+    }
+    [this._newlyWidenedBindings, this._newlyWidenedProperties] = saved;
+  }
+
   _widenArrays(
     realm: Realm,
     v1: Array<Value> | Array<{ $Key: void | Value, $Value: void | Value }>,
@@ -176,6 +194,7 @@ export class WidenImplementation {
             { skipInvariant: true }
           );
           b.phiNode = phiNode;
+          this._newlyWidenedBindings.push(b);
         }
         // Let the widened value be a reference to the phiNode of the binding
         invariant(phiNode.intrinsicName !== undefined);
@@ -257,6 +276,20 @@ export class WidenImplementation {
         }
         invariant(d2 !== undefined);
       }
+      if (b.object === realm.$GlobalObject) {
+        // Global properties emit inline GLOBAL_ASSIGNMENTs before _emitPropertyAssignments runs,
+        // which reorders reads of WIDEN_PROPERTY past writes in the loop body (#1722).
+        throw new FatalError("cannot widen global object property");
+      }
+      if (b === b.object.unknownProperty || (typeof b.key === "string" && b.key === +b.key + "")) {
+        for (let [propKey, pb] of b.object.properties) {
+          if (b.object instanceof ArrayValue && propKey === "length") continue;
+          if (!m1.has(pb) && !m2.has(pb) && pb.descriptor !== undefined) {
+            // Widening numeric/unknown properties drops pre-existing properties (#1722).
+            throw new FatalError("cannot widen indexed property on object with pre-existing properties");
+          }
+        }
+      }
       let result = this.widenDescriptors(realm, d1, d2);
       if (result && result.value instanceof AbstractValue && result.value.kind === "widened") {
         let rval = result.value;
@@ -318,6 +351,7 @@ export class WidenImplementation {
             throw new FatalError("todo: handle the case where key is an abstract value");
           }
           b.pathNode = pathNode;
+          this._newlyWidenedProperties.push(b);
         }
         result.value = pathNode;
       }
