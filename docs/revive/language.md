@@ -104,3 +104,5 @@ Abstract `yield`/`await` (layer 4) is not attempted. `await` during init still b
 | prettier | FAIL (PP1004 `catch {}`) | OK, digest-identical, with `--closedWorld`. With open world it stops cleanly at a `RegExp[Symbol.match]` on an abstract global |
 | mathjs | FAIL (PP1004 `1n`) | Parses and evaluates BigInt. It now stops at `seedrandom`'s residual loop (PP0037, loops track) |
 | babel-standalone, three | FAIL | FAIL (not language-related) |
+
+The `jsc` compatibility profile models an old JavaScriptCore. For typescript, prettier and highlight-js it reports PP0023 ("may terminate with exception: not an object") because that environment model lacks APIs these bundles probe. This is a reported diagnostic, not a silent miscompile.
