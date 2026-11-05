@@ -30,6 +30,7 @@
 import {
   DeclarativeEnvironmentRecord,
   EnvironmentRecord,
+  FunctionEnvironmentRecord,
   GlobalEnvironmentRecord,
   ObjectEnvironmentRecord,
   leakBinding,
@@ -74,7 +75,7 @@ import type {
 } from "@babel/types";
 
 const VALUE_NAME = "__prepack_loop_value";
-const ARGUMENTS_NAME = "__prepack_loop_arguments";
+const ARGUMENTS_NAME = "__prepack_args";
 const CODE_NAME = "__prepack_loop_exit";
 const KEY_NAME = "__prepack_loop_key";
 const ONCE_NAME = "__prepack_loop_once";
@@ -132,6 +133,8 @@ function exitCode(state: TransformState, kind: "break" | "continue", label: stri
   return i + 2;
 }
 
+let trialDepth = 0;
+
 function markExit(node: any) {
   node.prepackLoopExit = true;
   return node;
@@ -173,16 +176,28 @@ let LoopTransformVisitor = {
       state.unsupported = "the loop deletes an identifier";
     }
   },
+  "AssignmentExpression|UpdateExpression"(path: BabelTraversePath, state: TransformState) {
+    let target = path.isUpdateExpression() ? path.node.argument : path.node.left;
+    if (
+      t.isMemberExpression(target) &&
+      t.isIdentifier(target.object, { name: "arguments" }) &&
+      nearestFunction(path, false) === state.root
+    ) {
+      state.unsupported = "the loop mutates arguments elements";
+    }
+  },
   ThisExpression(path: BabelTraversePath, state: TransformState) {
     if (nearestFunction(path, false) === state.root) state.usesThis = true;
   },
   ReferencedIdentifier(path: BabelTraversePath, state: TransformState) {
     let name = path.node.name;
-    if (isReservedName(name)) {
+    if (!path.node.prepackGenerated && trialDepth === 0 && isReservedName(name)) {
       state.unsupported = `the loop uses the reserved name ${name}`;
     } else if (name === "arguments" && nearestFunction(path, false) === state.root) {
       state.usesArguments = true;
-      path.replaceWith(t.identifier(ARGUMENTS_NAME));
+      let id: any = t.identifier(ARGUMENTS_NAME);
+      id.prepackGenerated = true;
+      path.replaceWith(id);
     }
   },
   MetaProperty(path: BabelTraversePath, state: TransformState) {
@@ -389,7 +404,7 @@ function makeTrialBody(loop: BabelNodeStatement, labelSet: ?Array<string>): Babe
     let flag = t.identifier(ONCE_NAME);
     let node: any = t.forStatement(
       t.variableDeclaration("let", [t.variableDeclarator(flag, t.booleanLiteral(true))]),
-      flag,
+      t.identifier(ONCE_NAME),
       t.assignmentExpression("=", t.identifier(ONCE_NAME), t.booleanLiteral(false)),
       body
     );
@@ -575,7 +590,7 @@ function evaluateForInit(
   if (init == null || (init.type === "VariableDeclaration" && init.kind !== "var")) return ast;
   let stmt = init.type === "VariableDeclaration" ? init : t.expressionStatement((init: any));
   let effects = evaluateSpeculatively(realm, () =>
-    realm.evaluateForEffects(() => env.evaluate(stmt, strictCode), undefined, "residualLoop/init")
+    realm.evaluateForEffects(() => env.evaluateCompletionDeref(stmt, strictCode), undefined, "residualLoop/init")
   );
   if (!(effects instanceof Effects) || !(effects.result instanceof SimpleNormalCompletion)) return ast;
   realm.applyEffects(effects, "residualLoop/init");
@@ -587,6 +602,22 @@ function resolveName(env: LexicalEnvironment, name: string): void | EnvironmentR
     if (e.environmentRecord.HasBinding(name)) return e.environmentRecord;
   }
   return undefined;
+}
+
+function leakEnclosingFunctionBindings(realm: Realm, env: LexicalEnvironment): void {
+  for (let e = env; e; e = e.parent) {
+    let record = e.environmentRecord;
+    if (record instanceof FunctionEnvironmentRecord) {
+      for (let name of Object.keys(record.bindings)) {
+        if (name === "arguments") continue;
+        let b = record.bindings[name];
+        if (b !== undefined && b.initialized && b.value !== undefined && !b.hasLeaked) {
+          Leak.value(realm, b.value);
+        }
+      }
+      return;
+    }
+  }
 }
 
 function collectReadOnlyParams(
@@ -601,8 +632,10 @@ function collectReadOnlyParams(
     if (!(record instanceof DeclarativeEnvironmentRecord)) continue;
     if (record.creatingOptimizedFunction !== realm.currentOptimizedFunction) continue;
     let binding = record.bindings[name];
-    if (binding === undefined || !binding.initialized || binding.value === undefined || binding.hasLeaked) continue;
-    params.push({ name, value: binding.value });
+    if (binding === undefined || !binding.initialized || binding.hasLeaked) continue;
+    let val = binding.value;
+    if (val === undefined) continue;
+    params.push({ name, value: val });
   }
   return params;
 }
@@ -633,7 +666,9 @@ function leakForGlobalCode(
         leakBinding(binding);
         continue;
       }
-      let pb = realm.$GlobalObject.properties.get(name);
+      let globalObject = realm.$GlobalObject;
+      invariant(globalObject instanceof ObjectValue);
+      let pb = globalObject.properties.get(name);
       let desc = pb && pb.descriptor;
       let isDataProperty = desc instanceof PropertyDescriptor && desc.value instanceof Value;
       if (isDataProperty) Leak.value(realm, (desc: any).value);
@@ -653,9 +688,12 @@ function leakForGlobalCode(
 // Forget the values of the given global variables: from now on they are read from the global object.
 function havocGlobalProperties(realm: Realm, names: Array<string>): void {
   let globalObject = realm.$GlobalObject;
+  invariant(globalObject instanceof ObjectValue);
   for (let name of names) {
     let pb = globalObject.properties.get(name);
-    invariant(pb !== undefined && pb.descriptor instanceof PropertyDescriptor);
+    invariant(pb !== undefined);
+    let pbDesc = pb.descriptor;
+    invariant(pbDesc instanceof PropertyDescriptor);
     let value = AbstractValue.createTemporalFromBuildFunction(
       realm,
       Value,
@@ -663,7 +701,7 @@ function havocGlobalProperties(realm: Realm, names: Array<string>): void {
       createOperationDescriptor("OBJECT_GET_PARTIAL"),
       { skipInvariant: true, isPure: true }
     );
-    let desc = cloneDescriptor(pb.descriptor);
+    let desc = cloneDescriptor(pbDesc);
     invariant(desc !== undefined);
     desc.value = value;
     realm.recordModifiedProperty(pb);
@@ -711,11 +749,13 @@ export function residualizeLoop(
     // A helper called inside the loop may have mutated an outer local binding that was not syntactically assigned.
     res = attempt([]);
   }
-  if (res.effects === undefined) {
+  let effects = res.effects;
+  if (effects === undefined) {
     fail(realm, `${res.failure || "unknown reason"} (${reason})`, ast.loc);
   }
-  let { effects, loopEnv } = res;
+  let loopEnv = res.loopEnv;
   try {
+    invariant(effects !== undefined);
     let result = effects.result;
     if (result instanceof AbruptCompletion) fail(realm, `unexpected abrupt completion (${reason})`, ast.loc);
     invariant(result instanceof Completion);
@@ -785,19 +825,14 @@ function tryResidualLoop(
           loopEnvRec.InitializeBinding(VALUE_NAME, realm.intrinsics.undefined);
           (loopEnvRec: any).bindings[VALUE_NAME].mightHaveBeenCaptured = true;
         }
-        if (state.usesArguments) {
-          let argumentsValue = Environment.GetValue(realm, env.evaluate(t.identifier("arguments"), strictCode));
-          loopEnvRec.CreateImmutableBinding(ARGUMENTS_NAME, true);
-          loopEnvRec.InitializeBinding(ARGUMENTS_NAME, argumentsValue);
-          (loopEnvRec: any).bindings[ARGUMENTS_NAME].mightHaveBeenCaptured = true;
-        }
         let paramIds = params.map(p => t.identifier(p.name));
         let paramValues = params.map(p => p.value);
+        let wrapperParamIds = state.usesArguments ? [t.identifier(ARGUMENTS_NAME), ...paramIds] : paramIds;
         let wrapperStatements = [transformed.labeled];
         if (needsExitCode) wrapperStatements.push(t.returnStatement(t.numericLiteral(0)));
         let wrapperBody = t.blockStatement(wrapperStatements);
         let wrapper = new ECMAScriptSourceFunctionValue(realm);
-        wrapper.initialize(paramIds, wrapperBody);
+        wrapper.initialize(wrapperParamIds, wrapperBody);
         wrapper.$Environment = loopEnv;
 
         let thisVal;
@@ -809,6 +844,7 @@ function tryResidualLoop(
           globalProperties = leakForGlobalCode(realm, wrapper, state, loopEnv);
         } else {
           for (let v of paramValues) Leak.value(realm, v);
+          if (state.usesArguments) leakEnclosingFunctionBindings(realm, env);
           Leak.value(realm, wrapper);
           if (thisVal !== undefined) Leak.value(realm, thisVal);
         }
@@ -837,8 +873,24 @@ function tryResidualLoop(
                   trialEnv.environmentRecord.CreateImmutableBinding(KEY_NAME, true);
                   trialEnv.environmentRecord.InitializeBinding(KEY_NAME, key);
                 }
-                let trial = Functions.FunctionCreate(realm, "normal", paramIds, trialBody, trialEnv, strictCode);
-                return Call(realm, trial, thisVal || realm.intrinsics.undefined, paramValues);
+                let trialArgs = paramValues;
+                if (state.usesArguments) {
+                  let absArgs = AbstractValue.createTemporalFromBuildFunction(
+                    realm,
+                    ObjectValue,
+                    [],
+                    createOperationDescriptor("NOOP"),
+                    { skipInvariant: true }
+                  );
+                  trialArgs = [absArgs, ...paramValues];
+                }
+                let trial = Functions.FunctionCreate(realm, "normal", wrapperParamIds, trialBody, trialEnv, strictCode);
+                trialDepth++;
+                try {
+                  return Call(realm, trial, thisVal || realm.intrinsics.undefined, trialArgs);
+                } finally {
+                  trialDepth--;
+                }
               } finally {
                 realm.onDestroyScope(trialEnv);
               }
@@ -859,7 +911,10 @@ function tryResidualLoop(
           realm,
           needsExitCode ? NumberValue : UndefinedValue,
           args,
-          createOperationDescriptor("FOR_STATEMENT_FUNC", { usesThis: thisVal !== undefined })
+          createOperationDescriptor("FOR_STATEMENT_FUNC", {
+            usesThis: thisVal !== undefined,
+            usesArguments: state.usesArguments,
+          })
         );
         // Global variables assigned by the loop are read back after it.
         havocGlobalProperties(realm, globalProperties);

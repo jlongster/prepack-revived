@@ -899,12 +899,20 @@ export class ResidualOperationSerializer {
   }
 
   _serializeForFunctionCall(
-    { usesThis }: OperationDescriptorData,
+    { usesThis, usesArguments }: OperationDescriptorData,
     [func, ...argNodes]: Array<BabelNodeExpression>
   ): BabelNodeExpression {
+    let callArgs: Array<any> = argNodes;
+    if (usesArguments) {
+      if (usesThis) {
+        callArgs = [argNodes[0], t.identifier("arguments"), ...argNodes.slice(1)];
+      } else {
+        callArgs = [t.identifier("arguments"), ...argNodes];
+      }
+    }
     return usesThis
-      ? t.callExpression(t.memberExpression(func, t.identifier("call")), argNodes)
-      : t.callExpression(func, argNodes);
+      ? t.callExpression(t.memberExpression(func, t.identifier("call")), callArgs)
+      : t.callExpression(func, callArgs);
   }
 
   _serializeNewExpression(
