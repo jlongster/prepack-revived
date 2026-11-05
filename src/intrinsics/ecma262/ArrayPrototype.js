@@ -1153,35 +1153,35 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
-    let len = To.ToLength(realm, Get(realm, O, "length"));
+    return withConcreteLength(Get(realm, O, "length"), len => {
+      // 3. If len is zero, then
+      if (len === 0) {
+        // a. Perform ? Set(O, "length", 0, true).
+        Properties.Set(realm, O, "length", realm.intrinsics.zero, true);
 
-    // 3. If len is zero, then
-    if (len === 0) {
-      // a. Perform ? Set(O, "length", 0, true).
-      Properties.Set(realm, O, "length", realm.intrinsics.zero, true);
+        // b. Return undefined.
+        return realm.intrinsics.undefined;
+      } else {
+        // 4. Else len > 0,
+        // a. Let newLen be len-1.
+        let newLen = len - 1;
 
-      // b. Return undefined.
-      return realm.intrinsics.undefined;
-    } else {
-      // 4. Else len > 0,
-      // a. Let newLen be len-1.
-      let newLen = len - 1;
+        // b. Let indx be ! ToString(newLen).
+        let indx = new StringValue(realm, newLen + "");
 
-      // b. Let indx be ! ToString(newLen).
-      let indx = new StringValue(realm, newLen + "");
+        // c. Let element be ? Get(O, indx).
+        let element = Get(realm, O, indx);
 
-      // c. Let element be ? Get(O, indx).
-      let element = Get(realm, O, indx);
+        // d. Perform ? DeletePropertyOrThrow(O, indx).
+        Properties.DeletePropertyOrThrow(realm, O.throwIfNotConcreteObject(), indx);
 
-      // d. Perform ? DeletePropertyOrThrow(O, indx).
-      Properties.DeletePropertyOrThrow(realm, O.throwIfNotConcreteObject(), indx);
+        // e. Perform ? Set(O, "length", newLen, true).
+        Properties.Set(realm, O, "length", new NumberValue(realm, newLen), true);
 
-      // e. Perform ? Set(O, "length", newLen, true).
-      Properties.Set(realm, O, "length", new NumberValue(realm, newLen), true);
-
-      // f. Return element.
-      return element;
-    }
+        // f. Return element.
+        return element;
+      }
+    });
   });
 
   // ECMA262 22.1.3.18
@@ -1575,59 +1575,59 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 2. Let len be ? ToLength(? Get(O, "length")).
-    let len = To.ToLength(realm, Get(realm, O, "length"));
+    return withConcreteLength(Get(realm, O, "length"), len => {
+      // 3. If len is zero, then
+      if (len === 0) {
+        // a. Perform ? Set(O, "length", 0, true).
+        Properties.Set(realm, O, "length", realm.intrinsics.zero, true);
 
-    // 3. If len is zero, then
-    if (len === 0) {
-      // a. Perform ? Set(O, "length", 0, true).
-      Properties.Set(realm, O, "length", realm.intrinsics.zero, true);
-
-      // b. Return undefined.
-      return realm.intrinsics.undefined;
-    }
-
-    // 4. Let first be ? Get(O, "0").
-    let first = Get(realm, O, "0");
-
-    // 5. Let k be 1.
-    let k = 0;
-
-    // 6. Repeat, while k < len
-    while (k < len) {
-      // a. Let from be ! ToString(k).
-      let frm = new StringValue(realm, k + "");
-
-      // b. Let to be ! ToString(k-1).
-      let to = new StringValue(realm, k - 1 + "");
-
-      // c. Let fromPresent be ? HasProperty(O, from).
-      let fromPresent = HasProperty(realm, O, frm);
-
-      // d. If fromPresent is true, then
-      if (fromPresent) {
-        // i. Let fromVal be ? Get(O, from).
-        let fromVal = Get(realm, O, frm);
-
-        // ii. Perform ? Set(O, to, fromVal, true).
-        Properties.Set(realm, O, to, fromVal, true);
-      } else {
-        // d. Else fromPresent is false,
-        // i. Perform ? DeletePropertyOrThrow(O, to).
-        Properties.DeletePropertyOrThrow(realm, O.throwIfNotConcreteObject(), to);
+        // b. Return undefined.
+        return realm.intrinsics.undefined;
       }
 
-      // e. Increase k by 1.
-      k++;
-    }
+      // 4. Let first be ? Get(O, "0").
+      let first = Get(realm, O, "0");
 
-    // 7. Perform ? DeletePropertyOrThrow(O, ! ToString(len-1)).
-    Properties.DeletePropertyOrThrow(realm, O.throwIfNotConcreteObject(), new StringValue(realm, len - 1 + ""));
+      // 5. Let k be 1.
+      let k = 1;
 
-    // 8. Perform ? Set(O, "length", len-1, true).
-    Properties.Set(realm, O, "length", new NumberValue(realm, len - 1), true);
+      // 6. Repeat, while k < len
+      while (k < len) {
+        // a. Let from be ! ToString(k).
+        let frm = new StringValue(realm, k + "");
 
-    // 9. Return first.
-    return first;
+        // b. Let to be ! ToString(k-1).
+        let to = new StringValue(realm, k - 1 + "");
+
+        // c. Let fromPresent be ? HasProperty(O, from).
+        let fromPresent = HasProperty(realm, O, frm);
+
+        // d. If fromPresent is true, then
+        if (fromPresent) {
+          // i. Let fromVal be ? Get(O, from).
+          let fromVal = Get(realm, O, frm);
+
+          // ii. Perform ? Set(O, to, fromVal, true).
+          Properties.Set(realm, O, to, fromVal, true);
+        } else {
+          // d. Else fromPresent is false,
+          // i. Perform ? DeletePropertyOrThrow(O, to).
+          Properties.DeletePropertyOrThrow(realm, O.throwIfNotConcreteObject(), to);
+        }
+
+        // e. Increase k by 1.
+        k++;
+      }
+
+      // 7. Perform ? DeletePropertyOrThrow(O, ! ToString(len-1)).
+      Properties.DeletePropertyOrThrow(realm, O.throwIfNotConcreteObject(), new StringValue(realm, len - 1 + ""));
+
+      // 8. Perform ? Set(O, "length", len-1, true).
+      Properties.Set(realm, O, "length", new NumberValue(realm, len - 1), true);
+
+      // 9. Return first.
+      return first;
+    });
   });
 
   // ECMA262 22.1.3.23

@@ -303,36 +303,54 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
   }
 }
 
-// (c ? x : y) op z <=> c ? (x op z) : (y op z), if x, y and z are concrete primitives, so that both
-// branches fold to constants. (Keeps numeric facts such as the length of an array after a
-// conditional push precise.)
+// (c ? x : y) op z <=> c ? (x op z) : (y op z), if x, y and z are concrete primitives (or, recursively,
+// conditionals whose leaves are), so that every leaf folds to a constant. This keeps numeric facts
+// such as the length of an array after conditional pushes precise, and turns comparisons of such
+// values into boolean formulas over the conditions.
 function foldConditionalArithmetic(realm: Realm, value: AbstractValue, op: any): Value {
   if (value.args.length !== 2) return value;
   let [x, y] = value.args;
-  let condition, left, right;
-  if (x instanceof AbstractValue && x.kind === "conditional" && y instanceof PrimitiveValue) {
-    condition = x.args[0];
-    left = [x.args[1], y];
-    right = [x.args[2], y];
-  } else if (y instanceof AbstractValue && y.kind === "conditional" && x instanceof PrimitiveValue) {
-    condition = y.args[0];
-    left = [x, y.args[1]];
-    right = [x, y.args[2]];
-  } else {
-    return value;
-  }
-  if (!left.concat(right).every(v => v instanceof PrimitiveValue && !(v instanceof EmptyValue))) return value;
+  let isEquality = op === "===" || op === "!==" || op === "==" || op === "!=";
   // Only fold comparisons of numbers and strings. Folding comparisons of booleans would loop, since
   // simplifying the conditional result compares it with its own (boolean) branches.
-  if (
-    (op === "===" || op === "!==" || op === "==" || op === "!=") &&
-    !left.concat(right).every(v => v instanceof NumberValue || v instanceof StringValue)
-  )
-    return value;
-  let l = ValuesDomain.computeBinary(realm, op, (left[0]: any), (left[1]: any));
-  let r = ValuesDomain.computeBinary(realm, op, (right[0]: any), (right[1]: any));
-  if (!(l instanceof PrimitiveValue) || !(r instanceof PrimitiveValue)) return value;
-  return AbstractValue.createFromConditionalOp(realm, condition, l, r, value.expressionLocation);
+  let isFoldableLeaf = v =>
+    isEquality
+      ? v instanceof NumberValue || v instanceof StringValue
+      : v instanceof PrimitiveValue && !(v instanceof EmptyValue);
+  let budget = { leaves: 16 };
+  let result;
+  if (x instanceof AbstractValue && x.kind === "conditional" && isFoldableLeaf(y)) {
+    result = mapConditionalLeaves(realm, x, leaf => computeLeaf(realm, op, leaf, y), isFoldableLeaf, budget);
+  } else if (y instanceof AbstractValue && y.kind === "conditional" && isFoldableLeaf(x)) {
+    result = mapConditionalLeaves(realm, y, leaf => computeLeaf(realm, op, x, leaf), isFoldableLeaf, budget);
+  }
+  return result === undefined ? value : result;
+}
+
+function computeLeaf(realm: Realm, op: any, x: Value, y: Value): void | Value {
+  invariant(x instanceof ConcreteValue && y instanceof ConcreteValue);
+  let r = ValuesDomain.computeBinary(realm, op, x, y);
+  return r instanceof PrimitiveValue ? r : undefined;
+}
+
+function mapConditionalLeaves(
+  realm: Realm,
+  value: Value,
+  f: Value => void | Value,
+  isFoldableLeaf: Value => boolean,
+  budget: { leaves: number }
+): void | Value {
+  if (!(value instanceof AbstractValue)) {
+    if (!isFoldableLeaf(value) || --budget.leaves < 0) return undefined;
+    return f(value);
+  }
+  if (value.kind !== "conditional") return undefined;
+  let [c, l, r] = value.args;
+  let lr = mapConditionalLeaves(realm, l, f, isFoldableLeaf, budget);
+  if (lr === undefined) return undefined;
+  let rr = mapConditionalLeaves(realm, r, f, isFoldableLeaf, budget);
+  if (rr === undefined) return undefined;
+  return AbstractValue.createFromConditionalOp(realm, c, lr, rr, value.expressionLocation);
 }
 
 function distributeConditional(
