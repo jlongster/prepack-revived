@@ -26,6 +26,7 @@ import {
   Value,
 } from "../values/index.js";
 import { Functions } from "../singletons.js";
+import { installBuiltinSummaries } from "./summaries.js";
 
 import initializeObject from "./ecma262/Object.js";
 import initializeObjectPrototype from "./ecma262/ObjectPrototype.js";
@@ -508,6 +509,8 @@ export function initialize(i: Intrinsics, realm: Realm): Intrinsics {
     );
     i.__leakedValue = AbstractValue.createFromType(realm, Value, "leaked binding value", []);
   }
+
+  installBuiltinSummaries(i, realm);
 
   return i;
 }
