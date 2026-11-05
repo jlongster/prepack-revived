@@ -11,7 +11,7 @@
 
 import type { BabelNodeSourceLocation } from "@babel/types";
 import { FatalError, InfeasiblePathError } from "../errors.js";
-import { ValuesDomain } from "../domains/index.js";
+import { IntervalDomain, ValuesDomain } from "../domains/index.js";
 import invariant from "../invariant.js";
 import { Realm } from "../realm.js";
 import { AbstractValue, BooleanValue, ConcreteValue, StringValue, Value } from "../values/index.js";
@@ -58,6 +58,8 @@ export default function simplifyAndRefineAbstractValue(
     if (isRootSimplification) {
       realm.abstractValueImpliesCounter = 0;
       realm.inSimplificationPath = false;
+      negatedConjunctions.length = 0;
+      activeNegatedValues.length = 0;
     }
     realm.errorHandler = savedHandler;
     realm.isReadOnly = savedIsReadOnly;
@@ -67,6 +69,9 @@ export default function simplifyAndRefineAbstractValue(
 function simplify(realm, value: Value, isCondition: boolean = false, depth: number): Value {
   if (value instanceof ConcreteValue || depth > 5) return value;
   invariant(value instanceof AbstractValue);
+  if (value.mightHaveBeenDeleted() && AbstractValue._preservingEmpty) {
+    return simplifyWithEmpty(realm, value, isCondition, depth);
+  }
   if (isCondition || value.getType() === BooleanValue) {
     if (Path.implies(value, depth + 1)) return realm.intrinsics.true;
     if (Path.impliesNot(value, depth + 1)) return realm.intrinsics.false;
@@ -180,11 +185,36 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     case "<":
     case "<=":
     case ">":
-    case ">=":
+    case ">=": {
+      let byIntervals = decideByIntervals(realm, op, value.args);
+      if (byIntervals !== undefined) return byIntervals;
+      let folded = foldConditionalArithmetic(realm, value, op);
+      if (folded !== value) return simplify(realm, folded, isCondition, depth + 1);
       return distributeConditional(realm, value, isCondition, args =>
         AbstractValue.createFromBinaryOp(realm, op, args[0], args[1], loc, undefined, isCondition, true)
       );
-    case "+":
+    }
+    case "+": {
+      if (value.args.length !== 2) return value;
+      let [x0, y0] = value.args;
+      let x = simplify(realm, x0, false, depth + 1);
+      let y = simplify(realm, y0, false, depth + 1);
+      if (
+        x instanceof ConcreteValue &&
+        y instanceof ConcreteValue &&
+        !(x instanceof EmptyValue) &&
+        !(y instanceof EmptyValue)
+      ) {
+        return ValuesDomain.computeBinary(realm, "+", x, y);
+      }
+      if (x instanceof StringValue && x.value === "" && y.getType() === StringValue) return y;
+      if (y instanceof StringValue && y.value === "" && x.getType() === StringValue) return x;
+      let rebuilt =
+        x.equals(x0) && y.equals(y0)
+          ? value
+          : AbstractValue.createFromBinaryOp(realm, "+", x, y, loc, undefined, isCondition, true);
+      return rebuilt instanceof AbstractValue ? foldConditionalArithmetic(realm, rebuilt, "+") : rebuilt;
+    }
     case "-":
     case "*":
     case "/":
@@ -200,6 +230,8 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
     case "!=":
     case "===":
     case "!==": {
+      let byIntervals = decideByIntervals(realm, op, value.args);
+      if (byIntervals !== undefined) return byIntervals;
       let folded = foldConditionalArithmetic(realm, value, op);
       if (folded !== value) return simplify(realm, folded, isCondition, depth + 1);
       return simplifyEquality(realm, value, depth + 1);
@@ -210,7 +242,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       let x, y;
       if (c0 instanceof AbstractValue && c.mightBeFalse() && c.mightBeTrue()) {
         try {
-          x = Path.withCondition(c0, () => simplify(realm, x0, isCondition, depth + 1));
+          x = withAssumed(c0, () => simplify(realm, x0, isCondition, depth + 1));
         } catch (e) {
           if (e instanceof InfeasiblePathError) {
             // We now know that c0 cannot be be true on this path
@@ -219,7 +251,7 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
           throw e;
         }
         try {
-          y = Path.withInverseCondition(c0, () => simplify(realm, y0, isCondition, depth + 1));
+          y = withNegated(realm, c0, () => simplify(realm, y0, isCondition, depth + 1));
         } catch (e) {
           if (e instanceof InfeasiblePathError) {
             // We now know that c0 cannot be be false on this path
@@ -255,6 +287,27 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
       }
       // c ? x : x <=> x
       if (x.equals(y)) return x;
+      // If under c, y already simplifies to x, then (c ? x : y) <=> y; symmetrically for x under !c.
+      if (depth <= 3) {
+        if (y instanceof AbstractValue && !y.isTemporal()) {
+          try {
+            let yWhenC = Path.withCondition(c, () => simplify(realm, y, isCondition, depth + 1));
+            if (yWhenC.equals(x)) return y;
+          } catch (e) {
+            if (e instanceof InfeasiblePathError) return y;
+            throw e;
+          }
+        }
+        if (x instanceof AbstractValue && !x.isTemporal()) {
+          try {
+            let xWhenNotC = Path.withInverseCondition(c, () => simplify(realm, x, isCondition, depth + 1));
+            if (xWhenNotC.equals(y)) return x;
+          } catch (e) {
+            if (e instanceof InfeasiblePathError) return x;
+            throw e;
+          }
+        }
+      }
       // x ? x : y <=> x || y
       let cs = isCondition ? c : simplify(realm, c0, false, depth + 1);
       if (cs.equals(x)) return AbstractValue.createFromLogicalOp(realm, "||", x, y, loc, isCondition, true);
@@ -278,6 +331,24 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
         // c ? false : true <=> !c
         if (!x.mightNotBeFalse() && !y.mightNotBeTrue())
           return AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, isCondition);
+        if (x.getType() === BooleanValue && y.getType() === BooleanValue) {
+          if (isCondition || c.getType() === BooleanValue) {
+            // c ? x : false <=> c && x
+            if (!y.mightNotBeFalse()) return AbstractValue.createFromLogicalOp(realm, "&&", c, x, loc, isCondition);
+            // c ? true : y <=> c || y
+            if (!x.mightNotBeTrue()) return AbstractValue.createFromLogicalOp(realm, "||", c, y, loc, isCondition);
+          }
+          // c ? false : y <=> !c && y
+          if (!x.mightNotBeFalse()) {
+            let negC = AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, isCondition);
+            return AbstractValue.createFromLogicalOp(realm, "&&", negC, y, loc, isCondition);
+          }
+          // c ? x : true <=> !c || x
+          if (!y.mightNotBeTrue()) {
+            let negC = AbstractValue.createFromUnaryOp(realm, "!", c, true, loc, isCondition);
+            return AbstractValue.createFromLogicalOp(realm, "||", negC, x, loc, isCondition);
+          }
+        }
       }
       if (c.equals(c0) && x.equals(x0) && y.equals(y0)) return value;
       return AbstractValue.createFromConditionalOp(realm, c, x, y, value.expressionLocation, isCondition, true);
@@ -303,6 +374,132 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
   }
 }
 
+// Pairs [p, q] for which !(p && q) holds on the active simplification path.
+const negatedConjunctions: Array<[Value, Value]> = [];
+const activeNegatedValues: Array<AbstractValue> = [];
+
+function withAssumed<T>(condition: AbstractValue, fn: () => T): T {
+  return Path.withCondition(condition, () => propagateUnits(condition.$Realm, fn, 0));
+}
+
+function withNegated<T>(realm: Realm, condition: AbstractValue, fn: () => T): T {
+  let savedLen = negatedConjunctions.length;
+  let savedNegLen = activeNegatedValues.length;
+  activeNegatedValues.push(condition);
+  if (condition.kind === "&&" && negatedConjunctions.length < 16) {
+    negatedConjunctions.push([condition.args[0], condition.args[1]]);
+  } else if (condition.kind === "conditional" && negatedConjunctions.length < 15) {
+    let [cc, ca, cb] = condition.args;
+    negatedConjunctions.push([cc, ca]);
+    let notCc = AbstractValue.createFromUnaryOp(realm, "!", cc, true, undefined, true, true);
+    negatedConjunctions.push([notCc, cb]);
+  }
+  try {
+    return Path.withInverseCondition(condition, () => propagateUnits(realm, fn, 0));
+  } finally {
+    negatedConjunctions.length = savedLen;
+    activeNegatedValues.length = savedNegLen;
+  }
+}
+
+function isAlreadyNegated(v: AbstractValue): boolean {
+  for (let i = 0; i < activeNegatedValues.length; i++) {
+    if (activeNegatedValues[i] === v || activeNegatedValues[i].equals(v)) return true;
+  }
+  return false;
+}
+
+function propagateUnits<T>(realm: Realm, fn: () => T, depth: number): T {
+  if (depth < 4) {
+    for (let i = 0; i < negatedConjunctions.length; i++) {
+      let [p, q] = negatedConjunctions[i];
+      let pTrue = Path.implies(p);
+      let qTrue = Path.implies(q);
+      if (pTrue && qTrue) throw new InfeasiblePathError();
+      if (pTrue && q instanceof AbstractValue && q.mightBeTrue() && !isAlreadyNegated(q) && !Path.impliesNot(q)) {
+        return withNegated(realm, q, () => propagateUnits(realm, fn, depth + 1));
+      }
+      if (qTrue && p instanceof AbstractValue && p.mightBeTrue() && !isAlreadyNegated(p) && !Path.impliesNot(p)) {
+        return withNegated(realm, p, () => propagateUnits(realm, fn, depth + 1));
+      }
+    }
+  }
+  return fn();
+}
+
+// Safe simplification for values that may contain EmptyValue (__empty). General rules such as
+// equality or logical-operator rewrites must not run on EmptyValue because EmptyValue extends
+// UndefinedValue internally while serializing to an object sentinel ({}) at runtime.
+function simplifyWithEmpty(realm: Realm, value: AbstractValue, isCondition: boolean, depth: number): Value {
+  if (value.kind !== "conditional") return value;
+  let [c0, x0, y0] = value.args;
+  let c = simplify(realm, c0, true, depth + 1);
+  if (!c.mightNotBeTrue()) return simplify(realm, x0, isCondition, depth + 1);
+  if (!c.mightNotBeFalse()) return simplify(realm, y0, isCondition, depth + 1);
+  invariant(c instanceof AbstractValue);
+  if (Path.implies(c, depth + 1)) return simplify(realm, x0, isCondition, depth + 1);
+  if (Path.impliesNot(c, depth + 1)) return simplify(realm, y0, isCondition, depth + 1);
+
+  let x, y;
+  if (c0 instanceof AbstractValue) {
+    try {
+      x = withAssumed(c0, () => simplify(realm, x0, isCondition, depth + 1));
+    } catch (e) {
+      if (e instanceof InfeasiblePathError) return simplify(realm, y0, isCondition, depth + 1);
+      throw e;
+    }
+    try {
+      y = withNegated(realm, c0, () => simplify(realm, y0, isCondition, depth + 1));
+    } catch (e) {
+      if (e instanceof InfeasiblePathError) return x;
+      throw e;
+    }
+  } else {
+    x = simplify(realm, x0, isCondition, depth + 1);
+    y = simplify(realm, y0, isCondition, depth + 1);
+  }
+  if (x.equals(y)) return x;
+  let loc = value.expressionLocation;
+  // If pruning eliminated every EmptyValue, run full simplification on the remaining conditional.
+  if (!x.mightHaveBeenDeleted() && !y.mightHaveBeenDeleted()) {
+    return AbstractValue.createFromConditionalOp(realm, c, x, y, loc, isCondition);
+  }
+  // c1 ? (c2 ? v : empty) : empty <=> (c1 && c2) ? v : empty
+  if (
+    y instanceof EmptyValue &&
+    x instanceof AbstractValue &&
+    x.kind === "conditional" &&
+    x.args[2] instanceof EmptyValue
+  ) {
+    let both = AbstractValue.createFromLogicalOp(realm, "&&", c, x.args[0], loc, true);
+    return AbstractValue.createFromConditionalOp(realm, both, x.args[1], y, loc, isCondition, true);
+  }
+  // c1 ? empty : (c2 ? empty : v) <=> (c1 || c2) ? empty : v
+  if (
+    x instanceof EmptyValue &&
+    y instanceof AbstractValue &&
+    y.kind === "conditional" &&
+    y.args[1] instanceof EmptyValue
+  ) {
+    let either = AbstractValue.createFromLogicalOp(realm, "||", c, y.args[0], loc, true);
+    return AbstractValue.createFromConditionalOp(realm, either, x, y.args[2], loc, isCondition, true);
+  }
+  if (c.equals(c0) && x.equals(x0) && y.equals(y0)) return value;
+  return AbstractValue.createFromConditionalOp(realm, c, x, y, loc, isCondition, true);
+}
+
+function decideByIntervals(realm: Realm, op: any, args: Array<Value>): void | BooleanValue {
+  if (args.length !== 2) return undefined;
+  let [x, y] = args;
+  if (x.mightNotBeNumber() || y.mightNotBeNumber()) return undefined;
+  let a = IntervalDomain.of(x);
+  let b = IntervalDomain.of(y);
+  if (a === undefined || b === undefined) return undefined;
+  let decided = IntervalDomain.compare(op, a, b);
+  if (decided === undefined) return undefined;
+  return decided ? realm.intrinsics.true : realm.intrinsics.false;
+}
+
 // (c ? x : y) op z <=> c ? (x op z) : (y op z), if x, y and z are concrete primitives (or, recursively,
 // conditionals whose leaves are), so that every leaf folds to a constant. This keeps numeric facts
 // such as the length of an array after conditional pushes precise, and turns comparisons of such
@@ -310,6 +507,13 @@ function simplify(realm, value: Value, isCondition: boolean = false, depth: numb
 function foldConditionalArithmetic(realm: Realm, value: AbstractValue, op: any): Value {
   if (value.args.length !== 2) return value;
   let [x, y] = value.args;
+  // Do not distribute string concatenation over conditionals unless the string constant is short
+  // (at most 2 chars, e.g. ":" or "") — distributing a long prefix like `"btn active disabled "`
+  // duplicates the literal and prevents sharing `(c ? a : b)` across branches.
+  if (op === "+" && (x.getType() === StringValue || y.getType() === StringValue)) {
+    let constStr = x instanceof StringValue ? x.value : y instanceof StringValue ? y.value : undefined;
+    if (constStr === undefined || constStr.length > 2) return value;
+  }
   let isEquality = op === "===" || op === "!==" || op === "==" || op === "!=";
   // Only fold comparisons of numbers and strings. Folding comparisons of booleans would loop, since
   // simplifying the conditional result compares it with its own (boolean) branches.
@@ -317,12 +521,13 @@ function foldConditionalArithmetic(realm: Realm, value: AbstractValue, op: any):
     isEquality
       ? v instanceof NumberValue || v instanceof StringValue
       : v instanceof PrimitiveValue && !(v instanceof EmptyValue);
-  let budget = { leaves: 16 };
+  let budget = { nodes: 32 };
+  let memo = new Map();
   let result;
   if (x instanceof AbstractValue && x.kind === "conditional" && isFoldableLeaf(y)) {
-    result = mapConditionalLeaves(realm, x, leaf => computeLeaf(realm, op, leaf, y), isFoldableLeaf, budget);
+    result = mapConditionalLeaves(realm, x, leaf => computeLeaf(realm, op, leaf, y), isFoldableLeaf, budget, memo);
   } else if (y instanceof AbstractValue && y.kind === "conditional" && isFoldableLeaf(x)) {
-    result = mapConditionalLeaves(realm, y, leaf => computeLeaf(realm, op, x, leaf), isFoldableLeaf, budget);
+    result = mapConditionalLeaves(realm, y, leaf => computeLeaf(realm, op, x, leaf), isFoldableLeaf, budget, memo);
   }
   return result === undefined ? value : result;
 }
@@ -338,19 +543,33 @@ function mapConditionalLeaves(
   value: Value,
   f: Value => void | Value,
   isFoldableLeaf: Value => boolean,
-  budget: { leaves: number }
+  budget: { nodes: number },
+  memo: Map<AbstractValue, Value | null>
 ): void | Value {
   if (!(value instanceof AbstractValue)) {
-    if (!isFoldableLeaf(value) || --budget.leaves < 0) return undefined;
+    if (!isFoldableLeaf(value)) return undefined;
     return f(value);
   }
-  if (value.kind !== "conditional") return undefined;
+  let cached = memo.get(value);
+  if (cached !== undefined) return cached === null ? undefined : cached;
+  if (value.kind !== "conditional" || --budget.nodes < 0) {
+    memo.set(value, null);
+    return undefined;
+  }
   let [c, l, r] = value.args;
-  let lr = mapConditionalLeaves(realm, l, f, isFoldableLeaf, budget);
-  if (lr === undefined) return undefined;
-  let rr = mapConditionalLeaves(realm, r, f, isFoldableLeaf, budget);
-  if (rr === undefined) return undefined;
-  return AbstractValue.createFromConditionalOp(realm, c, lr, rr, value.expressionLocation);
+  let lr = mapConditionalLeaves(realm, l, f, isFoldableLeaf, budget, memo);
+  if (lr === undefined) {
+    memo.set(value, null);
+    return undefined;
+  }
+  let rr = mapConditionalLeaves(realm, r, f, isFoldableLeaf, budget, memo);
+  if (rr === undefined) {
+    memo.set(value, null);
+    return undefined;
+  }
+  let res = AbstractValue.createFromConditionalOp(realm, c, lr, rr, value.expressionLocation);
+  memo.set(value, res);
+  return res;
 }
 
 function distributeConditional(

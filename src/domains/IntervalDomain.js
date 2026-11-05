@@ -30,13 +30,15 @@ import {
      - every non-NaN value v satisfies lo <= v <= hi (-0 is treated as +0 for the bounds),
      - integral: every non-NaN value is a finite integer,
      - mayBeNaN / mayBeNegZero: whether NaN / -0 are possible.
-   Intervals are not stored on abstract values. They are derived on demand from the structure
-   of the value (its values domain, its kind and its arguments) and cached per value, which
-   keeps them sound under joins and widening: whatever produced the value also produced its
-   arguments, so the derivation only depends on immutable information.
+   Path-insensitive intervals are derived on demand from the immutable structure of the value
+   (its values domain, its kind and its arguments) and cached per value in a WeakMap, which
+   keeps them sound under joins and widening. When path conditions are active, IntervalDomain.of
+   propagates constraints from the path conditions through compound expressions without mutating
+   the path-insensitive cache.
 
    A solver (track 1B) can refine intervals later via IntervalDomain.refinementHook, which is
-   consulted after the structural derivation and may only return a sub-interval. */
+   consulted at the end of IntervalDomain.of (outside the path-insensitive cache) and met with
+   the derived interval so it may only tighten bounds. */
 
 const INT32_MIN = -2147483648;
 const INT32_MAX = 2147483647;
@@ -47,8 +49,8 @@ const MAX_DEPTH = 12;
 export default class IntervalDomain {
   constructor(lo: number, hi: number, integral: boolean, mayBeNaN: boolean, mayBeNegZero: boolean) {
     invariant(lo <= hi || (lo !== lo && hi !== hi), "empty or malformed interval");
-    this.lo = lo;
-    this.hi = hi;
+    this.lo = lo === 0 ? 0 : lo;
+    this.hi = hi === 0 ? 0 : hi;
     this.integral = integral && isFinite(lo) && isFinite(hi);
     this.mayBeNaN = mayBeNaN;
     this.mayBeNegZero = mayBeNegZero && lo <= 0 && hi >= 0;
@@ -65,7 +67,8 @@ export default class IntervalDomain {
   static uint32: IntervalDomain;
   static arrayLength: IntervalDomain;
 
-  // Optional refinement hook (e.g. an SMT solver). Must return an interval contained in the given one.
+  // Optional path-sensitive refinement hook (e.g. an SMT solver from track 1B).
+  // Called with (value, currentInterval); its result is met with currentInterval.
   static refinementHook: void | ((value: AbstractValue, interval: IntervalDomain) => IntervalDomain);
 
   static point(n: number): IntervalDomain {
@@ -95,7 +98,8 @@ export default class IntervalDomain {
   }
 
   meet(other: IntervalDomain): IntervalDomain {
-    if (this.isOnlyNaN() || other.isOnlyNaN()) return this.isOnlyNaN() ? this : other;
+    if (this.isOnlyNaN()) return this;
+    if (other.isOnlyNaN()) return this.mayBeNaN ? other : this;
     let lo = Math.max(this.lo, other.lo);
     let hi = Math.min(this.hi, other.hi);
     let integral = this.integral || other.integral;
@@ -103,8 +107,8 @@ export default class IntervalDomain {
       lo = Math.ceil(lo);
       hi = Math.floor(hi);
     }
-    // An empty meet means the value can only be NaN (or the path is infeasible); stay conservative.
-    if (!(lo <= hi)) return this;
+    // An empty numeric intersection means the value can only be NaN, or the path is infeasible.
+    if (!(lo <= hi)) return this.mayBeNaN && other.mayBeNaN ? IntervalDomain.point(NaN) : this;
     return new IntervalDomain(
       lo,
       hi,
@@ -141,7 +145,7 @@ export default class IntervalDomain {
     return IntervalDomain.integers(lo === 0 ? 0 : lo, hi === 0 ? 0 : hi);
   }
 
-  // Ask whether `this op other` is always true / always false. Returns undefined if unknown.
+  // Ask whether `a op b` is always true / always false for two number intervals. Returns undefined if unknown.
   static compare(op: BabelBinaryOperator, a: IntervalDomain, b: IntervalDomain): void | boolean {
     let mayBeNaN = a.mayBeNaN || b.mayBeNaN;
     if (a.isOnlyNaN() || b.isOnlyNaN()) {
@@ -164,7 +168,7 @@ export default class IntervalDomain {
       case "===":
       case "==":
         if (a.hi < b.lo || b.hi < a.lo) return false;
-        // Non-integral intervals of a single point can still only contain that point (and NaN).
+        // Single-point intervals (including +/-0) are equal unless NaN is possible.
         if (a.lo === a.hi && b.lo === b.hi && a.lo === b.lo && !mayBeNaN) return true;
         return undefined;
       case "!==":
@@ -178,23 +182,30 @@ export default class IntervalDomain {
   }
 
   // Returns the interval of a value that is known to be a number, or undefined if the value
-  // might not be a number.
-  // The interval takes the current path conditions into account.
+  // might not be a number. Takes the current path conditions into account.
   static of(value: Value): void | IntervalDomain {
-    let result = derive(value, 0);
-    if (result === undefined || !(value instanceof AbstractValue)) return result;
-    return refineWithPathConditions(value, result);
+    if (value instanceof NumberValue) return IntervalDomain.point(value.value);
+    if (!(value instanceof AbstractValue) || value.mightNotBeNumber()) return undefined;
+    let hasPath = hasAnyAssumedConditions(value.$Realm.pathConditions);
+    let result = hasPath ? deriveWithPath(value, 0, new Map()) : deriveBase(value, 0);
+    if (result === undefined) return undefined;
+    let hook = IntervalDomain.refinementHook;
+    if (hook !== undefined) result = result.meet(hook(value, result));
+    return result;
   }
 
   // Records how a derived (temporal) value was computed, so that its interval can be derived
   // from its operands like that of the equivalent non-temporal value.
   static noteDerivation(value: AbstractValue, args: Array<Value>, operationDescriptor: OperationDescriptor): void {
-    if (operationDescriptor.type === "BINARY_EXPRESSION") derivations.set(value, { args, operationDescriptor });
+    let type = operationDescriptor.type;
+    if (type === "BINARY_EXPRESSION" || type === "UNARY_EXPRESSION" || type === "ABSTRACT_FROM_TEMPLATE") {
+      derivations.set(value, { args, operationDescriptor });
+    }
   }
 
   // Returns the interval of ToNumber(value) for primitive values whose conversion is pure.
   static ofToNumber(value: Value): IntervalDomain {
-    return deriveToNumber(value, 0);
+    return deriveToNumber(value, 0, undefined);
   }
 
   // If value is a number that can only take a few values, return them (at most limit).
@@ -202,7 +213,11 @@ export default class IntervalDomain {
   // If ignoreNegZero is true, -0 may be represented by +0 (for callers that only use the number
   // as a length or index); otherwise undefined is returned when -0 is possible.
   static enumerate(value: Value, limit: number, ignoreNegZero: boolean): void | Array<number> {
-    if (value instanceof NumberValue) return [value.value];
+    if (value instanceof NumberValue) {
+      if (value.value !== value.value) return undefined;
+      if (Object.is(value.value, -0)) return ignoreNegZero ? [0] : undefined;
+      return [value.value];
+    }
     if (!(value instanceof AbstractValue) || value.mightNotBeNumber()) return undefined;
     if (!value.values.isTop()) {
       let range = IntervalDomain.of(value);
@@ -225,6 +240,7 @@ export default class IntervalDomain {
     let range = IntervalDomain.of(value);
     if (range === undefined || !range.integral || range.mayBeNaN || (range.mayBeNegZero && !ignoreNegZero))
       return undefined;
+    if (range.lo < -MAX_SAFE_LENGTH || range.hi > MAX_SAFE_LENGTH) return undefined;
     if (range.hi - range.lo + 1 > limit) return undefined;
     let result = [];
     for (let n = range.lo; n <= range.hi; n++) result.push(n);
@@ -258,15 +274,29 @@ IntervalDomain.arrayLength = IntervalDomain.integers(0, MAX_SAFE_LENGTH);
 
 const MAX_PATH_CONDITIONS = 64;
 
-// Meets the interval with facts of the form `value op constant` found in the path conditions,
+function hasAnyAssumedConditions(pc: mixed): boolean {
+  let cur = pc;
+  while (cur instanceof PathConditionsImplementation) {
+    if (!cur.isEmpty()) return true;
+    cur = cur._baseConditions;
+  }
+  return false;
+}
+
+// Meets interval with facts of the form `value op constant` found in the path conditions,
 // and picks the branch of a conditional value whose condition is implied by the path.
-function refineWithPathConditions(value: AbstractValue, interval: IntervalDomain): IntervalDomain {
+function refineWithPathConditions(
+  value: AbstractValue,
+  interval: IntervalDomain,
+  depth: number,
+  pathMemo: Map<AbstractValue, IntervalDomain | null>
+): IntervalDomain {
   let realm = value.$Realm;
   if (value.kind === "conditional") {
     let [c, x, y] = value.args;
     let branch = Path.implies(c) ? x : Path.impliesNot(c) ? y : undefined;
     if (branch !== undefined) {
-      let branchInterval = IntervalDomain.of(branch);
+      let branchInterval = deriveWithPath(branch, depth + 1, pathMemo);
       if (branchInterval !== undefined) interval = interval.meet(branchInterval);
     }
   }
@@ -323,11 +353,11 @@ function factAbout(value: AbstractValue, condition: AbstractValue, integral: boo
     case "==":
       return new IntervalDomain(k, k, Number.isInteger(k), false, k === 0);
     case "<":
-      return new IntervalDomain(-Infinity, integral ? Math.ceil(k) - 1 : k, false, mayBeNaN, true);
+      return new IntervalDomain(-Infinity, integral ? Math.ceil(k) - 1 : k, false, mayBeNaN, k > 0);
     case "<=":
       return new IntervalDomain(-Infinity, integral ? Math.floor(k) : k, false, mayBeNaN, true);
     case ">":
-      return new IntervalDomain(integral ? Math.floor(k) + 1 : k, Infinity, false, mayBeNaN, true);
+      return new IntervalDomain(integral ? Math.floor(k) + 1 : k, Infinity, false, mayBeNaN, k < 0);
     case ">=":
       return new IntervalDomain(integral ? Math.ceil(k) : k, Infinity, false, mayBeNaN, true);
     default:
@@ -335,27 +365,63 @@ function factAbout(value: AbstractValue, condition: AbstractValue, integral: boo
   }
 }
 
-const cache: WeakMap<AbstractValue, IntervalDomain | null> = new WeakMap();
-const derivations: WeakMap<AbstractValue, { args: Array<Value>, operationDescriptor: OperationDescriptor }> = new WeakMap();
+const baseCache: WeakMap<AbstractValue, IntervalDomain | null> = new WeakMap();
+const derivations: WeakMap<
+  AbstractValue,
+  { args: Array<Value>, operationDescriptor: OperationDescriptor }
+> = new WeakMap();
 
-function derive(value: Value, depth: number): void | IntervalDomain {
+function deriveBase(value: Value, depth: number): void | IntervalDomain {
   if (value instanceof NumberValue) return IntervalDomain.point(value.value);
   if (!(value instanceof AbstractValue) || value.mightNotBeNumber()) return undefined;
-  let cached = cache.get(value);
+  let cached = baseCache.get(value);
   if (cached !== undefined) return cached === null ? undefined : cached;
-  let result = depth > MAX_DEPTH ? IntervalDomain.top : deriveAbstract(value, depth);
-  let hook = IntervalDomain.refinementHook;
-  if (hook !== undefined && result !== IntervalDomain.top) result = hook(value, result);
-  if (depth <= MAX_DEPTH) cache.set(value, result);
+  let result = depth > MAX_DEPTH ? IntervalDomain.top : deriveAbstract(value, depth, undefined);
+  if (depth <= MAX_DEPTH) baseCache.set(value, result);
   return result;
 }
 
-function deriveToNumber(value: Value, depth: number): IntervalDomain {
+function deriveWithPath(
+  value: Value,
+  depth: number,
+  pathMemo: Map<AbstractValue, IntervalDomain | null>
+): void | IntervalDomain {
+  if (value instanceof NumberValue) return IntervalDomain.point(value.value);
+  if (!(value instanceof AbstractValue) || value.mightNotBeNumber()) return undefined;
+  let memoized = pathMemo.get(value);
+  if (memoized !== undefined) return memoized === null ? undefined : memoized;
+  let base = deriveBase(value, depth);
+  if (base === undefined) {
+    pathMemo.set(value, null);
+    return undefined;
+  }
+  if (depth > MAX_DEPTH) return base;
+  // Guard against cycles before recursing.
+  pathMemo.set(value, base);
+  let result = base.meet(deriveAbstract(value, depth, pathMemo));
+  result = refineWithPathConditions(value, result, depth, pathMemo);
+  pathMemo.set(value, result);
+  return result;
+}
+
+function deriveChild(
+  value: Value,
+  depth: number,
+  pathMemo: void | Map<AbstractValue, IntervalDomain | null>
+): void | IntervalDomain {
+  return pathMemo === undefined ? deriveBase(value, depth) : deriveWithPath(value, depth, pathMemo);
+}
+
+function deriveToNumber(
+  value: Value,
+  depth: number,
+  pathMemo: void | Map<AbstractValue, IntervalDomain | null>
+): IntervalDomain {
   if (value instanceof BooleanValue) return IntervalDomain.point(value.value ? 1 : 0);
   if (value instanceof NullValue) return IntervalDomain.point(0);
   if (value instanceof UndefinedValue) return IntervalDomain.point(NaN);
   if (value instanceof AbstractValue && value.getType() === BooleanValue) return IntervalDomain.integers(0, 1);
-  return derive(value, depth) || IntervalDomain.top;
+  return deriveChild(value, depth, pathMemo) || IntervalDomain.top;
 }
 
 function fromValuesDomain(value: AbstractValue): void | IntervalDomain {
@@ -369,58 +435,101 @@ function fromValuesDomain(value: AbstractValue): void | IntervalDomain {
   return result;
 }
 
-function deriveAbstract(value: AbstractValue, depth: number): IntervalDomain {
+function deriveAbstract(
+  value: AbstractValue,
+  depth: number,
+  pathMemo: void | Map<AbstractValue, IntervalDomain | null>
+): IntervalDomain {
   let fromValues = fromValuesDomain(value);
-  if (fromValues !== undefined) return fromValues;
+  if (fromValues !== undefined && value.kind !== "conditional") return fromValues;
   let args = value.args;
   let kind = value.kind;
-  // Temporal binary expressions (whose operands might have side effecting conversions) are
-  // derived values; if they produce a value, it is the same as that of the plain expression.
+  // Temporal expressions (whose operands might have side-effecting conversions) are derived
+  // values; if they return normally, their numeric result matches the underlying operation.
   let derivation = derivations.get(value);
   if (derivation !== undefined) {
     args = derivation.args;
-    kind = derivation.operationDescriptor.data.binaryOperator;
+    let desc = derivation.operationDescriptor;
+    if (desc.type === "BINARY_EXPRESSION") kind = desc.data.binaryOperator;
+    else if (desc.type === "UNARY_EXPRESSION") kind = desc.data.unaryOperator;
+    else if (desc.type === "ABSTRACT_FROM_TEMPLATE" && typeof desc.data.templateSource === "string")
+      kind = `template:${desc.data.templateSource}`;
   }
   let d = depth + 1;
   switch (kind) {
     case "conditional": {
-      let a = derive(args[1], d);
-      let b = derive(args[2], d);
-      if (a === undefined || b === undefined) return IntervalDomain.top;
-      return a.join(b);
+      let a = deriveChild(args[1], d, pathMemo);
+      let b = deriveChild(args[2], d, pathMemo);
+      if (a === undefined || b === undefined) return fromValues || IntervalDomain.top;
+      let joined = a.join(b);
+      return fromValues !== undefined ? joined.meet(fromValues) : joined;
     }
     case "+":
     case "-":
     case "*": {
       if (args.length !== 2) {
         // Unary minus and plus use the operator as kind as well.
-        let operand = deriveToNumber(args[0], d);
+        let operand = deriveToNumber(args[0], d, pathMemo);
         return kind === "-" ? negate(operand) : kind === "+" ? operand : IntervalDomain.top;
       }
       let [x, y] = args;
       if (!isPrimitiveNonString(x) || !isPrimitiveNonString(y)) return IntervalDomain.top;
-      return arithmetic(kind, deriveToNumber(x, d), deriveToNumber(y, d));
+      return arithmetic(kind, deriveToNumber(x, d, pathMemo), deriveToNumber(y, d, pathMemo));
     }
     case "%":
-      return remainder(deriveToNumber(args[0], d), deriveToNumber(args[1], d));
+      return remainder(deriveToNumber(args[0], d, pathMemo), deriveToNumber(args[1], d, pathMemo));
     case "&":
     case "|":
     case "^":
     case "<<":
     case ">>":
     case ">>>":
-      return bitwise(kind, deriveToNumber(args[0], d).toInt32(), deriveToNumber(args[1], d).toInt32());
+      return bitwise(
+        kind,
+        deriveToNumber(args[0], d, pathMemo).toInt32(),
+        deriveToNumber(args[1], d, pathMemo).toInt32()
+      );
     case "~":
       return IntervalDomain.int32;
     case "(A).length":
-      return IntervalDomain.arrayLength;
+    case "template:(A).length":
+      return args.length >= 1 ? stringLengthInterval(args[0], d) : IntervalDomain.arrayLength;
     default:
       if (typeof kind === "string" && kind.startsWith("template:global.Math.")) {
         let match = /^template:global\.Math\.(\w+)\(/.exec(kind);
-        if (match) return mathFunction(match[1], args.map(a => deriveToNumber(a, d)));
+        if (match) return mathFunction(match[1], args.map(a => deriveToNumber(a, d, pathMemo)));
       }
-      return IntervalDomain.top;
+      return fromValues || IntervalDomain.top;
   }
+}
+
+function stringLengthInterval(str: Value, depth: number): IntervalDomain {
+  if (depth > MAX_DEPTH) return IntervalDomain.arrayLength;
+  if (str instanceof StringValue) return IntervalDomain.point(str.value.length);
+  if (!(str instanceof AbstractValue) || str.getType() !== StringValue) return IntervalDomain.arrayLength;
+  if (!str.values.isTop()) {
+    let result;
+    for (let elem of str.values.getElements()) {
+      if (!(elem instanceof StringValue)) return IntervalDomain.arrayLength;
+      let p = IntervalDomain.point(elem.value.length);
+      result = result === undefined ? p : result.join(p);
+    }
+    if (result !== undefined) return result;
+  }
+  if (str.kind === "conditional") {
+    return stringLengthInterval(str.args[1], depth + 1).join(stringLengthInterval(str.args[2], depth + 1));
+  }
+  if (
+    str.kind === "+" &&
+    str.args.length === 2 &&
+    str.args[0].getType() === StringValue &&
+    str.args[1].getType() === StringValue
+  ) {
+    let a = stringLengthInterval(str.args[0], depth + 1);
+    let b = stringLengthInterval(str.args[1], depth + 1);
+    return IntervalDomain.integers(Math.min(MAX_SAFE_LENGTH, a.lo + b.lo), Math.min(MAX_SAFE_LENGTH, a.hi + b.hi));
+  }
+  return IntervalDomain.arrayLength;
 }
 
 function isPrimitiveNonString(v: Value): boolean {
@@ -441,21 +550,33 @@ function negate(a: IntervalDomain): IntervalDomain {
 function arithmetic(op: "+" | "-" | "*", a: IntervalDomain, b: IntervalDomain): IntervalDomain {
   if (a.isOnlyNaN() || b.isOnlyNaN()) return IntervalDomain.point(NaN);
   if (op === "-") return arithmetic("+", a, negate(b));
+  if (op === "+") {
+    // (+Infinity) + (-Infinity) is NaN even when neither endpoint sum (lo+lo, hi+hi) is NaN.
+    if ((a.lo === -Infinity && b.hi === Infinity) || (a.hi === Infinity && b.lo === -Infinity))
+      return IntervalDomain.top;
+  } else {
+    // 0 * +/-Infinity is NaN even when 0 is strictly inside one interval.
+    let aHasZero = a.lo <= 0 && a.hi >= 0;
+    let bHasZero = b.lo <= 0 && b.hi >= 0;
+    let aHasInf = !isFinite(a.lo) || !isFinite(a.hi);
+    let bHasInf = !isFinite(b.lo) || !isFinite(b.hi);
+    if ((aHasZero && bHasInf) || (bHasZero && aHasInf)) return IntervalDomain.top;
+  }
   let candidates = op === "+" ? [a.lo + b.lo, a.hi + b.hi] : [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi];
-  let mayBeNaN = a.mayBeNaN || b.mayBeNaN || candidates.some(c => c !== c);
-  // Infinity - Infinity or 0 * Infinity: the operands can produce NaN, give up on bounds.
   if (candidates.some(c => c !== c)) return IntervalDomain.top;
+  let mayBeNaN = a.mayBeNaN || b.mayBeNaN;
   let lo = Math.min(...candidates);
   let hi = Math.max(...candidates);
   let integral = a.integral && b.integral && isFinite(lo) && isFinite(hi);
-  // Sums of integers beyond 2^53 are still integers, but they might be rounded; bounds stay sound
-  // because rounding is monotone. -0 arises from -0 + -0, or from multiplying zero by a negative number.
+  // Sums of integers beyond 2^53 are still integers, though rounded; bounds stay sound because
+  // IEEE-754 rounding is monotone. -0 arises from -0 + -0, or from multiplying zero by a negative number.
   let mayBeNegZero = op === "+" ? a.mayBeNegZero && b.mayBeNegZero : lo <= 0 && hi >= 0;
   return new IntervalDomain(lo, hi, integral, mayBeNaN, mayBeNegZero);
 }
 
 function remainder(a: IntervalDomain, b: IntervalDomain): IntervalDomain {
   if (a.isOnlyNaN() || b.isOnlyNaN()) return IntervalDomain.point(NaN);
+  if (b.lo === 0 && b.hi === 0) return IntervalDomain.point(NaN);
   if (!a.integral || !b.integral) return IntervalDomain.top;
   let mayBeNaN = a.mayBeNaN || b.mayBeNaN || (b.lo <= 0 && b.hi >= 0);
   let m = Math.min(Math.max(Math.abs(b.lo), Math.abs(b.hi)) - 1, Math.max(Math.abs(a.lo), Math.abs(a.hi)));
@@ -482,6 +603,14 @@ function bitwise(op: string, a: IntervalDomain, b: IntervalDomain): IntervalDoma
     case "^":
       if (a.lo >= 0 && b.lo >= 0) return IntervalDomain.integers(0, allOnesAbove(Math.max(a.hi, b.hi)));
       return IntervalDomain.int32;
+    case "<<":
+      if (b.lo === b.hi) {
+        let s = b.lo & 31;
+        let factor = Math.pow(2, s);
+        if (a.lo * factor >= INT32_MIN && a.hi * factor <= INT32_MAX)
+          return IntervalDomain.integers(a.lo << s, a.hi << s);
+      }
+      return IntervalDomain.int32;
     case ">>":
       if (b.lo === b.hi) {
         let s = b.lo & 31;
@@ -489,9 +618,10 @@ function bitwise(op: string, a: IntervalDomain, b: IntervalDomain): IntervalDoma
       }
       return IntervalDomain.int32;
     case ">>>":
-      if (b.lo === b.hi && a.lo >= 0) {
+      if (b.lo === b.hi) {
         let s = b.lo & 31;
-        return IntervalDomain.integers(a.lo >>> s, a.hi >>> s);
+        if (a.lo >= 0) return IntervalDomain.integers(a.lo >>> s, a.hi >>> s);
+        if (s > 0) return IntervalDomain.integers(0, UINT32_MAX >>> s);
       }
       return IntervalDomain.uint32;
     default:
@@ -519,7 +649,7 @@ function mathFunction(name: string, args: Array<IntervalDomain>): IntervalDomain
         f(...args.map(a => a.hi)),
         args.every(a => a.integral),
         anyNaN,
-        args.some(a => a.mayBeNegZero) || (args.some(a => a.lo <= 0) && args.some(a => a.hi >= 0))
+        args.some(a => a.mayBeNegZero)
       );
     }
     case "abs": {

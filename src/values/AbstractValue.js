@@ -120,6 +120,7 @@ export default class AbstractValue extends Value {
   types: TypesDomain;
   values: ValuesDomain;
   mightBeEmpty: boolean;
+  static _preservingEmpty: boolean = false;
   args: Array<Value>;
   shape: void | ShapeInformationInterface;
   operationDescriptor: void | OperationDescriptor;
@@ -773,7 +774,18 @@ export default class AbstractValue extends Value {
     result.expressionLocation = loc;
     if (left) result.mightBeEmpty = left.mightHaveBeenDeleted();
     if (right && !result.mightBeEmpty) result.mightBeEmpty = right.mightHaveBeenDeleted();
-    if (doNotSimplify || result.mightBeEmpty) return result;
+    if (doNotSimplify) return result;
+    if (result.mightBeEmpty) {
+      let saved = AbstractValue._preservingEmpty;
+      AbstractValue._preservingEmpty = true;
+      try {
+        return isCondition
+          ? realm.simplifyAndRefineAbstractCondition(result)
+          : realm.simplifyAndRefineAbstractValue(result);
+      } finally {
+        AbstractValue._preservingEmpty = saved;
+      }
+    }
     return isCondition
       ? realm.simplifyAndRefineAbstractCondition(result)
       : realm.simplifyAndRefineAbstractValue(result);
