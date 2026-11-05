@@ -50,15 +50,15 @@ is worth it.</p>
 
 <p>Herman Venter <a href="https://github.com/facebookarchive/prepack/issues/24#issuecomment-408696869">wrote in 2018</a> that getting Prepack to run on real browser applications would take “a lot of very
 hard work and a long time,” and that shortcuts would produce something that works “only for some ill defined subset of
-JavaScript.” Both halves held up. The difference in 2026 is who does the hard work: a coordinated group of agents, each
-held to a scoreboard it couldn’t edit, with a fuzzer and a solver checking what they did. The final count is
+JavaScript.” Both halves held up. What made the hard work tractable this time was checking it: a corpus built from
+the tracker’s own hard cases, a differential fuzzer, and a solver that audits every rewrite. The final count is
 ${r.PASS} of 194 hard cases, with zero silently wrong.</p>
 
 <h3 id="links">Links</h3>
 
 <ul class="links">
   <li><a href="https://github.com/jlongster/prepack-revived">github.com/jlongster/prepack-revived</a>: the code, the corpus
-  (<code>test/serializer/hard/</code>), the track notes (<code>docs/revive/</code>) and this site (<code>site/</code>).
+  (<code>test/serializer/hard/</code>), the design notes (<code>docs/revive/</code>) and this site (<code>site/</code>).
   The repository is private for now.</li>
   <li><a href="https://jamesbox.exe.xyz/northstar/">Northstar Supply</a>: the React specialization running live
   (<a href="https://github.com/jlongster/northstar-supply">source</a>).</li>

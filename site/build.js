@@ -21,9 +21,9 @@ const parts = [
   {
     id: "part-1",
     num: "1",
-    title: "What Prepack was, and why it stopped",
-    short: "What Prepack was",
-    deck: "A partial evaluator for JavaScript, a bet on startup time, a React compiler, and eight problems its authors left open.",
+    title: "Prepack and its eight hard problems",
+    short: "Eight hard problems",
+    deck: "A partial evaluator for JavaScript, and the problems its authors left open, in their own words.",
     body: require("./src/parts/part1.js")(ctx),
   },
   {
@@ -31,7 +31,7 @@ const parts = [
     num: "2",
     title: "Reviving Prepack",
     short: "Reviving Prepack",
-    deck: "Parallel agents, a scoreboard they couldn’t edit, a fuzzer and an SMT solver, problem by problem, with the original and revived outputs side by side.",
+    deck: "Problem by problem: the technique, the key insight, what is still out of reach, and the original and revived outputs side by side.",
     body: require("./src/parts/part3.js")(ctx),
   },
   {

@@ -27,8 +27,7 @@ module.exports = (c, bench) => {
 <p>The benchmark corpus has 22 real libraries and app bundles, from 3.6 KB to 8.9 MB, each with a smoke test whose
 output digest must match the original’s in a fresh <code>node</code> process and in a <code>vm</code> context. Each is
 compiled under six option profiles (default, browser, seeded random, old JavaScriptCore, Node/React, lazy objects):
-132 compilations. When the benchmark was first added, Prepack produced 2 silently wrong libraries (11 of the profile
-runs) and failed on 8. Re-run for this article on the final build:</p>
+132 compilations. Results on the revived build:</p>
 
 <div class="stat-row w">
   <div class="stat"><span class="stat-num">${bench.runs.WRONG || 0}</span><span class="stat-label">wrong outputs in ${

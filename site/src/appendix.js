@@ -26,13 +26,13 @@ evaluates the expression shown in the “Run” table, so every “differs” ma
 <ul class="methods">
   <li><strong>Prepack 0.2.54</strong>: the last published release (October 8, 2018), from npm:
   <code>node node_modules/prepack/lib/prepack-cli.js input.js</code>.</li>
-  <li><strong>Revived Prepack</strong>: branch <code>revive</code> of the project repository, built with
+  <li><strong>Revived Prepack</strong>: the project repository, built with
   <code>yarn build</code>: <code>node lib/prepack-cli.js input.js</code>, Z3 4.16 installed (used by default).</li>
   <li>Everything ran on Node v26.7.0 on Linux x64, on November 5, 2026. Prepack runs with <code>TZ=UTC</code>.</li>
   <li>The corpus results below come from <code>node scripts/hard-scoreboard.js</code> run against each build on the same
   194 programs. The serializer suite count (3,744 of 3,744) is from <code>yarn test-serializer</code> on the same build.</li>
   <li>Quotes were copied from the GitHub and Hacker News APIs; each links to the specific comment, issue, gist or
-  source line. Intermediate scoreboard milestones and the fuzzing, Z3 and size statistics come from the track notes in
+  source line. The fuzzing, Z3 and size statistics come from the design notes in
   <code>docs/revive/</code>.</li>
 </ul>
 

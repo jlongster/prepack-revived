@@ -33,51 +33,26 @@ module.exports = c => {
     .join("");
 
   return `
-<p class="lede">The plan was written down before any code changed: a scoreboard first, one problem per agent, and no
-silent fixes. If something turned out to be impossible, the deliverable was a minimal example showing why.</p>
+<p class="lede">Each problem below gets the same treatment: what the original developers said about it, the
+technique the revived Prepack uses, what is still out of reach, and a real before/after. One rule holds throughout:
+when Prepack can’t show that a transformation is right, it stops with a diagnostic instead of emitting something that
+might be wrong. First, the overall result.</p>
 
-<h3 id="org">How the work was organized</h3>
+<h3 id="corpus">The hard-case corpus</h3>
 
 <div class="wn"><div class="b">
-<p><strong>Phase 0</strong> built the foundation in parallel. One agent revived the build (Babel 7, Flow and Jest from
-2018, now on Node 26) and recorded a baseline: 3,378 of 3,378 serializer tests passing. A second turned the issue
-tracker into a <em>hard-case corpus</em>: small, deterministic programs, each with a header naming the source issue
-and the goal. A third revived Prepack’s fuzzer and extended it to loops, <code>switch</code>, <code>try</code>,
-objects and closures.</p>
+<p>To measure the problems rather than argue about them, we turned the issue tracker into a corpus of 194 small,
+deterministic programs: the repros from the issues above, variants of them, minimized bugs found by a differential
+fuzzer, and excerpts of real libraries. Each program names its source issue and its goal in a header, and runs
+unchanged in plain Node, so every case can be checked by running the original and Prepack’s output side by side.</p>
+</div>${note(`<strong>Scoring.</strong> <code>scripts/hard-scoreboard.js</code> runs every corpus program in plain
+Node and through Prepack, runs both, and compares. A case is PASS only with no error, the same result, and output at
+most 2× the input. WRONG means Prepack reported success and the program computes something else.`)}</div>
 
-<p><strong>Phase 1</strong> ran six agents at once, one per area, each in its own git worktree: control-flow joins,
-a Z3 solver bridge, a numeric range domain, built-in summaries, loops, and recursion. <strong>Phase 2</strong> added
-environment models and a size cost model; then came integration, a second correctness round driven by the fuzzer,
-modern-language support, real-world blockers and the React work. Every merge re-ran the same gates.</p>
-</div>${note(`<strong>The scoreboard.</strong> <code>scripts/hard-scoreboard.js</code> runs every corpus program in
-plain Node and through Prepack, runs both, and compares. A case is PASS only with no error, the same result, and output
-at most 2× the input. WRONG means Prepack reported success and the program computes something else.`)}</div>
-
-<p>The rule that made parallel work safe was that the scoreboard, not the agent, decides. A track’s claim counted
-only if a failing case now passed, the full serializer suite still passed, and no case anywhere moved to WRONG.
-Agents could add cases but never edit or weaken existing ones, and “correctness beats coverage” was written into their
-instructions: when unsure, stop with a diagnostic. The coordinating session merged each branch and re-ran the gates
-itself.</p>
-
-<figure class="w chart">
-${stackedBars([
-  { label: "Phase 0 baseline (local build of the original)", PASS: 38, BLOAT: 16, CRASH: 63, WRONG: 16 },
-  { label: "Mid-project, before the size track", PASS: 104, BLOAT: 24, CRASH: 16, WRONG: 15 },
-  { label: "After the size cost model", PASS: 128, BLOAT: 1, CRASH: 15, WRONG: 15 },
-  { label: "After environment modeling", PASS: 150, BLOAT: 1, CRASH: 15, WRONG: 9 },
-  { label: "After correctness round 2", PASS: 187, BLOAT: 0, CRASH: 6, WRONG: 1 },
-  { label: "Final", PASS: r.PASS, BLOAT: r.BLOAT, CRASH: r.CRASH, WRONG: r.WRONG },
-])}
-${c.legend()}
-<figcaption>The hard-case corpus at each milestone. The corpus grew from 133 to 194 cases as the fuzzer and the
-real-world work found new bugs, which is why WRONG did not fall in a straight line. Intermediate rows are from the
-track notes in <code>docs/revive/</code>; the final row was re-measured for this article.</figcaption>
-</figure>
-
-<p>On the final 194-case corpus, the published Prepack 0.2.54 passes ${o.PASS}, crashes or reports an error on
-${o.CRASH}, and is <em>silently wrong</em> on ${o.WRONG}. The revived build passes ${r.PASS}, with ${r.WRONG} wrong
-and ${r.CRASH} clean errors. The serializer’s own regression suite grew from 3,378 to 3,744 test runs, all passing.
-Across 22 real-world libraries and six option profiles each, the revived build produces no wrong output.</p>
+<p>On the 194 cases, the published Prepack 0.2.54 passes ${o.PASS}, crashes or reports an error on ${o.CRASH}, and is
+<em>silently wrong</em> on ${o.WRONG}. The revived build passes ${r.PASS}, with ${r.WRONG} wrong and ${r.CRASH} clean
+errors. Prepack’s own regression suite passes 3,744 of 3,744 runs (the original has 3,378), and across 22 real-world
+libraries and six option profiles each, the revived build produces no wrong output.</p>
 
 <div class="table-wrap w"><table class="folders">
 <thead><tr><th scope="col">Corpus folder</th><th scope="col">0.2.54 passes</th><th scope="col">wrong</th><th scope="col">Revived passes</th><th scope="col">wrong</th></tr></thead>
@@ -88,13 +63,13 @@ Across 22 real-world libraries and six option profiles each, the revived build p
 <p>The four remaining errors are deliberate: a test that checks the duplicate-name diagnostic, an unfrozen object
 leaking from global code (reported, as the original test suite expects), a generator left suspended at the end of
 initialization (see <a href="#lang">modern JavaScript</a>), and one fuzzer case that bails out cleanly with correct
-recovered output. The rest of this part goes problem by problem.</p>
+recovered output.</p>
 
 <h3 id="a-loops">P1 · Loops</h3>
 
 ${quote("venter-1174")}
 
-<p>That was the plan in 2017. The loops agent implemented it as <code>residualLoop.js</code>. Prepack still tries to
+<p>That was the plan in 2017, and it is what the revived Prepack does, in <code>residualLoop.js</code>. It still tries to
 unroll a loop first. When that fails it rewrites the loop into a small closure, passes in the values the loop only
 reads, marks the objects it writes as escaped, and emits the loop as residual code at the right point in time. Before
 accepting the residual loop it evaluates one symbolic iteration against that state and checks every effect: if the
@@ -125,8 +100,8 @@ problem that is undecidable in general, and the residual loop sidesteps it only 
 
 ${quote("src-call-1586")}
 
-<p>The disabled code had five structural bugs (it always aborted at the end anyway). The recursion agent replaced it
-with <code>recursion.js</code>: recursion that stays concrete keeps unrolling, but as soon as a recursive call is
+<p>The disabled code had five structural bugs (it always aborted at the end anyway). It is replaced
+by <code>recursion.js</code>, built on one insight: recursion that stays concrete keeps unrolling, but as soon as a recursive call is
 reached under a new abstract condition, Prepack stops and emits a call to the original function. In optimized
 functions it first checks that the cluster of functions involved only touches state it can account for; in global code
 it snapshots everything the function reads and proves that nothing changes it afterwards.</p>
@@ -152,10 +127,10 @@ ${example("joins-2355", { caption: "#2355: <code>if (a) return true; return fals
 
 ${example("joins-labeled", { caption: "A <code>break</code> out of a labeled block under an unknown condition. 0.2.54 drops the break and folds the function to a constant." })}
 
-<p>The joins agent traced these to a handful of root causes: the saved-completion state was never scoped at
+<p>These trace back to a handful of root causes: the saved-completion state was never scoped at
 <code>switch</code>, labeled-statement and <code>try</code> boundaries; two simplifier rules erased boolean
-conversions; a joined completion reported only its first branch’s value. It also implemented the two features the
-tracker had asked for. <code>switch</code> on an unknown value (${I(1378)}, “level 4 (hard)”) now handles fall-through
+conversions; a joined completion reported only its first branch’s value. Fixing those made room for the two features
+the tracker had asked for. <code>switch</code> on an unknown value (${I(1378)}, “level 4 (hard)”) now handles fall-through
 and returns:</p>
 
 ${example("joins-switch-1378", {})}
@@ -166,19 +141,19 @@ now emitted as a residual <code>try</code>:</p>
 ${example("joins-try-2120", { caption: "0.2.54 reports PP0021 and prints code without the <code>catch</code>; that code throws where the original returns 42." })}
 
 <div class="wn"><div class="b">
-<p>The revived fuzzer generated 48,898 programs in its first campaigns, covering loops, labels, <code>switch</code>,
+<p>A differential fuzzer generated 48,898 programs covering loops, labels, <code>switch</code>,
 <code>try</code>, objects, arrays and closures. It found 1,260 silently wrong programs and 469 internal invariant
 failures, which minimized to dozens of distinct bugs. Every one became a corpus case: 44 now live in
 <code>test/serializer/hard/fuzz/</code>. On those 44, 0.2.54 is wrong on ${groups.fuzz.orig.WRONG} and crashes on
 ${groups.fuzz.orig.CRASH}. The revived build passes ${groups.fuzz.revived.PASS}.</p>
-</div>${note(`The agent’s design note concluded that the ten completion classes should eventually be replaced by a
+</div>${note(`A cleaner design would replace the ten completion classes with a
 single map from exit kind (<code>return</code>, <code>throw</code>, <code>break label</code>…) to a guarded branch.
-For this project they were patched instead: about 350 lines fixed every known bug without a rewrite.`)}</div>
+Patching them instead (about 350 lines) fixed every known bug without a rewrite.`)}</div>
 
 <h3 id="a-paths">P4 · Path conditions, checked by Z3</h3>
 
 <p>Prepack’s logic engine was a set of hand-written rewrite and implication rules. Rather than write better rules,
-the solver agent connected a real SMT solver. Z3 runs as a persistent child process behind two named pipes, so
+the revived Prepack asks a real SMT solver. Z3 runs as a persistent child process behind two named pipes, so
 Prepack, which is synchronous throughout, can ask it questions with blocking reads (about 1 ms per query). Every
 JavaScript value is encoded as a tagged datatype with exact IEEE-754 special cases for <code>NaN</code>,
 <code>±Infinity</code> and truthiness, and the encoding itself was tested against Node on 3,000 random expressions.</p>
@@ -211,7 +186,7 @@ numbers as exact reals, so it believes <code>x + 1 &gt; x</code> even at 2<sup>5
 
 <h3 id="a-ranges">P5 · Numeric facts</h3>
 
-<p>The range agent added an interval domain: every numeric abstract value carries bounds, whether it is an integer,
+<p>The fix is an interval domain: every numeric abstract value carries bounds, whether it is an integer,
 and whether it might be <code>NaN</code> or <code>-0</code>, derived from the expression and refined by the current
 path conditions. An array whose length is “0 or 1” can then be pushed to, by splitting on the few possible lengths:</p>
 
@@ -229,7 +204,7 @@ ${quote("venter-1891")}
 <p>That was the bind: anything handed to code Prepack couldn’t see had to be havoced, and havocing too much makes the
 analysis useless. ${I(2319)} listed Facebook’s top built-in bail-outs: <code>RegExp.prototype.test</code> (275),
 <code>Array.prototype.indexOf</code> (201), <code>parseInt</code> (176) and <code>Math.abs</code> (58). This is the
-kind of work an AI agent is good at and a small team never has time for: 81 built-ins now carry declarative effect
+kind of tedious, spec-heavy work a small team never has time for: 81 built-ins now carry declarative effect
 summaries (what they coerce, whether they can throw, whether they can run user code), each with a differential test.</p>
 
 ${example("builtins-2319", { caption: "All of #2319’s top four in one function. 0.2.54 reports three fatal errors, then prints code that happens to work." })}
@@ -256,7 +231,7 @@ ${example("env-process", { caption: "0.2.54 compiles a reference to <code>proces
 
 ${example("env-window", { caption: "Feature detection folded against Prepack’s own environment: in 0.2.54, a browser with <code>fetch</code> is told it has none." })}
 
-<p>The environment agent made three changes. Unknown globals are now <em>open-world</em>: they become residual
+<p>Three changes fix it. Unknown globals are now <em>open-world</em>: they become residual
 reads. Models for the DOM, Node and <code>Intl</code> are generated from TypeScript’s <code>lib.dom.d.ts</code> and
 <code>@types/node</code> (77 interfaces, 102 DOM globals), which, as it happens, is what a commenter on ${I(24)}
 suggested in 2017. And specializing on the environment is now explicit: <code>--assume</code> folds an assumption and
@@ -266,7 +241,7 @@ ${example("env-guard", { caption: "<code>--assume 'process.env.NODE_ENV=\"produc
 
 <h3 id="a-size">P8 · Output size</h3>
 
-<p>The size agent attacked bloat at three levels: serializer peepholes (dead intermediate writes, compact
+<p>The revived Prepack attacks bloat at three levels: serializer peepholes (dead intermediate writes, compact
 <code>Error</code> objects, <code>Object.create</code> instead of a prototype-swapping constructor), a cost model that
 decides at serialization time whether to write out a computed object graph or the code that computed it, and limits on
 inlining. The cost model is the important one:</p>
@@ -304,7 +279,7 @@ ${c.benchSection()}
 server rendering of a <em>known</em> app for <em>unknown</em> request data. The app is a 30-component e-commerce page
 (the same one behind the Northstar demo linked below); the data is a different
 product listing on every request. Instead of evaluating the real <code>react-dom/server</code>, which keeps its state
-in long-lived queues Prepack can’t summarize, the agent ported React’s server renderer into about 1,300 lines written
+in long-lived queues Prepack can’t summarize, we ported React’s server renderer into about 1,300 lines written
 in a style Prepack <em>can</em> evaluate: every function restores what it changes. The attribute tables are copied
 verbatim from react-dom 18.3.1. Prepack then specializes the whole render for a data schema inferred from training
 inputs. Here is one small component and the code Prepack produced for one place it is used:</p>
