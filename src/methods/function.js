@@ -37,6 +37,7 @@ import {
   Value,
 } from "../values/index.js";
 import { OrdinaryCallEvaluateBody, OrdinaryCallBindThis, PrepareForOrdinaryCall, Call } from "./call.js";
+import { tryResidualizeRecursiveCall, withActivation } from "./recursion.js";
 import { SameValue } from "../methods/abstract.js";
 import { Construct } from "../methods/construct.js";
 import { UpdateEmpty } from "../methods/index.js";
@@ -96,6 +97,10 @@ function InternalCall(
     if (F.$FunctionKind === "classConstructor")
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "not callable");
 
+    // Recursion driven by abstract values becomes a residual call instead of being unrolled.
+    let residualCall = tryResidualizeRecursiveCall(realm, F, thisArgument, argsList);
+    if (residualCall !== undefined) return residualCall;
+
     // 3. Let callerContext be the running execution context.
     let callerContext = realm.getRunningContext();
 
@@ -114,7 +119,7 @@ function InternalCall(
       OrdinaryCallBindThis(realm, F, calleeContext, thisArgument);
 
       // 7. Let result be OrdinaryCallEvaluateBody(F, argumentsList).
-      result = OrdinaryCallEvaluateBody(realm, F, argsList);
+      result = withActivation(realm, F, () => OrdinaryCallEvaluateBody(realm, F, argsList));
     } finally {
       // 8. Remove calleeContext from the execution context stack and restore callerContext as the running execution context.
       realm.popContext(calleeContext);
