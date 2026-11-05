@@ -58,7 +58,7 @@ import { getVerifiedRecomputeRecipes, type RecomputeRecipe } from "../methods/re
 import {
   canEmbedClassProperty,
   canIgnoreClassLengthProperty,
-  canSerializePromiseAsResolved,
+  canSerializeSettledPromise,
   ClassPropertiesToIgnore,
   getNaturalFunctionPrototype,
   getObjectPrototypeMetadata,
@@ -592,7 +592,16 @@ export class ResidualHeapVisitor {
       return;
     }
 
-    invariant(!(val instanceof NativeFunctionValue), "all native function values should be intrinsics");
+    if (val instanceof NativeFunctionValue) {
+      let diag = new CompilerDiagnostic(
+        "Internal native functions (such as Promise resolving functions) cannot be serialized in residual heap",
+        val.expressionLocation,
+        "PP0001",
+        "FatalError"
+      );
+      this.realm.handleError(diag);
+      throw new FatalError();
+    }
 
     invariant(val instanceof ECMAScriptSourceFunctionValue);
     invariant(val.constructor === ECMAScriptSourceFunctionValue);
@@ -1034,13 +1043,12 @@ export class ResidualHeapVisitor {
         this.visitValueWeakSet(val);
         return;
       case "Promise": {
-        if (!canSerializePromiseAsResolved(val)) {
-          let diag = new CompilerDiagnostic(
-            "Only fulfilled Promises with non-thenable values can be serialized in residual heap",
-            val.expressionLocation,
-            "PP0001",
-            "FatalError"
-          );
+        if (!canSerializeSettledPromise(val)) {
+          let msg =
+            val.$PromiseState === "pending"
+              ? "Pending Promises cannot be serialized in residual heap"
+              : "Fulfilled Promises with thenable or abstract-object values cannot be serialized in residual heap";
+          let diag = new CompilerDiagnostic(msg, val.expressionLocation, "PP0001", "FatalError");
           this.realm.handleError(diag);
           throw new FatalError();
         }

@@ -77,7 +77,7 @@ import {
   getSuggestedArrayLiteralLength,
   ClassPropertiesToIgnore,
   canIgnoreClassLengthProperty,
-  canSerializePromiseAsResolved,
+  canSerializeSettledPromise,
   getNaturalFunctionPrototype,
   getObjectPrototypeMetadata,
 } from "./utils.js";
@@ -1625,12 +1625,12 @@ export class ResidualHeapSerializer {
   }
 
   _serializeValuePromise(val: ObjectValue): BabelNodeExpression {
-    invariant(canSerializePromiseAsResolved(val));
+    invariant(canSerializeSettledPromise(val));
     let result = val.$PromiseResult;
     invariant(result instanceof Value);
     if (this.emitter.getReasonToWaitForDependencies(result)) {
       let diag = new CompilerDiagnostic(
-        "Cyclic fulfilled Promise cannot be serialized in residual heap",
+        "Cyclic settled Promise cannot be serialized in residual heap",
         val.expressionLocation,
         "PP0001",
         "FatalError"
@@ -1640,6 +1640,31 @@ export class ResidualHeapSerializer {
     }
     let serializedResult = this.serializeValue(result);
     this._emitObjectProperties(val);
+    if (val.$PromiseState === "rejected") {
+      if (val.$PromiseIsHandled === true) {
+        let semaphore = this._acquireOneObjectSemaphore(val);
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          [val],
+          () => {
+            let uid = this.getSerializeObjectIdentifier(val);
+            this.emitter.emit(
+              t.expressionStatement(
+                t.callExpression(t.memberExpression(uid, t.identifier("catch")), [
+                  t.functionExpression(null, [], t.blockStatement([])),
+                ])
+              )
+            );
+            if (semaphore !== undefined) semaphore.releaseOne();
+          },
+          this.emitter.getBody()
+        );
+      }
+      let rejectArgs = result instanceof UndefinedValue ? [] : [serializedResult];
+      return t.callExpression(
+        t.memberExpression(this.preludeGenerator.memoizeReference("Promise"), t.identifier("reject")),
+        rejectArgs
+      );
+    }
     let args = result instanceof UndefinedValue ? [] : [serializedResult];
     return t.callExpression(
       t.memberExpression(this.preludeGenerator.memoizeReference("Promise"), t.identifier("resolve")),

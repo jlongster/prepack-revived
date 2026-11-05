@@ -1882,7 +1882,14 @@ export class PropertiesImplementation {
   }
 
   ThrowIfInternalSlotNotWritable<T: ObjectValue>(realm: Realm, object: T, key: string): T {
-    if (!realm.isNewObject(object)) {
+    if (
+      !realm.isNewObject(object) &&
+      (realm.modifiedProperties !== undefined ||
+        realm.isReadOnly ||
+        realm.isInPureScope() ||
+        !realm.pathConditions.isEmpty() ||
+        realm.savedCompletion !== undefined)
+    ) {
       AbstractValue.reportIntrospectionError(object, key);
       throw new FatalError();
     }

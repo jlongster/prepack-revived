@@ -160,6 +160,7 @@ export class Effects {
 export class Tracer {
   beginEvaluateForEffects(state: any): void {}
   endEvaluateForEffects(state: any, effects: void | Effects): void {}
+  onApplyEffects(effects: Effects, appendGenerator: boolean): void {}
   detourCall(
     F: FunctionValue,
     thisArgument: void | Value,
@@ -1532,6 +1533,7 @@ export class Realm {
         });
       }
     }
+    for (let t1 of this.tracers) t1.onApplyEffects(effects, appendGenerator);
   }
 
   outputToConsole(method: ConsoleMethodTypes, args: Array<string | ConcreteValue>): void {

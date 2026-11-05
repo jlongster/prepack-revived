@@ -246,14 +246,12 @@ function execInContext(code) {
     logOutput += "\n" + prefix + values.join("");
   }
 
+  let onUnhandled = () => {};
+  let onHandled = () => {};
+  process.on("unhandledRejection", onUnhandled);
+  process.on("rejectionHandled", onHandled);
   try {
-    new vm.Script(
-      `var global = this;
-      var self = this;
-      ${code}
-      report(inspect());`,
-      { cachedDataProduced: false }
-    ).runInNewContext({
+    let ctx = vm.createContext({
       setTimeout: setTimeout,
       setInterval: setInterval,
       clearTimeout: clearTimeout,
@@ -273,8 +271,20 @@ function execInContext(code) {
         },
       },
     });
+    new vm.Script(
+      `var global = this;
+      var self = this;
+      ${code}`,
+      { cachedDataProduced: false }
+    ).runInContext(ctx);
+    if (typeof (process: any)._tickCallback === "function") (process: any)._tickCallback();
+    new vm.Script(`report(inspect());`, { cachedDataProduced: false }).runInContext(ctx);
+    if (typeof (process: any)._tickCallback === "function") (process: any)._tickCallback();
   } catch (e) {
     return Promise.reject(e);
+  } finally {
+    process.removeListener("unhandledRejection", onUnhandled);
+    process.removeListener("rejectionHandled", onHandled);
   }
   if (result && typeof result.then === "function") {
     return result.then(function(resultOutput) {

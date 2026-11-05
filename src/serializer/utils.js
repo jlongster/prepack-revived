@@ -239,7 +239,10 @@ function mightHaveThenProperty(obj: ObjectValue): boolean {
   return cur !== null && !(cur instanceof NullValue);
 }
 
-export function canSerializePromiseAsResolved(val: ObjectValue): boolean {
+export function canSerializeSettledPromise(val: ObjectValue): boolean {
+  if (val.$PromiseState === "rejected") {
+    return val.$PromiseResult instanceof Value;
+  }
   if (val.$PromiseState !== "fulfilled") return false;
   let res = val.$PromiseResult;
   if (!(res instanceof Value)) return false;
@@ -251,6 +254,8 @@ export function canSerializePromiseAsResolved(val: ObjectValue): boolean {
   }
   return true;
 }
+
+export const canSerializePromiseAsResolved = canSerializeSettledPromise;
 
 export function getObjectPrototypeMetadata(
   realm: Realm,

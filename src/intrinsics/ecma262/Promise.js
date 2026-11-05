@@ -10,7 +10,8 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { ObjectValue, FunctionValue, NativeFunctionValue } from "../../values/index.js";
+import { ObjectValue, FunctionValue, NativeFunctionValue, StringValue } from "../../values/index.js";
+import { CompilerDiagnostic, FatalError } from "../../errors.js";
 import { AbruptCompletion } from "../../completions.js";
 import {
   NewPromiseCapability,
@@ -18,14 +19,33 @@ import {
   PerformPromiseRace,
   CreateResolvingFunctions,
 } from "../../methods/promise.js";
-import { IsCallable, Call, GetIterator, SameValuePartial, Get, IsPromise } from "../../methods/index.js";
-import { IteratorClose } from "../../methods/iterator.js";
+import {
+  IsCallable,
+  Call,
+  GetIterator,
+  SameValuePartial,
+  Get,
+  IsPromise,
+  Invoke,
+  IsConstructor,
+} from "../../methods/index.js";
+import { IteratorClose, IteratorStep, IteratorValue } from "../../methods/iterator.js";
 import { Create } from "../../singletons.js";
 import invariant from "../../invariant.js";
 
 export default function(realm: Realm): NativeFunctionValue {
   // ECMA262 25.4.3.1
   let func = new NativeFunctionValue(realm, "Promise", "Promise", 1, (context, [executor], argCount, NewTarget) => {
+    if (realm.isInPureScope()) {
+      let diag = new CompilerDiagnostic(
+        "Constructing a Promise in pure scope is residualized",
+        realm.currentLocation,
+        "PP0001",
+        "FatalError"
+      );
+      realm.handleError(diag);
+      throw new FatalError();
+    }
     // 1. If NewTarget is undefined, throw a TypeError exception.
     if (!NewTarget) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
@@ -200,6 +220,138 @@ export default function(realm: Realm): NativeFunctionValue {
 
     // 9. Return Completion(result).
     return result;
+  });
+
+  // ECMA262 27.2.4.2 Promise.allSettled
+  func.defineNativeMethod("allSettled", 1, (context, [iterable]) => {
+    let C = context.throwIfNotConcrete();
+    if (!(C instanceof ObjectValue)) {
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+    }
+    let promiseCapability = NewPromiseCapability(realm, C);
+    let promiseResolve;
+    try {
+      promiseResolve = Get(realm, C, "resolve");
+      if (!IsCallable(realm, promiseResolve)) {
+        throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError);
+      }
+    } catch (e) {
+      if (e instanceof AbruptCompletion) {
+        Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [e.value]);
+        return promiseCapability.promise;
+      }
+      throw e;
+    }
+    let iterator;
+    try {
+      iterator = GetIterator(realm, iterable);
+    } catch (e) {
+      if (e instanceof AbruptCompletion) {
+        Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [e.value]);
+        return promiseCapability.promise;
+      }
+      throw e;
+    }
+    let iteratorRecord = { $Iterator: iterator, $Done: false };
+    try {
+      invariant(C instanceof FunctionValue && IsConstructor(realm, C));
+      let values = [];
+      let remainingElementsCount = { value: 1 };
+      let index = 0;
+      while (true) {
+        let next;
+        try {
+          next = IteratorStep(realm, iteratorRecord.$Iterator);
+        } catch (e) {
+          if (e instanceof AbruptCompletion) iteratorRecord.$Done = true;
+          throw e;
+        }
+        if (next === false) {
+          iteratorRecord.$Done = true;
+          remainingElementsCount.value -= 1;
+          if (remainingElementsCount.value === 0) {
+            let valuesArray = Create.CreateArrayFromList(realm, values);
+            Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [valuesArray]);
+          }
+          return promiseCapability.promise;
+        }
+        let nextValue;
+        try {
+          nextValue = IteratorValue(realm, next);
+        } catch (e) {
+          if (e instanceof AbruptCompletion) iteratorRecord.$Done = true;
+          throw e;
+        }
+        values.push(realm.intrinsics.undefined);
+        let nextPromise = Call(realm, promiseResolve, C, [nextValue]);
+        let alreadyCalled = { value: false };
+        let myIndex = index;
+        let onFulfilled = new NativeFunctionValue(
+          realm,
+          undefined,
+          undefined,
+          1,
+          (_ctx, [x]) => {
+            if (alreadyCalled.value) return realm.intrinsics.undefined;
+            alreadyCalled.value = true;
+            let obj = Create.ObjectCreate(realm, realm.intrinsics.ObjectPrototype);
+            Create.CreateDataProperty(realm, obj, "status", new StringValue(realm, "fulfilled"));
+            Create.CreateDataProperty(realm, obj, "value", x);
+            values[myIndex] = obj;
+            remainingElementsCount.value -= 1;
+            if (remainingElementsCount.value === 0) {
+              let valuesArray = Create.CreateArrayFromList(realm, values);
+              Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [valuesArray]);
+            }
+            return realm.intrinsics.undefined;
+          },
+          false
+        );
+        let onRejected = new NativeFunctionValue(
+          realm,
+          undefined,
+          undefined,
+          1,
+          (_ctx, [r]) => {
+            if (alreadyCalled.value) return realm.intrinsics.undefined;
+            alreadyCalled.value = true;
+            let obj = Create.ObjectCreate(realm, realm.intrinsics.ObjectPrototype);
+            Create.CreateDataProperty(realm, obj, "status", new StringValue(realm, "rejected"));
+            Create.CreateDataProperty(realm, obj, "reason", r);
+            values[myIndex] = obj;
+            remainingElementsCount.value -= 1;
+            if (remainingElementsCount.value === 0) {
+              let valuesArray = Create.CreateArrayFromList(realm, values);
+              Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [valuesArray]);
+            }
+            return realm.intrinsics.undefined;
+          },
+          false
+        );
+        remainingElementsCount.value += 1;
+        Invoke(realm, nextPromise, "then", [onFulfilled, onRejected]);
+        index += 1;
+      }
+    } catch (e) {
+      if (e instanceof AbruptCompletion) {
+        let result;
+        if (iteratorRecord.$Done === false) {
+          try {
+            result = IteratorClose(realm, iterator, e).value;
+          } catch (resultCompletion) {
+            if (resultCompletion instanceof AbruptCompletion) {
+              result = resultCompletion.value;
+            } else throw resultCompletion;
+          }
+        } else {
+          result = e.value;
+        }
+        Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [result]);
+        return promiseCapability.promise;
+      }
+      throw e;
+    }
+    invariant(false);
   });
 
   // ECMA262 25.4.4.4

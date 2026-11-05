@@ -9,8 +9,9 @@
 
 /* @flow */
 
-import type { Realm } from "../realm.js";
+import type { Effects, Realm, Tracer } from "../realm.js";
 import type { ResolvingFunctions, PromiseCapability, PromiseReaction } from "../types.js";
+import type { BabelNodeSourceLocation } from "@babel/types";
 import { AbruptCompletion } from "../completions.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import {
@@ -30,16 +31,136 @@ import { IteratorStep, IteratorValue } from "./iterator.js";
 import { Create, Properties } from "../singletons.js";
 import invariant from "../invariant.js";
 
-// ECMA262 8.4.1
-export function EnqueueJob(realm: Realm, queueName: string, job: Function, args: Array<any>): void {
-  let diag = new CompilerDiagnostic(
-    "Promise reaction jobs during initialization are not yet supported",
-    realm.currentLocation,
-    "PP0001",
-    "FatalError"
-  );
+type PendingJob = {
+  queueName: string,
+  job: Function,
+  args: Array<any>,
+  loc: ?BabelNodeSourceLocation,
+};
+
+type PromiseJobQueueState = {
+  acceptingJobs: boolean,
+  tracerInstalled: boolean,
+  rootJobs: Array<PendingJob>,
+  effectsJobStack: Array<Array<PendingJob>>,
+  effectsJobs: WeakMap<Effects, Array<PendingJob>>,
+};
+
+const MAX_PROMISE_JOBS = 10000;
+const realmJobQueues: WeakMap<Realm, PromiseJobQueueState> = new WeakMap();
+
+function createPromiseJobTracer(state: PromiseJobQueueState): Tracer {
+  return ({
+    beginEvaluateForEffects(_s: any): void {
+      state.effectsJobStack.push([]);
+    },
+    endEvaluateForEffects(_s: any, effects: void | Effects): void {
+      let frameJobs = state.effectsJobStack.pop();
+      if (effects !== undefined && frameJobs !== undefined && frameJobs.length > 0) {
+        state.effectsJobs.set(effects, frameJobs);
+      }
+    },
+    onApplyEffects(effects: Effects, appendGenerator: boolean): void {
+      if (!appendGenerator) return;
+      let frameJobs = state.effectsJobs.get(effects);
+      if (frameJobs === undefined || frameJobs.length === 0) return;
+      state.effectsJobs.delete(effects);
+      let stack = state.effectsJobStack;
+      let target = stack.length > 0 ? stack[stack.length - 1] : state.rootJobs;
+      target.push(...frameJobs);
+    },
+    detourCall(): void {},
+    beforeCall(): void {},
+    afterCall(): void {},
+    beginOptimizingFunction(): void {},
+    endOptimizingFunction(): void {},
+  }: any);
+}
+
+function getOrCreateJobQueueState(realm: Realm): PromiseJobQueueState {
+  let state = realmJobQueues.get(realm);
+  if (state === undefined) {
+    state = {
+      acceptingJobs: false,
+      tracerInstalled: false,
+      rootJobs: [],
+      effectsJobStack: [],
+      effectsJobs: new WeakMap(),
+    };
+    realmJobQueues.set(realm, state);
+  }
+  if (!state.tracerInstalled) {
+    state.tracerInstalled = true;
+    realm.tracers.push(createPromiseJobTracer(state));
+  }
+  return state;
+}
+
+function failPromiseOp(realm: Realm, message: string, loc?: ?BabelNodeSourceLocation): empty {
+  let diag = new CompilerDiagnostic(message, loc || realm.currentLocation, "PP0001", "FatalError");
   realm.handleError(diag);
   throw new FatalError();
+}
+
+export function beginPromiseJobQueue(realm: Realm): void {
+  let state = getOrCreateJobQueueState(realm);
+  state.acceptingJobs = true;
+  state.rootJobs.length = 0;
+  state.effectsJobStack.length = 0;
+}
+
+export function endPromiseJobQueue(realm: Realm): void {
+  let state = realmJobQueues.get(realm);
+  if (state !== undefined) {
+    state.acceptingJobs = false;
+    state.rootJobs.length = 0;
+    state.effectsJobStack.length = 0;
+  }
+}
+
+export function drainPromiseJobs(realm: Realm): void {
+  let state = realmJobQueues.get(realm);
+  if (state === undefined || state.rootJobs.length === 0) return;
+  let jobsRun = 0;
+  while (state.rootJobs.length > 0) {
+    realm.testTimeout();
+    let nextJob = state.rootJobs.shift();
+    if (jobsRun >= MAX_PROMISE_JOBS) {
+      failPromiseOp(realm, "Maximum number of Promise jobs exceeded during initialization", nextJob.loc);
+    }
+    jobsRun++;
+    let jobContext = realm.createExecutionContext();
+    jobContext.lexicalEnvironment = realm.$GlobalEnv;
+    jobContext.variableEnvironment = realm.$GlobalEnv;
+    jobContext.realm = realm;
+    if (nextJob.loc) jobContext.setLocation(nextJob.loc);
+    realm.pushContext(jobContext);
+    try {
+      nextJob.job(realm, ...nextJob.args);
+    } finally {
+      realm.popContext(jobContext);
+    }
+  }
+}
+
+// ECMA262 8.4.1
+export function EnqueueJob(realm: Realm, queueName: string, job: Function, args: Array<any>): void {
+  if (realm.isInPureScope()) {
+    failPromiseOp(realm, "Promise reaction jobs in pure scope are residualized");
+  }
+  if (!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) {
+    failPromiseOp(realm, "Promise reaction jobs under abstract conditions are not supported");
+  }
+  if (realm.generator !== undefined && realm.generator.name === "evaluateIgnoringEffects") {
+    failPromiseOp(realm, "Promise reaction jobs during side-effect-free evaluation are not supported");
+  }
+  let state = realmJobQueues.get(realm);
+  if (state === undefined || !state.acceptingJobs) {
+    failPromiseOp(realm, "Promise reaction jobs outside global initialization are not supported");
+  }
+  let stack = state.effectsJobStack;
+  let target = stack.length > 0 ? stack[stack.length - 1] : state.rootJobs;
+  target.push({ queueName, job, args, loc: realm.currentLocation });
 }
 
 // ECMA262 25.4.1.5
@@ -375,6 +496,16 @@ export function PerformPromiseThen(
   // 1. Assert: IsPromise(promise) is true.
   invariant(IsPromise(realm, promise), "IsPromise(promise) is true");
 
+  if (realm.isInPureScope()) {
+    failPromiseOp(realm, "Promise reactions in pure scope are residualized");
+  }
+  if (!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) {
+    failPromiseOp(realm, "Promise reactions under abstract conditions are not supported");
+  }
+  if (realm.generator !== undefined && realm.generator.name === "evaluateIgnoringEffects") {
+    failPromiseOp(realm, "Promise reactions during side-effect-free evaluation are not supported");
+  }
+
   // 2. Assert: resultCapability is a PromiseCapability record.
   resultCapability;
 
@@ -436,8 +567,38 @@ export function PerformPromiseThen(
 }
 
 // ECMA262 25.4.2.1
-export function PromiseReactionJob(realm: Realm, reaction: Function, argument: Value): Value {
-  return realm.intrinsics.undefined;
+export function PromiseReactionJob(realm: Realm, reaction: PromiseReaction, argument: Value): Value {
+  let promiseCapability = reaction.capabilities;
+  let handler = reaction.handler;
+
+  let handlerAbrupt;
+  let handlerValue = realm.intrinsics.undefined;
+  if (handler instanceof StringValue && handler.value === "Identity") {
+    handlerValue = argument;
+  } else if (handler instanceof StringValue && handler.value === "Thrower") {
+    handlerAbrupt = argument;
+  } else {
+    try {
+      handlerValue = Call(realm, handler, realm.intrinsics.undefined, [argument]);
+    } catch (e) {
+      if (e instanceof AbruptCompletion) {
+        handlerAbrupt = e.value;
+      } else {
+        throw e;
+      }
+    }
+    if (realm.savedCompletion !== undefined) {
+      failPromiseOp(
+        realm,
+        "Promise reaction with conditional abrupt completion during initialization is not supported"
+      );
+    }
+  }
+
+  if (handlerAbrupt !== undefined) {
+    return Call(realm, promiseCapability.reject, realm.intrinsics.undefined, [handlerAbrupt]);
+  }
+  return Call(realm, promiseCapability.resolve, realm.intrinsics.undefined, [handlerValue]);
 }
 
 // ECMA262 25.4.1.3.2
@@ -487,7 +648,7 @@ function createResolveFunction(realm) {
         // 9. If then is an abrupt completion, then
         if (e instanceof AbruptCompletion) {
           // a. Return RejectPromise(promise, then.[[Value]]).
-          return RejectPromise(realm, promise, e);
+          return RejectPromise(realm, promise, e.value);
         } else throw e;
       }
 
@@ -573,6 +734,12 @@ export function CreateResolvingFunctions(realm: Realm, promise: ObjectValue): Re
 
 // ECMA262 25.4.1.4
 export function FulfillPromise(realm: Realm, promise: ObjectValue, value: Value): Value {
+  if (realm.isInPureScope()) {
+    failPromiseOp(realm, "Settling a Promise in pure scope is residualized");
+  }
+  if ((!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) && !realm.isNewObject(promise)) {
+    failPromiseOp(realm, "Settling an outer Promise under abstract conditions is not supported");
+  }
   // 1. Assert: The value of promise.[[PromiseState]] is "pending".
   invariant(promise.$PromiseState === "pending");
 
@@ -606,6 +773,12 @@ export function FulfillPromise(realm: Realm, promise: ObjectValue, value: Value)
 
 // ECMA262 25.4.1.7
 export function RejectPromise(realm: Realm, promise: ObjectValue, reason: Value): Value {
+  if (realm.isInPureScope()) {
+    failPromiseOp(realm, "Settling a Promise in pure scope is residualized");
+  }
+  if ((!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) && !realm.isNewObject(promise)) {
+    failPromiseOp(realm, "Settling an outer Promise under abstract conditions is not supported");
+  }
   // 1. Assert: The value of promise.[[PromiseState]] is "pending".
   invariant(promise.$PromiseState === "pending");
 
@@ -664,4 +837,21 @@ export function PromiseResolveThenableJob(
   promiseToResolve: ObjectValue,
   thenable: Value,
   then: Value
-): void {}
+): Value {
+  let resolvingFunctions = CreateResolvingFunctions(realm, promiseToResolve);
+  try {
+    let thenCallResult = Call(realm, then, thenable, [resolvingFunctions.resolve, resolvingFunctions.reject]);
+    if (realm.savedCompletion !== undefined) {
+      failPromiseOp(realm, "Thenable resolution with conditional abrupt completion is not supported");
+    }
+    return thenCallResult;
+  } catch (e) {
+    if (e instanceof AbruptCompletion) {
+      if (realm.savedCompletion !== undefined) {
+        failPromiseOp(realm, "Thenable resolution with conditional abrupt completion is not supported");
+      }
+      return Call(realm, resolvingFunctions.reject, realm.intrinsics.undefined, [e.value]);
+    }
+    throw e;
+  }
+}

@@ -22,6 +22,7 @@ import type { SourceFile, SourceType } from "./types.js";
 import * as t from "@babel/types";
 
 import { AbruptCompletion, Completion, ThrowCompletion } from "./completions.js";
+import { beginPromiseJobQueue, drainPromiseJobs, endPromiseJobQueue } from "./methods/promise.js";
 import { CompilerDiagnostic, FatalError } from "./errors.js";
 import { ExecutionContext } from "./realm.js";
 import {
@@ -1185,13 +1186,19 @@ export class LexicalEnvironment {
     context.variableEnvironment = this;
     context.realm = this.realm;
     this.realm.pushContext(context);
+    beginPromiseJobQueue(this.realm);
     let res, code;
     try {
       let ast;
       [ast, code] = this.concatenateAndParse(sources, sourceType);
       if (onParse) onParse(ast);
       res = this.realm.statistics.evaluation.measure(() => this.evaluateCompletion(ast, false));
+      if (!(res instanceof AbruptCompletion)) {
+        res = Environment.GetValue(this.realm, res);
+        drainPromiseJobs(this.realm);
+      }
     } finally {
+      endPromiseJobQueue(this.realm);
       this.realm.popContext(context);
       this.realm.onDestroyScope(context.lexicalEnvironment);
       if (!this.destroyed) this.realm.onDestroyScope(this);
@@ -1202,7 +1209,7 @@ export class LexicalEnvironment {
     }
     if (res instanceof AbruptCompletion) return [res, code];
 
-    return [Environment.GetValue(this.realm, res), code];
+    return [res, code];
   }
 
   execute(
