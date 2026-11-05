@@ -20,6 +20,7 @@ import { FatalError } from "../errors.js";
 import type { Realm } from "../realm.js";
 import { createOperationDescriptor, type OperationDescriptor } from "../utils/generator.js";
 import type { PropertyKeyValue, ShapeInformationInterface } from "../types.js";
+import type { ModelMethodSpec } from "../intrinsics/env/generatedModels.js";
 import { Placeholders } from "../utils/PreludeGenerator.js";
 import {
   AbstractObjectValue,
@@ -44,6 +45,7 @@ import invariant from "../invariant.js";
 export type AbstractValueKind =
   | "||"
   | "!"
+  | "typeof"
   | "==="
   | "!=="
   | "rebuiltProperty"
@@ -88,7 +90,9 @@ type AbstractValueKindPrefix =
   | "process"
   | "template"
   | "abstractCounted"
-  | "magicGlobalObject";
+  | "magicGlobalObject"
+  | "envGlobal"
+  | "typeofGlobal";
 
 export default class AbstractValue extends Value {
   constructor(
@@ -124,6 +128,12 @@ export default class AbstractValue extends Value {
   args: Array<Value>;
   shape: void | ShapeInformationInterface;
   operationDescriptor: void | OperationDescriptor;
+  isEnvironmentValue: void | boolean;
+  envShapeName: void | string;
+  envMethodSpec: void | ModelMethodSpec;
+  envConstructorShape: void | string;
+  envPath: void | string;
+  envElementType: void | typeof Value;
 
   toDisplayString(): string {
     return "[Abstract " + this.hashValue.toString() + "]";
@@ -444,6 +454,12 @@ export default class AbstractValue extends Value {
       for (let arg of this.args) if (arg.mightBeNull()) return true;
       return false;
     }
+    if (this.kind === "||") {
+      return this.args[1].mightBeNull();
+    }
+    if (this.kind === "conditional") {
+      return this.args[1].mightBeNull() || this.args[2].mightBeNull();
+    }
     if (this.values.isTop()) return true;
     return this.values.includesValueOfType(NullValue);
   }
@@ -539,6 +555,12 @@ export default class AbstractValue extends Value {
     if (this.kind === "abstractConcreteUnion") {
       for (let arg of this.args) if (arg.mightBeUndefined()) return true;
       return false;
+    }
+    if (this.kind === "||") {
+      return this.args[1].mightBeUndefined();
+    }
+    if (this.kind === "conditional") {
+      return this.args[1].mightBeUndefined() || this.args[2].mightBeUndefined();
     }
     if (this.values.isTop()) return true;
     return this.values.includesValueOfType(UndefinedValue);

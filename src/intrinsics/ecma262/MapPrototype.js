@@ -244,8 +244,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
     }
 
     // 6. If key is -0, let key be +0.
-    key = key.throwIfNotConcrete();
-    if (key instanceof NumberValue && Object.is(key.value, -0)) key = realm.intrinsics.zero;
+    if (key.mightBeNumber()) {
+      key = key.throwIfNotConcrete();
+      if (key instanceof NumberValue && Object.is(key.value, -0)) key = realm.intrinsics.zero;
+    }
 
     // 7. Let p be the Record {[[Key]]: key, [[Value]]: value}.
     let p = { $Key: key, $Value: value };

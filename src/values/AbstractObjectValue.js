@@ -17,6 +17,7 @@ import {
   type AbstractValueKind,
   ArrayValue,
   BooleanValue,
+  NativeFunctionValue,
   NullValue,
   NumberValue,
   ObjectValue,
@@ -32,6 +33,7 @@ import { createOperationDescriptor, type OperationDescriptor } from "../utils/ge
 import { construct_empty_effects } from "../realm.js";
 import { SimpleNormalCompletion } from "../completions.js";
 import { cloneDescriptor, equalDescriptors, PropertyDescriptor } from "../descriptors.js";
+import { getEnvironmentProperty, isEnvironmentDerived } from "../intrinsics/env/models.js";
 
 export default class AbstractObjectValue extends AbstractValue {
   constructor(
@@ -379,6 +381,21 @@ export default class AbstractObjectValue extends AbstractValue {
     let P = _P;
     if (P instanceof StringValue) P = P.value;
     if (this.values.isTop()) {
+      if (this.isEnvironmentValue && typeof P === "string") {
+        let realm = this.$Realm;
+        let Desc = _Desc.throwIfNotConcrete(realm);
+        let generator = realm.generator;
+        if (generator !== undefined) {
+          let targetObj: any = this.kind === "explicit conversion to object" ? this.args[0] : this;
+          if (realm.isInPureScope()) {
+            if (Desc.value instanceof Value) Leak.value(realm, Desc.value);
+            if (Desc.get instanceof Value) Leak.value(realm, Desc.get);
+            if (Desc.set instanceof Value) Leak.value(realm, Desc.set);
+          }
+          generator.emitDefineProperty(targetObj, P, Desc);
+        }
+        return true;
+      }
       AbstractValue.reportIntrospectionError(this, P);
       throw new FatalError();
     }
@@ -534,6 +551,102 @@ export default class AbstractObjectValue extends AbstractValue {
     if (P instanceof StringValue) P = P.value;
 
     if (this.values.isTop()) {
+      if (this.kind === "conditional") {
+        let [cond, ob1, ob2] = this.args;
+        if (
+          cond instanceof AbstractValue &&
+          (ob1 instanceof ObjectValue || ob1 instanceof AbstractObjectValue) &&
+          (ob2 instanceof ObjectValue || ob2 instanceof AbstractObjectValue) &&
+          ((ob1 instanceof AbstractValue && ob1.isEnvironmentValue) ||
+            (ob2 instanceof AbstractValue && ob2.isEnvironmentValue))
+        ) {
+          let realm = this.$Realm;
+          // Fast path for global-alias roots such as `typeof window !== "undefined" ? window : global`:
+          // when the `$GlobalObject` arm has no own property P, emit a single property read on `Receiver`.
+          if (
+            typeof P === "string" &&
+            !realm.isInPureScope() &&
+            ((ob1 instanceof AbstractObjectValue &&
+              ob1.isEnvironmentValue === true &&
+              ob2 instanceof ObjectValue &&
+              ob2 === realm.$GlobalObject &&
+              !ob2.properties.has(P) &&
+              !realm.intrinsics.ObjectPrototype.properties.has(P)) ||
+              (ob2 instanceof AbstractObjectValue &&
+                ob2.isEnvironmentValue === true &&
+                ob1 instanceof ObjectValue &&
+                ob1 === realm.$GlobalObject &&
+                !ob1.properties.has(P) &&
+                !realm.intrinsics.ObjectPrototype.properties.has(P)))
+          ) {
+            let envArm = ob1 instanceof AbstractObjectValue ? ob1 : ((ob2: any): AbstractObjectValue);
+            return getEnvironmentProperty(realm, envArm, Receiver, P);
+          }
+          return realm.evaluateWithAbstractConditional(
+            cond,
+            () => realm.evaluateForEffects(() => ob1.$Get(P, Receiver), undefined, "ConditionalEnvGet/1"),
+            () => realm.evaluateForEffects(() => ob2.$Get(P, Receiver), undefined, "ConditionalEnvGet/2")
+          );
+        }
+      }
+      let elemType = this.envElementType;
+      if (elemType !== undefined && typeof P === "string") {
+        let realm = this.$Realm;
+        let protoBinding = realm.intrinsics.ArrayPrototype.properties.get(P);
+        if (
+          protoBinding !== undefined &&
+          protoBinding.descriptor instanceof PropertyDescriptor &&
+          protoBinding.descriptor.value instanceof NativeFunctionValue
+        ) {
+          return protoBinding.descriptor.value;
+        }
+        let ob = this.kind === "explicit conversion to object" ? this.args[0] : Receiver;
+        if (P === "length") {
+          return AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            NumberValue,
+            [ob, new StringValue(realm, "length")],
+            createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
+            { skipInvariant: true, isPure: true }
+          );
+        }
+        if (P === "0") {
+          let elem = AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            elemType,
+            [ob, new StringValue(realm, "0")],
+            createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
+            { skipInvariant: true, isPure: true }
+          );
+          invariant(elem instanceof AbstractValue);
+          if (this.isEnvironmentValue === true) elem.isEnvironmentValue = true;
+          return elem;
+        }
+        if (String(+P) === P && +P > 0) {
+          let elem = AbstractValue.createTemporalFromBuildFunction(
+            realm,
+            elemType,
+            [ob, new StringValue(realm, P)],
+            createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
+            { skipInvariant: true, isPure: true }
+          );
+          invariant(elem instanceof AbstractValue);
+          let union = AbstractValue.createAbstractConcreteUnion(realm, elem, [realm.intrinsics.undefined]);
+          if (this.isEnvironmentValue === true) union.isEnvironmentValue = true;
+          return union;
+        }
+      }
+      if (this.isEnvironmentValue) {
+        if (this.$Realm.isInPureScope()) {
+          Leak.value(this.$Realm, Receiver);
+          return this.$Realm.evaluateWithPossibleThrowCompletion(
+            () => getEnvironmentProperty(this.$Realm, this, Receiver, P),
+            TypesDomain.topVal,
+            ValuesDomain.topVal
+          );
+        }
+        return getEnvironmentProperty(this.$Realm, this, Receiver, P);
+      }
       let generateAbstractGet = () => {
         let ob = Receiver;
         if (this.kind === "explicit conversion to object") ob = this.args[0];
@@ -644,15 +757,49 @@ export default class AbstractObjectValue extends AbstractValue {
 
   $GetPartial(P: AbstractValue | PropertyKeyValue, Receiver: Value): Value {
     if (!(P instanceof AbstractValue)) return this.$Get(P, Receiver);
+    let keyVal: AbstractValue = P;
     if (this.values.isTop() || !this.isSimpleObject()) {
       if (this.isSimpleObject() && this.isIntrinsic()) {
         return AbstractValue.createTemporalFromBuildFunction(
           this.$Realm,
           Value,
-          [this, P],
+          [this, keyVal],
           createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
           { skipInvariant: true, isPure: true }
         );
+      }
+      if (this.isEnvironmentValue === true) {
+        let ob = this.kind === "explicit conversion to object" ? this.args[0] : Receiver;
+        if (this.$Realm.isInPureScope()) {
+          Leak.value(this.$Realm, ob);
+          Leak.value(this.$Realm, keyVal);
+          return this.$Realm.evaluateWithPossibleThrowCompletion(
+            () => {
+              let res = AbstractValue.createTemporalFromBuildFunction(
+                this.$Realm,
+                Value,
+                [ob, keyVal],
+                createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
+                { skipInvariant: true, isPure: true }
+              );
+              invariant(res instanceof AbstractValue);
+              res.isEnvironmentValue = true;
+              return res;
+            },
+            TypesDomain.topVal,
+            ValuesDomain.topVal
+          );
+        }
+        let res = AbstractValue.createTemporalFromBuildFunction(
+          this.$Realm,
+          Value,
+          [ob, keyVal],
+          createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
+          { skipInvariant: true, isPure: true }
+        );
+        invariant(res instanceof AbstractValue);
+        res.isEnvironmentValue = true;
+        return res;
       }
       if (this.$Realm.isInPureScope()) {
         // If we're in a pure scope, we can leak the key and the instance,
@@ -819,6 +966,43 @@ export default class AbstractObjectValue extends AbstractValue {
     let P = _P;
     if (!this.values.isTop() && !(P instanceof AbstractValue)) return this.$Set(P, V, Receiver);
     if (this.values.isTop()) {
+      if (this.kind === "conditional") {
+        let [cond, ob1, ob2] = this.args;
+        if (
+          cond instanceof AbstractValue &&
+          (ob1 instanceof ObjectValue || ob1 instanceof AbstractObjectValue) &&
+          (ob2 instanceof ObjectValue || ob2 instanceof AbstractObjectValue) &&
+          (isEnvironmentDerived(ob1) || isEnvironmentDerived(ob2))
+        ) {
+          let realm = this.$Realm;
+          let result = realm.evaluateWithAbstractConditional(
+            cond,
+            () =>
+              realm.evaluateForEffects(
+                () => new BooleanValue(realm, ob1.$SetPartial(P, V, ob1)),
+                undefined,
+                "ConditionalEnvSet/1"
+              ),
+            () =>
+              realm.evaluateForEffects(
+                () => new BooleanValue(realm, ob2.$SetPartial(P, V, ob2)),
+                undefined,
+                "ConditionalEnvSet/2"
+              )
+          );
+          return result instanceof BooleanValue ? result.value : true;
+        }
+      }
+      if (this.isEnvironmentValue && !this.$Realm.isInPureScope()) {
+        let generator = this.$Realm.generator;
+        invariant(generator);
+        let targetReceiver =
+          Receiver instanceof AbstractObjectValue && Receiver.kind === "explicit conversion to object"
+            ? Receiver.args[0]
+            : Receiver;
+        generator.emitPropertyAssignment(targetReceiver, P, V);
+        return true;
+      }
       if (this.$Realm.isInPureScope()) {
         // If we're in a pure scope, we can leak the key and the instance,
         // and leave the residual property assignment in place.

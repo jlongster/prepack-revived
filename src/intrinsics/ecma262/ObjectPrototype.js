@@ -10,6 +10,7 @@
 /* @flow */
 
 import type { Realm } from "../../realm.js";
+import type { CallableObjectValue } from "../../types.js";
 import {
   AbstractValue,
   NativeFunctionValue,
@@ -20,6 +21,7 @@ import {
 } from "../../values/index.js";
 import { SameValuePartial, RequireObjectCoercible } from "../../methods/abstract.js";
 import { HasOwnProperty, HasSomeCompatibleType } from "../../methods/has.js";
+import { IsAccessorDescriptor, IsCallable } from "../../methods/is.js";
 import { Invoke } from "../../methods/call.js";
 import { Properties, To } from "../../singletons.js";
 import { FatalError } from "../../errors.js";
@@ -163,4 +165,80 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }),
     })
   );
+
+  // ECMA262 Annex B.2.2.2 Object.prototype.__defineGetter__(P, getter)
+  obj.defineNativeMethod("__defineGetter__", 2, (context, [P, getter]) => {
+    let O = To.ToObject(realm, context);
+    if (!IsCallable(realm, getter)) {
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "getter must be a function");
+    }
+    let callableGetter = ((getter: any): CallableObjectValue | AbstractValue);
+    let desc = new PropertyDescriptor({
+      get: callableGetter,
+      enumerable: true,
+      configurable: true,
+    });
+    let key = To.ToPropertyKey(realm, P.throwIfNotConcrete());
+    Properties.DefinePropertyOrThrow(realm, O, key, desc);
+    return realm.intrinsics.undefined;
+  });
+
+  // ECMA262 Annex B.2.2.3 Object.prototype.__defineSetter__(P, setter)
+  obj.defineNativeMethod("__defineSetter__", 2, (context, [P, setter]) => {
+    let O = To.ToObject(realm, context);
+    if (!IsCallable(realm, setter)) {
+      throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "setter must be a function");
+    }
+    let callableSetter = ((setter: any): CallableObjectValue | AbstractValue);
+    let desc = new PropertyDescriptor({
+      set: callableSetter,
+      enumerable: true,
+      configurable: true,
+    });
+    let key = To.ToPropertyKey(realm, P.throwIfNotConcrete());
+    Properties.DefinePropertyOrThrow(realm, O, key, desc);
+    return realm.intrinsics.undefined;
+  });
+
+  // ECMA262 Annex B.2.2.4 Object.prototype.__lookupGetter__(P)
+  obj.defineNativeMethod("__lookupGetter__", 1, (context, [P]) => {
+    let O = To.ToObject(realm, context);
+    let key = To.ToPropertyKey(realm, P.throwIfNotConcrete());
+    while (true) {
+      let desc = O.$GetOwnProperty(key);
+      if (desc !== undefined) {
+        Properties.ThrowIfMightHaveBeenDeleted(desc);
+        desc = desc.throwIfNotConcrete(realm);
+        if (IsAccessorDescriptor(realm, desc)) {
+          return desc.get || realm.intrinsics.undefined;
+        }
+        return realm.intrinsics.undefined;
+      }
+      let proto = O.$GetPrototypeOf();
+      if (proto instanceof NullValue) return realm.intrinsics.undefined;
+      O = proto;
+    }
+    invariant(false);
+  });
+
+  // ECMA262 Annex B.2.2.5 Object.prototype.__lookupSetter__(P)
+  obj.defineNativeMethod("__lookupSetter__", 1, (context, [P]) => {
+    let O = To.ToObject(realm, context);
+    let key = To.ToPropertyKey(realm, P.throwIfNotConcrete());
+    while (true) {
+      let desc = O.$GetOwnProperty(key);
+      if (desc !== undefined) {
+        Properties.ThrowIfMightHaveBeenDeleted(desc);
+        desc = desc.throwIfNotConcrete(realm);
+        if (IsAccessorDescriptor(realm, desc)) {
+          return desc.set || realm.intrinsics.undefined;
+        }
+        return realm.intrinsics.undefined;
+      }
+      let proto = O.$GetPrototypeOf();
+      if (proto instanceof NullValue) return realm.intrinsics.undefined;
+      O = proto;
+    }
+    invariant(false);
+  });
 }

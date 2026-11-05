@@ -11,8 +11,31 @@
 
 import type { ErrorHandler } from "./errors.js";
 
-export type Compatibility = "browser" | "jsc-600-1-4-17" | "mobile" | "node-source-maps" | "fb-www" | "node-react";
-export const CompatibilityValues = ["browser", "jsc-600-1-4-17", "mobile", "node-source-maps", "fb-www", "node-react"];
+export type Compatibility =
+  | "browser"
+  | "jsc-600-1-4-17"
+  | "mobile"
+  | "node-source-maps"
+  | "fb-www"
+  | "node-react"
+  | "node"
+  | "universal";
+export const CompatibilityValues = [
+  "browser",
+  "jsc-600-1-4-17",
+  "mobile",
+  "node-source-maps",
+  "fb-www",
+  "node-react",
+  "node",
+  "universal",
+];
+
+export type UnknownGlobalsMode = "open" | "closed" | "error";
+export const UnknownGlobalsModeValues = ["open", "closed", "error"];
+
+export type AssumptionFallbackMode = "inline" | "throw";
+export const AssumptionFallbackModeValues = ["inline", "throw"];
 
 export type InvariantModeTypes =
   | "throw"
@@ -62,6 +85,11 @@ export type RealmOptions = {
   arrayNestedOptimizedFunctionsEnabled?: boolean,
   reactFailOnUnsupportedSideEffects?: boolean,
   removeModuleFactoryFunctions?: boolean,
+  closedWorld?: boolean,
+  unknownGlobals?: UnknownGlobalsMode,
+  hasExplicitCompatibility?: boolean,
+  assumptions?: { [string]: mixed },
+  fallbackMode?: AssumptionFallbackMode,
 };
 
 export type SerializerOptions = {
@@ -77,6 +105,7 @@ export type SerializerOptions = {
   inlineExpressions?: boolean,
   trace?: boolean,
   heapGraphFormat?: "DotLanguage" | "VISJS",
+  fallbackMode?: AssumptionFallbackMode,
 };
 
 export const defaultOptions = {};

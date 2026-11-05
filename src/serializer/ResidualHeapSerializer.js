@@ -13,6 +13,7 @@ import { Realm } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
 import { IsArray, Get } from "../methods/index.js";
 import {
+  AbstractObjectValue,
   AbstractValue,
   BooleanValue,
   BoundFunctionValue,
@@ -20,6 +21,7 @@ import {
   EmptyValue,
   FunctionValue,
   NativeFunctionValue,
+  NullValue,
   NumberValue,
   ObjectValue,
   ProxyValue,
@@ -422,6 +424,13 @@ export class ResidualHeapSerializer {
       return;
     }
     if (proto === this.realm.intrinsics[kind + "Prototype"]) return;
+    if (
+      obj instanceof ECMAScriptSourceFunctionValue &&
+      obj.$FunctionKind === "generator" &&
+      proto === this.realm.intrinsics.Generator
+    ) {
+      return;
+    }
 
     let semaphore = this._acquireOneObjectSemaphore(obj);
     this.emitter.emitNowOrAfterWaitingForDependencies(
@@ -665,7 +674,7 @@ export class ResidualHeapSerializer {
   emitDefinePropertyBody(
     deleteIfMightHaveBeenDeleted: boolean,
     locationFunction: void | (() => BabelNodeLVal),
-    val: ObjectValue,
+    val: ObjectValue | AbstractObjectValue,
     key: string | SymbolValue | AbstractValue,
     desc: Descriptor
   ): BabelNodeStatement {
@@ -696,7 +705,7 @@ export class ResidualHeapSerializer {
       invariant(false);
     }
     invariant(desc instanceof PropertyDescriptor);
-    if (locationFunction !== undefined && this._canEmbedProperty(val, key, desc)) {
+    if (locationFunction !== undefined && val instanceof ObjectValue && this._canEmbedProperty(val, key, desc)) {
       let descValue = desc.value;
       invariant(descValue instanceof Value);
       invariant(!this.emitter.getReasonToWaitForDependencies([descValue, val]), "precondition of _emitProperty");
@@ -1704,7 +1713,7 @@ export class ResidualHeapSerializer {
     let propertiesToSerialize = new Map();
 
     // handle class inheritance
-    if (!(classFunc.$Prototype instanceof NativeFunctionValue)) {
+    if (classFunc.$Prototype !== this.realm.intrinsics.FunctionPrototype) {
       classMethodInstance.classSuperNode = this.serializeValue(classFunc.$Prototype);
     }
 
@@ -2067,7 +2076,10 @@ export class ResidualHeapSerializer {
     );
     let serializedProto = this.serializeValue(classConstructor ? classConstructor : proto);
     if (val.temporalAlias === undefined) {
-      if (!this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) && !this.realm.isCompatibleWith("mobile")) {
+      if (
+        (!classConstructor && proto instanceof NullValue) ||
+        (!this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) && !this.realm.isCompatibleWith("mobile"))
+      ) {
         return t.callExpression(this.preludeGenerator.memoizeReference("Object.create"), [
           classConstructor ? t.memberExpression(serializedProto, t.identifier("prototype")) : serializedProto,
         ]);

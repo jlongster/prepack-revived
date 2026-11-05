@@ -19,6 +19,7 @@ import { ForInOfHeadEvaluation, ForInOfBodyEvaluation } from "./ForOfStatement.j
 import { EnumerableOwnProperties, UpdateEmpty } from "../methods/index.js";
 import { Environment } from "../singletons.js";
 import { AbstractValue, AbstractObjectValue, ArrayValue, ObjectValue, StringValue, Value } from "../values/index.js";
+import { findEnvEnumerationSplitCondition } from "../intrinsics/env/models.js";
 import type {
   BabelNodeExpression,
   BabelNodeForInStatement,
@@ -65,9 +66,42 @@ function evaluateForIn(
   strictCode: boolean,
   env: LexicalEnvironment,
   realm: Realm,
-  labelSet: ?Array<string>
+  labelSet: ?Array<string>,
+  splitDepth: number = 0
 ): Value {
   let { left, right, body } = ast;
+
+  if (splitDepth < 5 && !realm.instantRender.enabled) {
+    let probeEffects = realm.evaluateForEffects(
+      () => Environment.GetValue(realm, env.evaluate(right, strictCode)),
+      undefined,
+      "ForInProbe"
+    );
+    if (
+      probeEffects.result instanceof SimpleNormalCompletion &&
+      probeEffects.modifiedBindings.size === 0 &&
+      probeEffects.modifiedProperties.size === 0
+    ) {
+      let splitCond = findEnvEnumerationSplitCondition(realm, probeEffects.result.value);
+      if (splitCond !== undefined) {
+        return realm.evaluateWithAbstractConditional(
+          splitCond,
+          () =>
+            realm.evaluateForEffects(
+              () => evaluateForIn(ast, strictCode, env, realm, labelSet, splitDepth + 1),
+              undefined,
+              "ForInEnvSplit/1"
+            ),
+          () =>
+            realm.evaluateForEffects(
+              () => evaluateForIn(ast, strictCode, env, realm, labelSet, splitDepth + 1),
+              undefined,
+              "ForInEnvSplit/2"
+            )
+        );
+      }
+    }
+  }
 
   function reportErrorAndThrowIfNotConcrete(val: Value, loc: ?BabelNodeSourceLocation) {
     if (val instanceof AbstractValue) reportError(realm, loc);
