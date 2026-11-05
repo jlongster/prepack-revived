@@ -13,7 +13,7 @@ import type { Realm } from "../realm.js";
 import type { LexicalEnvironment } from "../environment.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { Add } from "../methods/index.js";
-import { AbstractValue, NumberValue, IntegralValue, Value } from "../values/index.js";
+import { AbstractValue, ConcreteValue, NumberValue, IntegralValue, Value } from "../values/index.js";
 import type { BabelNodeUpdateExpression } from "@babel/types";
 import { Environment, Leak, Properties, To } from "../singletons.js";
 import invariant from "../invariant.js";
@@ -68,10 +68,13 @@ export default function(
       if (realm.handleError(error) === "Fail") throw new FatalError();
       oldNum = AbstractValue.createFromUnaryOp(realm, "+", oldExpr, true, ast.argument.loc);
     }
-    let newAbstractValue =
-      oldNum instanceof AbstractValue
-        ? AbstractValue.createFromBinaryOp(realm, op, oldNum, new NumberValue(realm, 1), ast.loc)
-        : ValuesDomain.computeBinary(realm, op, oldNum, new NumberValue(realm, 1));
+    let newAbstractValue;
+    if (oldNum instanceof AbstractValue) {
+      newAbstractValue = AbstractValue.createFromBinaryOp(realm, op, oldNum, new NumberValue(realm, 1), ast.loc);
+    } else {
+      invariant(oldNum instanceof ConcreteValue);
+      newAbstractValue = ValuesDomain.computeBinary(realm, op, oldNum, new NumberValue(realm, 1));
+    }
     Properties.PutValue(realm, expr, newAbstractValue);
     if (ast.prefix === true) {
       return newAbstractValue;

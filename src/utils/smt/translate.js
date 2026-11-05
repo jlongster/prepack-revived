@@ -174,9 +174,9 @@ export class SmtTranslator {
   strConsts: Set<string>;
   primAsserted: Set<string>;
 
-  truthy(v: Value): string {
+  truthy(v: Value, depth: number = 0): string {
     if (v instanceof ConcreteValue) return v.mightNotBeTrue() ? "false" : "true";
-    return `(truthy ${this.term(v)})`;
+    return `(truthy ${this.term(v, depth)})`;
   }
 
   // The script (declarations, definitions and background facts) needed by the terms produced so far.
@@ -184,24 +184,25 @@ export class SmtTranslator {
     return this.decls.join("\n");
   }
 
-  term(v: Value): string {
+  term(v: Value, depth: number = 0): string {
     if (v instanceof ConcreteValue) return this.concrete(v);
     if (!(v instanceof AbstractValue)) throw new TranslationError("unexpected value");
     let bucket = this.buckets.get(v.hashValue);
     if (bucket === undefined) this.buckets.set(v.hashValue, (bucket = []));
     for (let [w, name] of bucket) if (w === v || w.equals(v)) return name;
+    if (depth > 60) throw new TranslationError("expression too deep");
     let pureSpec = pureOperationSpec(v);
     if (pureSpec !== undefined) {
       let [od, args] = pureSpec;
       for (let [od2, args2, name] of this.pureLeaves) {
-        if (samePureDescriptor(od, od2) && this.sameArgs(args, args2)) {
+        if (samePureDescriptor(od, od2) && this.sameArgs(args, args2, depth + 1)) {
           bucket.push([v, name]);
           return name;
         }
       }
     }
     if (++this.nodes > this.maxNodes) throw new TranslationError("expression too large");
-    let compound = this.compound(v, pureSpec);
+    let compound = this.compound(v, pureSpec, depth + 1);
     let name = `v${this.counter++}`;
     bucket.push([v, name]);
     if (pureSpec !== undefined) this.pureLeaves.push([pureSpec[0], pureSpec[1], name]);
@@ -209,7 +210,7 @@ export class SmtTranslator {
       this.decls.push(`(define-fun ${name} () JS ${compound})`);
     } else {
       this.decls.push(`(declare-const ${name} JS)`);
-      let facts = this.leafFacts(v, name);
+      let facts = this.leafFacts(v, name, depth + 1);
       if (facts.length > 0) this.decls.push(`(assert (and ${facts.join(" ")}))`);
       this.leaves.push({ name, label: describe(v) });
     }
@@ -264,7 +265,7 @@ export class SmtTranslator {
   }
 
   // Returns an SMT term for an operator node, or undefined if the node must be treated as an opaque leaf.
-  compound(v: AbstractValue, pureSpec: void | [OperationDescriptor, Array<Value>]): void | string {
+  compound(v: AbstractValue, pureSpec: void | [OperationDescriptor, Array<Value>], depth: number): void | string {
     let kind = v.kind;
     let od = v.operationDescriptor;
     let args = v.args;
@@ -277,23 +278,23 @@ export class SmtTranslator {
     switch (od.type) {
       case "CANNOT_BECOME_OBJECT": {
         if (args.length !== 1) return undefined;
-        return `(Bool (nullish ${this.term(args[0])}))`;
+        return `(Bool (nullish ${this.term(args[0], depth)}))`;
       }
       case "CONDITIONAL_EXPRESSION": {
         if (kind !== "conditional" || args.length !== 3) return undefined;
-        return `(ite ${this.truthy(args[0])} ${this.term(args[1])} ${this.term(args[2])})`;
+        return `(ite ${this.truthy(args[0], depth)} ${this.term(args[1], depth)} ${this.term(args[2], depth)})`;
       }
       case "LOGICAL_EXPRESSION": {
         if (args.length !== 2 || od.data.logicalOperator !== kind) return undefined;
-        let a = this.term(args[0]);
-        let b = this.term(args[1]);
+        let a = this.term(args[0], depth);
+        let b = this.term(args[1], depth);
         if (kind === "&&") return `(ite (truthy ${a}) ${b} ${a})`;
         if (kind === "||") return `(ite (truthy ${a}) ${a} ${b})`;
         return undefined;
       }
       case "UNARY_EXPRESSION": {
         if (args.length !== 1 || od.data.unaryOperator !== kind) return undefined;
-        let a = this.term(args[0]);
+        let a = this.term(args[0], depth);
         switch (kind) {
           case "!":
             return `(Bool (not (truthy ${a})))`;
@@ -317,8 +318,8 @@ export class SmtTranslator {
       case "BINARY_EXPRESSION": {
         if (args.length !== 2 || od.data.binaryOperator !== kind) return undefined;
         let op = kind;
-        let a = this.term(args[0]);
-        let b = this.term(args[1]);
+        let a = this.term(args[0], depth);
+        let b = this.term(args[1], depth);
         switch (op) {
           case "===":
             return `(Bool (seq ${a} ${b}))`;
@@ -399,10 +400,10 @@ export class SmtTranslator {
   }
 
   // Facts Prepack's domains establish about an opaque abstract value.
-  leafFacts(v: AbstractValue, name: string): Array<string> {
+  leafFacts(v: AbstractValue, name: string, depth: number): Array<string> {
     let facts = [];
     if (v.kind === "abstractConcreteUnion" && v.args.length > 0) {
-      let alts = v.args.map(a => `(same ${name} ${this.term(a)})`);
+      let alts = v.args.map(a => `(same ${name} ${this.term(a, depth)})`);
       facts.push(`(or ${alts.join(" ")})`);
       return facts;
     }
@@ -421,10 +422,10 @@ export class SmtTranslator {
     return facts;
   }
 
-  sameArgs(a: Array<Value>, b: Array<Value>): boolean {
+  sameArgs(a: Array<Value>, b: Array<Value>, depth: number): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
-      if (!a[i].equals(b[i]) && this.term(a[i]) !== this.term(b[i])) return false;
+      if (!a[i].equals(b[i]) && this.term(a[i], depth) !== this.term(b[i], depth)) return false;
     }
     return true;
   }

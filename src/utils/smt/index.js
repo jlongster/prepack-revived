@@ -63,6 +63,12 @@ export function getSmtStats(): SmtStats {
   return Object.assign({}, stats);
 }
 
+if (typeof process !== "undefined" && process.env.PREPACK_SMT_PRINT_STATS) {
+  process.on("exit", () => {
+    process.stderr.write("SMT_STATS " + JSON.stringify(stats) + "\n");
+  });
+}
+
 let z3: void | null | Z3Process; // null: looked for z3 and did not find it
 let cache: Map<string, Z3Answer> = new Map();
 
@@ -173,20 +179,26 @@ function provenUnsat(assumptions: $ReadOnlyArray<Value>, goal: SmtTranslator => 
   return check(q.script)[0] === "unsat";
 }
 
-// Collects the hashValues of opaque leaves reachable inside `v` so unrelated path conditions can be sliced away.
-function collectLeafHashes(v: Value, out: Set<number>, seen: Set<AbstractValue>): void {
-  if (!(v instanceof AbstractValue) || seen.has(v)) return;
-  seen.add(v);
-  let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
-  if (entry !== undefined && entry.isPure === true) {
-    if (entry.args.length === 0) out.add(v.hashValue);
-    else for (let a of entry.args) collectLeafHashes(a, out, seen);
-    return;
+// Collects the hashValues of opaque leaves reachable inside `v` (iteratively, bounded so deep DAGs never overflow the C stack).
+function collectLeafHashes(root: Value, out: Set<number>, seen: Set<AbstractValue>): void {
+  let stack = [root];
+  let steps = 0;
+  while (stack.length > 0 && steps < 600) {
+    let v = stack.pop();
+    if (!(v instanceof AbstractValue) || seen.has(v)) continue;
+    seen.add(v);
+    steps++;
+    let entry = v.$Realm.getTemporalOperationEntryFromDerivedValue(v);
+    if (entry !== undefined && entry.isPure === true) {
+      if (entry.args.length === 0) out.add(v.hashValue);
+      else for (let a of entry.args) stack.push(a);
+      continue;
+    }
+    if (v.intrinsicName !== undefined || v.args.length === 0) {
+      out.add(v.hashValue);
+    }
+    for (let a of v.args) stack.push(a);
   }
-  if (v.intrinsicName !== undefined || v.args.length === 0) {
-    out.add(v.hashValue);
-  }
-  for (let a of v.args) collectLeafHashes(a, out, seen);
 }
 
 // Keeps only assumptions transitively sharing at least one leaf hash with `target` (sound by monotonicity: dropping
