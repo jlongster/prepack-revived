@@ -119,7 +119,7 @@ function InternalCall(
       OrdinaryCallBindThis(realm, F, calleeContext, thisArgument);
 
       // 7. Let result be OrdinaryCallEvaluateBody(F, argumentsList).
-      result = withActivation(realm, F, () => OrdinaryCallEvaluateBody(realm, F, argsList));
+      result = withActivation(realm, F, argsList, () => OrdinaryCallEvaluateBody(realm, F, argsList));
     } finally {
       // 8. Remove calleeContext from the execution context stack and restore callerContext as the running execution context.
       realm.popContext(calleeContext);
