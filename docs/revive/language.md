@@ -84,6 +84,8 @@ Abstract `yield`/`await` (layer 4) is not attempted. `await` during init still b
 
 ## Serializer fixes found on the large workloads
 
+- Merging revive's rwfix track: `async` is represented by `$FunctionKind` (`"async"`/`"asyncGenerator"`), and `$IsAsync` is also set so rwfix's serializer paths emit `async`. rwfix's `isAsync` parameters on `FunctionCreate`/`GeneratorFunctionCreate` delegate to `AsyncFunctionCreate`/`AsyncGeneratorFunctionCreate`. rwfix's bail-out on async calls was removed, because `lang` evaluates async functions. Instances emitted as `{__proto__: C.prototype}` literals record a use of class `C`, so the class is defined first.
+
 - `??` and optional chains are parenthesized when Babel 7's printer would drop needed parentheses. Without this, the output had syntax errors (`a ?? b && c`) or different semantics (`(a || b)?.c` printed as `a || b?.c`). See `ensureModernSyntaxParentheses` in `src/serializer/serializer.js`.
 - **Class emission order.**
   - The base class is emitted before its subclasses, including when they share an insertion point and when the base is serialized later.
@@ -102,7 +104,8 @@ Abstract `yield`/`await` (layer 4) is not attempted. `await` during init still b
 | highlight-js | WRONG | OK |
 | typescript | FAIL (PP1004 `??`) | OK with `--closedWorld`. With revive's new open-world default it stops cleanly at `process.platform` / `__filename` probes (environment track) |
 | prettier | FAIL (PP1004 `catch {}`) | OK, digest-identical, with `--closedWorld`. With open world it stops cleanly at a `RegExp[Symbol.match]` on an abstract global |
-| mathjs | FAIL (PP1004 `1n`) | Parses and evaluates BigInt. It now stops at `seedrandom`'s residual loop (PP0037, loops track) |
-| babel-standalone, three | FAIL | FAIL (not language-related) |
+| mathjs | FAIL (PP1004 `1n`) | Parses and evaluates BigInt. It now stops in `seedrandom` initialization: `String.fromCharCode.apply` over an array built from abstract `Math.random()` values (PP0001, not a language issue) |
+| three | FAIL | OK, after merging revive's rwfix track, in every profile except `jsc` |
+| babel-standalone | FAIL | FAIL (not language-related) |
 
 The `jsc` compatibility profile models an old JavaScriptCore. For typescript, prettier and highlight-js it reports PP0023 ("may terminate with exception: not an object") because that environment model lacks APIs these bundles probe. This is a reported diagnostic, not a silent miscompile.
