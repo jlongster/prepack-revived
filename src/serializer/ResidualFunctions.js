@@ -1385,10 +1385,14 @@ export class ResidualFunctions {
         );
         let blockStatement: BabelNodeBlockStatement = ((funcNode: any).body: BabelNodeBlockStatement);
         invariant(t.isBlockStatement(blockStatement));
-        (funcNode: any).body = t.blockStatement(
-          [initializerStatement].concat(blockStatement.body),
-          blockStatement.directives
-        );
+        if (rewrittenAdditionalFunctions.has(functionValue)) {
+          blockStatement.body.unshift(initializerStatement);
+        } else {
+          (funcNode: any).body = t.blockStatement(
+            [initializerStatement].concat(blockStatement.body),
+            blockStatement.directives
+          );
+        }
       }
     }
 
