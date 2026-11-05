@@ -220,28 +220,32 @@ export default class AbstractValue extends Value {
   }
 
   // this => val. A false value does not imply that !(this => val).
-  implies(val: AbstractValue, depth: number = 0, pc: PathConditions = this.$Realm.pathConditions): boolean {
+  implies(val: AbstractValue, depth: number = 0): boolean {
     if (depth > 5) return false;
     if (this.equals(val)) return true; // x => x regardless of its value
     if (this.kind === "||") {
       let [x, y] = this.args;
       let xi =
         x.implies(val, depth + 1) ||
-        (x instanceof AbstractValue && ((this.$Realm: any)._implicationUsedLeaf = true, this.$Realm.pathConditions.impliesNot(x, depth + 1)));
+        (x instanceof AbstractValue &&
+          ((this.$Realm._implicationUsedLeaf = true), this.$Realm.pathConditions.impliesNot(x, depth + 1)));
       if (!xi) return false;
       let yi =
         y.implies(val, depth + 1) ||
-        (y instanceof AbstractValue && ((this.$Realm: any)._implicationUsedLeaf = true, this.$Realm.pathConditions.impliesNot(y, depth + 1)));
+        (y instanceof AbstractValue &&
+          ((this.$Realm._implicationUsedLeaf = true), this.$Realm.pathConditions.impliesNot(y, depth + 1)));
       return yi;
     } else if (this.kind === "&&") {
       let [x, y] = this.args;
       let xi =
         x.implies(val, depth + 1) ||
-        (x instanceof AbstractValue && ((this.$Realm: any)._implicationUsedLeaf = true, this.$Realm.pathConditions.impliesNot(x, depth + 1)));
+        (x instanceof AbstractValue &&
+          ((this.$Realm._implicationUsedLeaf = true), this.$Realm.pathConditions.impliesNot(x, depth + 1)));
       if (xi) return true;
       let yi =
         y.implies(val, depth + 1) ||
-        (y instanceof AbstractValue && ((this.$Realm: any)._implicationUsedLeaf = true, this.$Realm.pathConditions.impliesNot(y, depth + 1)));
+        (y instanceof AbstractValue &&
+          ((this.$Realm._implicationUsedLeaf = true), this.$Realm.pathConditions.impliesNot(y, depth + 1)));
       return yi;
     } else if (this.kind === "!") {
       let [nx] = this.args;
@@ -250,7 +254,7 @@ export default class AbstractValue extends Value {
         // !!x => val if x => val
         let [x] = nx.args;
         invariant(x instanceof AbstractValue);
-        return x.implies(val, depth + 1, pc);
+        return x.implies(val, depth + 1);
       }
     } else if (this.kind === "conditional") {
       let [c, x, y] = this.args;
@@ -264,24 +268,24 @@ export default class AbstractValue extends Value {
         if (!x.mightNotBeFalse()) {
           // (c ? false : y) => vx !== undefined && vx !== null if y => vx, since val is false unless y is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return y instanceof AbstractValue && y.implies(vx, depth + 1, pc);
+            return y instanceof AbstractValue && y.implies(vx, depth + 1);
           // (c ? false : y) => undefined !== vy && null !== vy if y => vy, since val is false unless y is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return y instanceof AbstractValue && y.implies(vy, depth + 1, pc);
+            return y instanceof AbstractValue && y.implies(vy, depth + 1);
         } else if (!y.mightNotBeFalse()) {
           // (c ? x : false) => vx !== undefined && vx !== null if x => vx, since val is false unless x is true
           if (vx instanceof AbstractValue && (vy instanceof NullValue || vy instanceof UndefinedValue))
-            return x instanceof AbstractValue && x.implies(vx, depth + 1, pc);
+            return x instanceof AbstractValue && x.implies(vx, depth + 1);
           // (c ? x : false) => undefined !== vy && null !== vy if x => vy, since val is false unless x is true
           if ((vx instanceof NullValue || vx instanceof UndefinedValue) && vy instanceof AbstractValue)
-            return x instanceof AbstractValue && x.implies(vy, depth + 1, pc);
+            return y instanceof AbstractValue && y.implies(vy, depth + 1);
         }
       }
 
       // (c ? x : false) => c && x (if c or x were falsy, (c ? x : false) could not be true)
       if (!y.mightNotBeFalse()) {
-        if (c instanceof AbstractValue && c.implies(val, depth + 1, pc)) return true;
-        if (x instanceof AbstractValue && x.implies(val, depth + 1, pc)) return true;
+        if (c instanceof AbstractValue && c.implies(val, depth + 1)) return true;
+        if (x instanceof AbstractValue && x.implies(val, depth + 1)) return true;
       }
     } else if (this.kind === "!==") {
       // (0 !== x) => Boolean(x) only when x is known to be a finite integer (IntegralValue).
@@ -938,7 +942,17 @@ export default class AbstractValue extends Value {
   static convertToTemporalIfArgsAreTemporal(realm: Realm, val: AbstractValue, condArgs?: Array<Value>): AbstractValue {
     if (condArgs === undefined) condArgs = val.args;
 
-    let temporalArg = condArgs.find(arg => arg.isTemporal());
+    function containsTemporal(arg: Value): boolean {
+      if (arg.isTemporal()) return true;
+      if (arg instanceof AbstractValue) {
+        for (let subArg of arg.args) {
+          if (containsTemporal(subArg)) return true;
+        }
+      }
+      return false;
+    }
+
+    let temporalArg = condArgs.find(containsTemporal);
     if (temporalArg !== undefined) {
       let realmGenerator = realm.generator;
       invariant(realmGenerator !== undefined);

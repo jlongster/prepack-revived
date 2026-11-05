@@ -12,8 +12,8 @@
 import { CompilerDiagnostic, FatalError } from "../errors.js";
 import type { Realm } from "../realm.js";
 import { leakBinding } from "../environment.js";
-import { AbstractValue, ArrayValue, EmptyValue, ObjectValue, Value } from "../values/index.js";
-import { TestIntegrityLevel } from "../methods/index.js";
+import { AbstractValue, ArrayValue, EmptyValue, NumberValue, ObjectValue, Value } from "../values/index.js";
+import { IsArray, IsArrayIndex, TestIntegrityLevel } from "../methods/index.js";
 import type { BabelNodeSourceLocation } from "@babel/types";
 import invariant from "../invariant.js";
 import { HeapInspector } from "../utils/HeapInspector.js";
@@ -36,6 +36,9 @@ function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInsp
 
   let getHeapInspector =
     getCachingHeapInspector || (() => new HeapInspector(realm, new Logger(realm, /*internalDebug*/ false)));
+
+  let isArray = IsArray(realm, object);
+  let maxAssignedArrayIndex = -1;
 
   // TODO: We should emit current value and then reset value for all *internal slots*; this will require deep serializer support; or throw FatalError when we detect any non-initial values in internal slots.
   for (let [name, propertyBinding] of object.properties) {
@@ -72,10 +75,27 @@ function materializeObject(realm: Realm, object: ObjectValue, getCachingHeapInsp
                 generator.emitDefineProperty(object, name, descriptor);
               } else {
                 generator.emitPropertyAssignment(object, name, value);
+                if (isArray && IsArrayIndex(realm, name) && !value.mightHaveBeenDeleted()) {
+                  maxAssignedArrayIndex = Math.max(maxAssignedArrayIndex, Number(name));
+                }
               }
             }
           }
         }
+      }
+    }
+  }
+
+  if (isArray && generator !== undefined) {
+    let lenBinding = object.properties.get("length");
+    if (lenBinding !== undefined && lenBinding.descriptor instanceof PropertyDescriptor) {
+      let lenVal = lenBinding.descriptor.value;
+      if (
+        lenVal instanceof Value &&
+        !(lenVal instanceof AbstractValue && lenVal.kind === "widened property") &&
+        (!(lenVal instanceof NumberValue) || lenVal.value !== maxAssignedArrayIndex + 1)
+      ) {
+        generator.emitPropertyAssignment(object, "length", lenVal);
       }
     }
   }
