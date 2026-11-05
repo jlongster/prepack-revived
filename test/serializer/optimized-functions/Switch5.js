@@ -1,6 +1,5 @@
 let x = global.__abstract ? __abstract("number", "5") : 5;
 
-// throws introspection error
 function g(max) {
   let counter = 0;
   for (let i = 0; i < max; i++) {

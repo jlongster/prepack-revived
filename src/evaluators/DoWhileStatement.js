@@ -19,6 +19,7 @@ import { LoopContinues, InternalGetResultValue } from "./ForOfStatement.js";
 import { AbruptCompletion, BreakCompletion, SimpleNormalCompletion } from "../completions.js";
 import { Environment, To } from "../singletons.js";
 import invariant from "../invariant.js";
+import { residualizeLoop } from "./residualLoop.js";
 import type { BabelNodeDoWhileStatement } from "@babel/types";
 
 export default function(
@@ -67,6 +68,18 @@ export default function(
     invariant(false);
   });
   if (resultOrDiagnostic instanceof Value) return resultOrDiagnostic;
+
+  // In pure scope, emit the loop as a residual loop rather than trying to summarize it.
+  if (realm.isInPureScope() && !realm.instantRender.enabled) {
+    return residualizeLoop(
+      realm,
+      ast,
+      strictCode,
+      env,
+      labelSet,
+      `${resultOrDiagnostic.errorCode}: ${resultOrDiagnostic.message}`
+    );
+  }
 
   // If we get here then unrolling the loop did not work, possibly because the value of the loop condition is not known,
   // so instead try to compute a fixpoint for it
