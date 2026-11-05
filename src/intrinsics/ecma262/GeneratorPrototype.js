@@ -10,7 +10,7 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { ReturnCompletion } from "../../completions.js";
+import { ReturnCompletion, ThrowCompletion } from "../../completions.js";
 import { ObjectValue, StringValue } from "../../values/index.js";
 import { GeneratorResume, GeneratorResumeAbrupt } from "../../methods/generator.js";
 
@@ -42,7 +42,7 @@ export default function(realm: Realm, obj: ObjectValue): void {
     let g = context;
 
     // 2. Let C be Completion{[[Type]]: throw, [[Value]]: exception, [[Target]]: empty}.
-    let C = new ReturnCompletion(exception, realm.currentLocation);
+    let C = new ThrowCompletion(exception, realm.currentLocation);
 
     // 3. Return ? GeneratorResumeAbrupt(g, C).
     return GeneratorResumeAbrupt(realm, g, C);

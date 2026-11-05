@@ -40,6 +40,7 @@ import {
   IteratorValue,
   NewPromiseCapability,
 } from "./index.js";
+import { evaluateGeneratorCall } from "./generator.js";
 import {
   AbruptCompletion,
   Completion,
@@ -386,15 +387,19 @@ export function OrdinaryCallEvaluateBody(
   } else {
     invariant(f instanceof ECMAScriptSourceFunctionValue);
     let F = f;
-    if (F.$FunctionKind === "generator" || F.$FunctionKind === "asyncGenerator") {
+    if (F.$FunctionKind === "asyncGenerator") {
       let diag = new CompilerDiagnostic(
-        "Calling a generator function during initialization is not yet supported",
+        "Calling an async generator function during initialization is not yet supported",
         realm.currentLocation,
         "PP0001",
         "FatalError"
       );
       realm.handleError(diag);
       throw new FatalError();
+    } else if (F.$FunctionKind === "generator") {
+      let thisVal = realm.getRunningContext().lexicalEnvironment.environmentRecord.GetThisBinding();
+      let genObj = evaluateGeneratorCall(realm, F, thisVal, argumentsList);
+      return new ReturnCompletion(genObj, realm.currentLocation);
     } else if (F.$FunctionKind === "async") {
       if (realm.isInPureScope()) {
         let diag = new CompilerDiagnostic(

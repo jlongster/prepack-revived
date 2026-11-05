@@ -27,6 +27,7 @@ import {
   BigIntValue,
   BooleanValue,
   ConcreteValue,
+  FunctionValue,
   NativeFunctionValue,
   NullValue,
   NumberValue,
@@ -257,6 +258,7 @@ export default class ObjectValue extends ConcreteValue {
   // generator
   $GeneratorState: void | "suspendedStart" | "executing";
   $GeneratorContext: void | ExecutionContext;
+  $RegeneratorInvoke: void | FunctionValue;
 
   // typed array
   $TypedArrayName: void | TypedArrayKind;

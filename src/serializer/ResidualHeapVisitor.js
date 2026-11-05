@@ -14,7 +14,7 @@ import { CompilerDiagnostic, FatalError } from "../errors.js";
 import { type Effects, Realm } from "../realm.js";
 import { Path } from "../singletons.js";
 import type { Descriptor, PropertyBinding, ObjectKind } from "../types.js";
-import type { Binding } from "../environment.js";
+import type { Binding, LexicalEnvironment } from "../environment.js";
 import { HashSet, IsArray, Get } from "../methods/index.js";
 import {
   AbstractObjectValue,
@@ -75,6 +75,7 @@ import { PropertyDescriptor, AbstractJoinedDescriptor } from "../descriptors.js"
 type BindingState = {|
   capturedBindings: Set<ResidualFunctionBinding>,
   capturingScopes: Set<Scope>,
+  readersByBinding: Map<ResidualFunctionBinding, Set<Scope>>,
 |};
 
 /* This class visits all values that are reachable in the residual heap.
@@ -120,6 +121,7 @@ export class ResidualHeapVisitor {
     this.residualReactElementVisitor = new ResidualReactElementVisitor(this.realm, this);
     this.generatorTree = new GeneratorTree();
     this.recomputeRecipes = enableRecompute ? getVerifiedRecomputeRecipes(realm) : new Map();
+    this._resolvedBindingCache = new WeakMap();
   }
 
   realm: Realm;
@@ -152,6 +154,7 @@ export class ResidualHeapVisitor {
   globalEnvironmentRecord: GlobalEnvironmentRecord;
   residualReactElementVisitor: ResidualReactElementVisitor;
   recomputeRecipes: Map<ObjectValue, RecomputeRecipe>;
+  _resolvedBindingCache: WeakMap<LexicalEnvironment, Map<string, EnvironmentRecord>>;
 
   // Going backwards from the current scope, find either the containing
   // additional function, or if there isn't one, return the global generator.
@@ -273,7 +276,7 @@ export class ResidualHeapVisitor {
   // Queues up visiting a value in some arbitrary scope.
   _visitInUnrelatedScope(scope: Scope, val: Value): void {
     let scopes = this.values.get(val);
-    if (scopes !== undefined && scopes.has(scope)) return;
+    if (scopes !== undefined && (scopes.has(scope) || (scopes.has(this.globalGenerator) && scopes.size > 1))) return;
     this._enqueueWithUnrelatedScope(scope, () => this.visitValue(val));
   }
 
@@ -669,9 +672,12 @@ export class ResidualHeapVisitor {
         for (let innerName of functionInfo.unbound.keys()) {
           let environment = this.resolveBinding(val, innerName);
           let residualBinding = this.getBinding(environment, innerName);
+          if (functionInfo.modified.has(innerName) && !residualBinding.modified) {
+            residualBinding.modified = true;
+            this._onBindingMarkedModified(residualBinding);
+          }
           this.visitBinding(val, residualBinding);
           residualFunctionBindings.set(innerName, residualBinding);
-          if (functionInfo.modified.has(innerName)) residualBinding.modified = true;
         }
       });
     }
@@ -701,14 +707,42 @@ export class ResidualHeapVisitor {
     }
   }
 
-  // Addresses the case:
-  // let x = [];
-  // let y = [];
-  // function a() { x.push("hi"); }
-  // function b() { y.push("bye"); }
-  // function c() { return x.length + y.length; }
-  // Here we need to make sure that a and b both initialize x and y because x and y will be in the same
-  // captured scope because c captures both x and y.
+  _promoteCapturingScope(bindingState: BindingState, scope: Scope): void {
+    if (bindingState.capturingScopes.has(scope)) return;
+    bindingState.capturingScopes.add(scope);
+    for (let modifiedBinding of bindingState.capturedBindings) {
+      if (this.scope === scope) {
+        this._visitBindingHelper(modifiedBinding);
+      } else {
+        this._enqueueWithUnrelatedScope(scope, () => this._visitBindingHelper(modifiedBinding));
+      }
+    }
+  }
+
+  _onBindingMarkedModified(residualFunctionBinding: ResidualFunctionBinding): void {
+    let envRec = residualFunctionBinding.declarativeEnvironmentRecord;
+    if (envRec === null) return;
+    for (let funcToScopes of this.functionToCapturedScopes.values()) {
+      let bindingState = funcToScopes.get(envRec);
+      if (bindingState === undefined) continue;
+      if (!bindingState.capturedBindings.has(residualFunctionBinding)) {
+        bindingState.capturedBindings.add(residualFunctionBinding);
+        for (let capturingScope of bindingState.capturingScopes) {
+          this._enqueueWithUnrelatedScope(capturingScope, () => this._visitBindingHelper(residualFunctionBinding));
+        }
+      }
+      let readers = bindingState.readersByBinding.get(residualFunctionBinding);
+      if (readers !== undefined) {
+        bindingState.readersByBinding.delete(residualFunctionBinding);
+        for (let readerScope of readers) {
+          this._promoteCapturingScope(bindingState, readerScope);
+        }
+      }
+    }
+  }
+
+  // Addresses the case where multiple functions share a referentialized scope (which holds modified bindings):
+  // every function that initializes that captured scope must visit all modified bindings in it.
   visitBinding(scope: Scope, residualFunctionBinding: ResidualFunctionBinding): void {
     let environment = residualFunctionBinding.declarativeEnvironmentRecord;
     if (environment === null) return;
@@ -723,43 +757,66 @@ export class ResidualHeapVisitor {
     let bindingState = getOrDefault(funcToScopes, envRec, () => ({
       capturedBindings: new Set(),
       capturingScopes: new Set(),
+      readersByBinding: new Map(),
     }));
-    // If the binding is new for this bindingState, have all functions capturing bindings from that scope visit it
-    if (!bindingState.capturedBindings.has(residualFunctionBinding)) {
-      for (let capturingScope of bindingState.capturingScopes) {
-        this._enqueueWithUnrelatedScope(capturingScope, () => this._visitBindingHelper(residualFunctionBinding));
+
+    this._visitBindingHelper(residualFunctionBinding);
+
+    if (residualFunctionBinding.modified) {
+      if (!bindingState.capturedBindings.has(residualFunctionBinding)) {
+        for (let capturingScope of bindingState.capturingScopes) {
+          if (capturingScope !== scope) {
+            this._enqueueWithUnrelatedScope(capturingScope, () => this._visitBindingHelper(residualFunctionBinding));
+          }
+        }
+        bindingState.capturedBindings.add(residualFunctionBinding);
       }
-      bindingState.capturedBindings.add(residualFunctionBinding);
-    }
-    // If the function is new for this bindingState, visit all existent bindings in this scope
-    if (!bindingState.capturingScopes.has(scope)) {
-      invariant(this.scope === scope);
-      for (let residualBinding of bindingState.capturedBindings) this._visitBindingHelper(residualBinding);
-      bindingState.capturingScopes.add(scope);
+      this._promoteCapturingScope(bindingState, scope);
+    } else if (!bindingState.capturingScopes.has(scope)) {
+      let readers = getOrDefault(bindingState.readersByBinding, residualFunctionBinding, () => new Set());
+      readers.add(scope);
     }
   }
 
   resolveBinding(val: FunctionValue, name: string): EnvironmentRecord {
+    let lexEnv = val.$Environment;
+    if (lexEnv !== undefined) {
+      let envMap = this._resolvedBindingCache.get(lexEnv);
+      if (envMap !== undefined) {
+        let cached = envMap.get(name);
+        if (cached !== undefined) return cached;
+      }
+    }
     let doesNotMatter = true;
     let reference = this.logger.tryQuery(
-      () => Environment.ResolveBinding(this.realm, name, doesNotMatter, val.$Environment),
+      () => Environment.ResolveBinding(this.realm, name, doesNotMatter, lexEnv),
       undefined
     );
+    let resolved;
     if (
       reference === undefined ||
       Environment.IsUnresolvableReference(this.realm, reference) ||
       reference.base === this.globalEnvironmentRecord ||
       reference.base === this.globalEnvironmentRecord.$DeclarativeRecord
     ) {
-      return this.globalEnvironmentRecord;
+      resolved = this.globalEnvironmentRecord;
     } else {
       invariant(!Environment.IsUnresolvableReference(this.realm, reference));
       let referencedBase = reference.base;
       let referencedName: string = (reference.referencedName: any);
       invariant(referencedName === name);
       invariant(referencedBase instanceof DeclarativeEnvironmentRecord);
-      return referencedBase;
+      resolved = referencedBase;
     }
+    if (lexEnv !== undefined) {
+      let envMap = this._resolvedBindingCache.get(lexEnv);
+      if (envMap === undefined) {
+        envMap = new Map();
+        this._resolvedBindingCache.set(lexEnv, envMap);
+      }
+      envMap.set(name, resolved);
+    }
+    return resolved;
   }
 
   hasBinding(environment: EnvironmentRecord, name: string): boolean {
@@ -1197,6 +1254,7 @@ export class ResidualHeapVisitor {
   _mark(val: Value): boolean {
     let scopes = this.values.get(val);
     if (scopes === undefined) this.values.set(val, (scopes = new Set()));
+    if (scopes.has(this.globalGenerator) && scopes.size > 1) return false;
     if (this.scope instanceof Generator && this.scope.effectsToApply === undefined) {
       // If we've already marked this value for any simple parent (non-effect carrying) generator,
       // then we don't need to re-mark it, as such a set of generators is reduced to the
@@ -1424,7 +1482,10 @@ export class ResidualHeapVisitor {
             let newValue = modifiedBinding.value;
             invariant(newValue);
             this.visitValue(newValue);
-            residualBinding.modified = true;
+            if (!residualBinding.modified) {
+              residualBinding.modified = true;
+              this._onBindingMarkedModified(residualBinding);
+            }
             let otherFunc = residualBinding.additionalFunctionOverridesValue;
             if (otherFunc !== undefined && otherFunc !== functionValue) {
               let otherNameVal = otherFunc._SafeGetDataPropertyValue("name");
@@ -1459,8 +1520,10 @@ export class ResidualHeapVisitor {
       },
       visitLeakedBinding: (binding: Binding) => {
         let residualBinding = this.getBinding(binding.environment, binding.name);
+        let wasModified = residualBinding.modified;
         residualBinding.modified = true;
         residualBinding.hasLeaked = true;
+        if (!wasModified) this._onBindingMarkedModified(residualBinding);
         // This may not have been referentialized if the binding is a local of an optimized function.
         // in that case, we need to figure out which optimized function it is, and referentialize it in that scope.
         let commonScope = this._getCommonScope();

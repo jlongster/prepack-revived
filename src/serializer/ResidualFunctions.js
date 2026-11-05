@@ -45,7 +45,7 @@ import { ResidualFunctionInstantiator, type Replacement, getReplacement } from "
 import { Modules } from "../utils/modules.js";
 import { ResidualFunctionInitializers } from "./ResidualFunctionInitializers.js";
 import { nullExpression } from "../utils/babelhelpers.js";
-import type { LocationService, ClassMethodInstance } from "./types.js";
+import type { LocationService, ClassMethodInstance, SerializedBody } from "./types.js";
 import { Referentializer } from "./Referentializer.js";
 import { HeapInspector } from "../utils/HeapInspector.js";
 import { getOrDefault } from "./utils.js";
@@ -81,6 +81,7 @@ export class ResidualFunctions {
     this.factoryNameGenerator = factoryNameGenerator;
     this.functionPrototypes = new Map();
     this.firstFunctionUsages = new Map();
+    this.firstFunctionUsagesPerBody = new Map();
     this.functions = new Map();
     this.classes = new Map();
     this.functionInstances = [];
@@ -110,6 +111,7 @@ export class ResidualFunctions {
   factoryNameGenerator: NameGenerator;
   functionPrototypes: Map<FunctionValue, BabelNodeIdentifier>;
   firstFunctionUsages: Map<FunctionValue, BodyReference>;
+  firstFunctionUsagesPerBody: Map<FunctionValue, Map<SerializedBody, BodyReference>>;
   functions: Map<BabelNodeBlockStatement, Array<FunctionInstance>>;
   classes: Map<ObjectValue, BabelNodeClassExpression>;
   functionInstances: Array<FunctionInstance>;
@@ -141,6 +143,15 @@ export class ResidualFunctions {
 
   addFunctionUsage(val: FunctionValue, bodyReference: BodyReference): void {
     if (!this.firstFunctionUsages.has(val)) this.firstFunctionUsages.set(val, bodyReference);
+    let byBody = this.firstFunctionUsagesPerBody.get(val);
+    if (byBody === undefined) {
+      byBody = new Map();
+      this.firstFunctionUsagesPerBody.set(val, byBody);
+    }
+    let prev = byBody.get(bodyReference.body);
+    if (prev === undefined || bodyReference.index < prev.index) {
+      byBody.set(bodyReference.body, bodyReference);
+    }
   }
 
   _findSelfBindingName(funcBody: BabelNodeBlockStatement, instances: Array<FunctionInstance>): void | string {
@@ -165,10 +176,17 @@ export class ResidualFunctions {
     return selfName;
   }
 
+  _canArrowGoToPrelude(val: FunctionValue): boolean {
+    if (!(val instanceof ECMAScriptSourceFunctionValue)) return false;
+    let code = val.$ECMAScriptCode;
+    let fInfo = code ? this.residualFunctionInfos.get(code) : undefined;
+    return fInfo === undefined || (!fInfo.usesThis && !fInfo.usesArguments);
+  }
+
   _isStaticallyInPrelude(val: FunctionValue): boolean {
     if (!(val instanceof ECMAScriptSourceFunctionValue)) return false;
     if (val.isIntrinsic()) return false;
-    if (val.$ThisMode === "lexical") return false;
+    if (val.$ThisMode === "lexical" && !this._canArrowGoToPrelude(val)) return false;
     if (this.residualClassMethodInstances.has(val)) return false;
     if (this.additionalFunctionValueNestedFunctions.has(val)) return false;
     let inst = this.residualFunctionInstances.get(val);
@@ -545,6 +563,12 @@ export class ResidualFunctions {
       let body;
       if (t.isFunctionExpression(funcOrClassNode)) {
         funcNodes.set(functionValue, ((funcOrClassNode: any): BabelNodeFunctionExpression));
+        if (instance.containingAdditionalFunction === undefined) {
+          preludeDefinedFuncs.add(functionValue);
+        }
+        body = getPrelude(instance);
+      } else if (t.isArrowFunctionExpression(funcOrClassNode) && this._canArrowGoToPrelude(functionValue)) {
+        funcNodes.set(functionValue, ((funcOrClassNode: any): BabelNodeArrowFunctionExpression));
         if (instance.containingAdditionalFunction === undefined) {
           preludeDefinedFuncs.add(functionValue);
         }
@@ -1207,7 +1231,10 @@ export class ResidualFunctions {
             invariant(scopeInstances.size === 0);
             let declarator = defineFunction(inst, info.functionId, clonedNode);
             registerFunctionStrictness(clonedNode, functionValue.$Strict, declarator);
-            if (!isLexical && inst.containingAdditionalFunction === undefined) {
+            if (
+              (!isLexical || this._canArrowGoToPrelude(functionValue)) &&
+              inst.containingAdditionalFunction === undefined
+            ) {
               validInPrelude.add(functionValue);
             }
           }
@@ -1240,6 +1267,40 @@ export class ResidualFunctions {
     let bodyInstanceSet = new Set();
     for (let instance of this.functionInstances) {
       if (functionBodies.has(instance)) bodyInstanceSet.add(instance);
+    }
+    for (let instance of bodyInstanceSet) {
+      let fv = instance.functionValue;
+      if (!this.residualClassMethodInstances.has(fv)) continue;
+      let ip = instance.insertionPoint;
+      if (!(ip instanceof BodyReference)) continue;
+      let byBody = this.firstFunctionUsagesPerBody.get(fv);
+      let firstUsage = byBody !== undefined ? byBody.get(ip.body) : this.firstFunctionUsages.get(fv);
+      if (firstUsage instanceof BodyReference && firstUsage.body === ip.body && firstUsage.index < ip.index) {
+        instance.insertionPoint = new BodyReference(ip.body, firstUsage.index);
+      }
+    }
+    let superOrderChanged = true;
+    while (superOrderChanged) {
+      superOrderChanged = false;
+      for (let instance of bodyInstanceSet) {
+        let fv = instance.functionValue;
+        if (!this.residualClassMethodInstances.has(fv)) continue;
+        let ip = instance.insertionPoint;
+        if (!(ip instanceof BodyReference)) continue;
+        let superVal = fv.$Prototype;
+        if (!(superVal instanceof FunctionValue) || superVal === fv) continue;
+        let superInst = this.residualFunctionInstances.get(superVal);
+        if (
+          superInst !== undefined &&
+          bodyInstanceSet.has(superInst) &&
+          superInst.insertionPoint instanceof BodyReference &&
+          superInst.insertionPoint.body === ip.body &&
+          superInst.insertionPoint.index > ip.index
+        ) {
+          superInst.insertionPoint = new BodyReference(ip.body, ip.index);
+          superOrderChanged = true;
+        }
+      }
     }
     let visitedBodyInstances = new Set();
     const visitSameIndexDep = (depVal: Value, ownerFv: FunctionValue, ip: BodyReference): void => {

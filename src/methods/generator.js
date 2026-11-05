@@ -7,15 +7,191 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-/* @flow strict-local */
+/* @flow */
 
 import type { Realm } from "../realm.js";
-import { AbruptCompletion } from "../completions.js";
+import { AbruptCompletion, ReturnCompletion } from "../completions.js";
 import { CompilerDiagnostic, FatalError } from "../errors.js";
-import { Value, ObjectValue, UndefinedValue } from "../values/index.js";
-import { Create } from "../singletons.js";
+import {
+  ECMAScriptSourceFunctionValue,
+  FunctionValue,
+  ObjectValue,
+  StringValue,
+  UndefinedValue,
+  Value,
+} from "../values/index.js";
+import { Environment } from "../singletons.js";
+import { Call } from "./call.js";
+import { Get } from "./get.js";
+import parse from "../utils/parse.js";
+import traverseFast from "../utils/traverse-fast.js";
 import invariant from "../invariant.js";
+import * as t from "@babel/types";
+import generate from "@babel/generator";
+import * as babel from "@babel/core";
+import fs from "fs";
 import type { BabelNodeBlockStatement } from "@babel/types";
+
+let cachedRuntimeSource: void | string;
+const realmRegeneratorRuntimes: WeakMap<Realm, ObjectValue> = new WeakMap();
+const loweredGeneratorCodeCache: WeakMap<BabelNodeBlockStatement, string> = new WeakMap();
+
+function failGeneratorOp(realm: Realm, message: string): empty {
+  let diag = new CompilerDiagnostic(message, realm.currentLocation, "PP0001", "FatalError");
+  realm.handleError(diag);
+  throw new FatalError();
+}
+
+function getRegeneratorRuntimeSource(): string {
+  if (cachedRuntimeSource === undefined) {
+    let runtimePath = require.resolve("regenerator-runtime/runtime.js");
+    let raw = fs.readFileSync(runtimePath, "utf8");
+    let needle = '(function() { return this })() || Function("return this")()';
+    invariant(raw.includes(needle), "unexpected regenerator-runtime/runtime.js format");
+    let body = raw.replace(needle, "{}");
+    cachedRuntimeSource = `(function() {\nvar module = { exports: {} };\n${body}\nreturn module.exports;\n})()`;
+  }
+  return cachedRuntimeSource;
+}
+
+function getOrCreateRealmRegeneratorRuntime(realm: Realm): ObjectValue {
+  let existing = realmRegeneratorRuntimes.get(realm);
+  if (existing !== undefined) return existing;
+  let ast;
+  try {
+    ast = parse(realm, getRegeneratorRuntimeSource(), "regenerator-runtime");
+  } catch (_e) {
+    failGeneratorOp(realm, "Failed to parse internal generator runtime");
+  }
+  let ctx = realm.createExecutionContext();
+  ctx.lexicalEnvironment = realm.$GlobalEnv;
+  ctx.variableEnvironment = realm.$GlobalEnv;
+  ctx.realm = realm;
+  realm.pushContext(ctx);
+  let res;
+  try {
+    res = realm.evaluateWithoutEffects(() => realm.$GlobalEnv.evaluateCompletionDeref(ast, false));
+  } finally {
+    realm.popContext(ctx);
+  }
+  if (res instanceof AbruptCompletion || !(res instanceof ObjectValue)) {
+    failGeneratorOp(realm, "Failed to initialize internal generator runtime");
+  }
+  realmRegeneratorRuntimes.set(realm, res);
+  return res;
+}
+
+function containsSuperReference(F: ECMAScriptSourceFunctionValue): boolean {
+  let found = false;
+  let check = node => {
+    if (node.type === "Super") {
+      found = true;
+      return true;
+    }
+    return (
+      node.type === "ClassExpression" ||
+      node.type === "ClassDeclaration" ||
+      node.type === "ObjectMethod" ||
+      node.type === "FunctionExpression" ||
+      node.type === "FunctionDeclaration"
+    );
+  };
+  for (let p of F.$FormalParameters) traverseFast(p, check);
+  if (!found && F.$ECMAScriptCode) traverseFast(F.$ECMAScriptCode, check);
+  return found;
+}
+
+function getLoweredGeneratorFactorySource(F: ECMAScriptSourceFunctionValue): string {
+  let code = F.$ECMAScriptCode;
+  invariant(code !== undefined);
+  let cached = loweredGeneratorCodeCache.get(code);
+  if (cached !== undefined) return cached;
+
+  let directives = (code.directives || []).slice();
+  if (F.$Strict && !directives.some(d => d.value && d.value.value === "use strict")) {
+    directives.unshift(t.directive(t.directiveLiteral("use strict")));
+  }
+  let bodyNode = t.blockStatement(code.body, directives);
+  let genExpr = t.functionExpression(null, F.$FormalParameters, bodyNode, true, false);
+  let declProg = t.program([t.variableDeclaration("var", [t.variableDeclarator(t.identifier("__pp_gen"), genExpr)])]);
+  let rawSrc = generate(declProg).code;
+  let transformed = babel.transformSync(rawSrc, {
+    configFile: false,
+    babelrc: false,
+    plugins: [
+      "@babel/plugin-transform-parameters",
+      "@babel/plugin-transform-destructuring",
+      "@babel/plugin-transform-for-of",
+      "@babel/plugin-transform-spread",
+      "@babel/plugin-transform-block-scoping",
+      "@babel/plugin-transform-regenerator",
+    ],
+  });
+  invariant(transformed && typeof transformed.code === "string");
+  let factorySrc = `(function(regeneratorRuntime) {\n${transformed.code}\nreturn __pp_gen;\n})`;
+  loweredGeneratorCodeCache.set(code, factorySrc);
+  return factorySrc;
+}
+
+export function evaluateGeneratorCall(
+  realm: Realm,
+  F: ECMAScriptSourceFunctionValue,
+  thisValue: Value,
+  argumentsList: Array<Value>
+): ObjectValue {
+  if (realm.isInPureScope()) {
+    failGeneratorOp(realm, "Calling a generator function in pure scope is residualized");
+  }
+  if (!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) {
+    failGeneratorOp(realm, "Calling a generator function under abstract conditions is not supported");
+  }
+  if (containsSuperReference(F)) {
+    failGeneratorOp(realm, "Calling a generator method using super during initialization is not supported");
+  }
+
+  let runtimeObj = getOrCreateRealmRegeneratorRuntime(realm);
+  let factorySrc = getLoweredGeneratorFactorySource(F);
+  let factoryAst;
+  try {
+    factoryAst = parse(realm, factorySrc, "lowered-generator");
+  } catch (_e) {
+    failGeneratorOp(realm, "Failed to parse lowered generator body");
+  }
+  let closureEnv = F.$Environment;
+  invariant(closureEnv !== undefined);
+
+  let factoryVal;
+  let ctx = realm.createExecutionContext();
+  ctx.lexicalEnvironment = closureEnv;
+  ctx.variableEnvironment = closureEnv;
+  ctx.realm = realm;
+  realm.pushContext(ctx);
+  try {
+    let evalRes = closureEnv.evaluateCompletion((factoryAst.program.body[0]: any).expression, F.$Strict);
+    if (evalRes instanceof AbruptCompletion) throw evalRes;
+    factoryVal = Environment.GetValue(realm, evalRes);
+  } finally {
+    realm.popContext(ctx);
+  }
+  invariant(factoryVal instanceof FunctionValue);
+  let loweredFn = Call(realm, factoryVal, realm.intrinsics.undefined, [runtimeObj]);
+  invariant(loweredFn instanceof FunctionValue);
+  let genObj = Call(realm, loweredFn, thisValue, argumentsList);
+  invariant(genObj instanceof ObjectValue);
+
+  let invokeFn = Get(realm, genObj, "_invoke");
+  invariant(invokeFn instanceof FunctionValue);
+  genObj.properties.delete("_invoke");
+  genObj.$RegeneratorInvoke = invokeFn;
+  genObj.$GeneratorState = "suspendedStart";
+  genObj.$GeneratorContext = undefined;
+
+  let proto = Get(realm, F, "prototype");
+  if (proto instanceof ObjectValue) {
+    genObj.$Prototype = proto;
+  }
+  return genObj;
+}
 
 // ECMA26225.3.3.1
 export function GeneratorStart(
@@ -23,120 +199,74 @@ export function GeneratorStart(
   generator: ObjectValue,
   generatorBody: BabelNodeBlockStatement
 ): UndefinedValue {
-  // Note that generator is a new object, and we can thus write to internal slots
   invariant(realm.isNewObject(generator));
-
-  // 1. Assert: The value of generator.[[GeneratorState]] is undefined.
   invariant(
     generator instanceof ObjectValue && generator.$GeneratorState === undefined,
     "The value of generator.[[GeneratorState]] is undefined"
   );
-
-  // 2. Let genContext be the running execution context.
   let genContext = realm.getRunningContext();
-
-  // 3. Set the Generator component of genContext to generator.
-
-  // 4. Set the code evaluation state of genContext such that when evaluation is resumed for that execution context the following steps will be performed:
-  // a. Let result be the result of evaluating generatorBody.
-  // b. Assert: If we return here, the generator either threw an exception or performed either an implicit or explicit return.
-  // c. Remove genContext from the execution context stack and restore the execution context that is at the top of the execution context stack as the running execution context.
-  // d. Set generator.[[GeneratorState]] to "completed".
-  // e. Once a generator enters the "completed" state it never leaves it and its associated execution context is never resumed. Any execution state associated with generator can be discarded at this point.
-  // f. If result is a normal completion, let resultValue be undefined.
-  // g. Else,
-  // i. If result.[[Type]] is return, let resultValue be result.[[Value]].
-  // ii. Else, return Completion(result).
-  // h. Return CreateIterResultObject(resultValue, true).
-
-  // 5. Set generator.[[GeneratorContext]] to genContext.
   generator.$GeneratorContext = genContext;
-
-  // 6. Set generator.[[GeneratorState]] to "suspendedStart".
   generator.$GeneratorState = "suspendedStart";
-
-  // 7. Return NormalCompletion(undefined).
   return realm.intrinsics.undefined;
 }
 
 // ECMA26225.3.3.2
-export function GeneratorValidate(realm: Realm, generator: Value): void | "suspendedStart" {
-  // 1. If Type(generator) is not Object, throw a TypeError exception.
+export function GeneratorValidate(realm: Realm, generator: Value): void | "suspendedStart" | "executing" {
   if (!(generator instanceof ObjectValue)) {
-    throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, "Type(generator) is not Object");
+    throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Type(generator) is not Object");
   }
-
-  // 2. If generator does not have a [[GeneratorState]] internal slot, throw a TypeError exception.
-  if (!("$GeneratorState" in generator)) {
-    throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, "Type(generator) is not Object");
+  if (generator.$GeneratorState === undefined) {
+    throw realm.createErrorThrowCompletion(
+      realm.intrinsics.TypeError,
+      "Generator method called on incompatible receiver"
+    );
   }
-
-  // 3. Assert: generator also has a [[GeneratorContext]] internal slot.
-  invariant("$GeneratorContext" in generator);
-
-  // 4. Let state be generator.[[GeneratorState]].
   let state = generator.$GeneratorState;
-
-  // 5. If state is "executing", throw a TypeError exception.
   if (state === "executing") {
-    throw realm.createErrorThrowCompletion(realm.intrinsics.SyntaxError, "Type(generator) is not Object");
+    throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "Generator is already running");
   }
-
-  // 6. Return state.
   return state;
+}
+
+function stepRegenerator(realm: Realm, generator: ObjectValue, method: "next" | "return" | "throw", arg: Value): Value {
+  if (realm.isInPureScope()) {
+    failGeneratorOp(realm, "Advancing a generator in pure scope is not supported");
+  }
+  if (!realm.pathConditions.isEmpty() || realm.savedCompletion !== undefined) {
+    failGeneratorOp(realm, "Advancing a generator under abstract conditions is not supported");
+  }
+  let invokeFn = generator.$RegeneratorInvoke;
+  if (invokeFn === undefined) {
+    failGeneratorOp(realm, "Resuming a generator during initialization is not supported");
+  }
+  generator.$GeneratorState = "executing";
+  try {
+    let res = Call(realm, invokeFn, generator, [new StringValue(realm, method), arg]);
+    if (realm.savedCompletion !== undefined) {
+      failGeneratorOp(realm, "Generator body with conditional abrupt completion is not supported");
+    }
+    return res;
+  } finally {
+    generator.$GeneratorState = "suspendedStart";
+  }
 }
 
 // ECMA26225.3.3.3
 export function GeneratorResume(realm: Realm, generator: Value, value: Value): Value {
-  // 1. Let state be ? GeneratorValidate(generator).
-  let state = GeneratorValidate(realm, generator);
+  GeneratorValidate(realm, generator);
   invariant(generator instanceof ObjectValue);
-
-  // 2. If state is "completed", return CreateIterResultObject(undefined, true).
-  if (state === "completed") return Create.CreateIterResultObject(realm, realm.intrinsics.undefined, true);
-
-  // 3. Assert: state is either "suspendedStart" or "suspendedYield".
-  invariant(
-    state === "suspendedStart" || state === "suspendedYield",
-    "state is either 'suspendedStart' or 'suspendedYield'"
-  );
-
-  let diag = new CompilerDiagnostic(
-    "Resuming a generator during initialization is not yet supported",
-    realm.currentLocation,
-    "PP0001",
-    "FatalError"
-  );
-  realm.handleError(diag);
-  throw new FatalError();
+  return stepRegenerator(realm, generator, "next", value);
 }
 
 // ECMA26225.3.3.4
 export function GeneratorResumeAbrupt(realm: Realm, generator: Value, abruptCompletion: AbruptCompletion): Value {
-  let diag = new CompilerDiagnostic(
-    "Resuming a generator during initialization is not yet supported",
-    realm.currentLocation,
-    "PP0001",
-    "FatalError"
-  );
-  realm.handleError(diag);
-  throw new FatalError();
+  GeneratorValidate(realm, generator);
+  invariant(generator instanceof ObjectValue);
+  let method = abruptCompletion instanceof ReturnCompletion ? "return" : "throw";
+  return stepRegenerator(realm, generator, method, abruptCompletion.value);
 }
 
 // ECMA26225.3.3.5
 export function GeneratorYield(realm: Realm, iterNextObj: ObjectValue): Value {
-  // 1. Assert: iterNextObj is an Object that implements the IteratorResult interface.
-
-  // 2. Let genContext be the running execution context.
-  // 3. Assert: genContext is the execution context of a generator.
-  // 4. Let generator be the value of the Generator component of genContext.
-  // 5. Set generator.[[GeneratorState]] to "suspendedYield".
-  // 6. Remove genContext from the execution context stack and restore the execution context that is at the top of the execution context stack as the running execution context.
-  // 7. Set the code evaluation state of genContext such that when evaluation is resumed with a Completion resumptionValue the following steps will be performed:
-  // a.  Return resumptionValue.
-  // b. NOTE: This returns to the evaluation of the YieldExpression production that originally called this abstract operation.
-  // 8. Return NormalCompletion(iterNextObj).
   return realm.intrinsics.undefined;
-
-  // 9. NOTE: This returns to the evaluation of the operation that had most previously resumed evaluation of genContext.
 }

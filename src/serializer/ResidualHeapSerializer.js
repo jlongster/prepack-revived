@@ -1731,6 +1731,7 @@ export class ResidualHeapSerializer {
 
     let inOptimizedFunction = this._residualOptimizedFunctions.tryGetOptimizedFunctionRoot(val);
     if (inOptimizedFunction !== undefined) instance.containingAdditionalFunction = inOptimizedFunction;
+    let afterInsertionPoint: Array<() => void> = [];
     let bindingsEmittedSemaphore = new CountingSemaphore(() => {
       invariant(instance);
       // hoist if we are in an additionalFunction
@@ -1740,7 +1741,13 @@ export class ResidualHeapSerializer {
       } else {
         instance.insertionPoint = this.emitter.getBodyReference();
       }
+      for (let cb of afterInsertionPoint) cb();
     });
+
+    let isClassCtor =
+      val.$FunctionKind === "classConstructor" &&
+      val.$HomeObject instanceof ObjectValue &&
+      val.$HomeObject.$IsClassPrototype;
 
     for (let [boundName, residualBinding] of residualBindings) {
       let referencedValues = [];
@@ -1751,20 +1758,30 @@ export class ResidualHeapSerializer {
         serializeBindingFunc = () => this._serializeDeclarativeEnvironmentRecordBinding(residualBinding);
         if (residualBinding.value !== undefined) referencedValues.push(residualBinding.value);
       }
-      bindingsEmittedSemaphore.acquireOne();
-      this.emitter.emitNowOrAfterWaitingForDependencies(
-        referencedValues,
-        () => {
-          serializeBindingFunc();
-          bindingsEmittedSemaphore.releaseOne();
-        },
-        this.emitter.getBody()
-      );
+      if (isClassCtor) {
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          referencedValues,
+          () => {
+            serializeBindingFunc();
+          },
+          this.emitter.getBody()
+        );
+      } else {
+        bindingsEmittedSemaphore.acquireOne();
+        this.emitter.emitNowOrAfterWaitingForDependencies(
+          referencedValues,
+          () => {
+            serializeBindingFunc();
+            bindingsEmittedSemaphore.releaseOne();
+          },
+          this.emitter.getBody()
+        );
+      }
     }
     if (val.$FunctionKind === "classConstructor") {
       let homeObject = val.$HomeObject;
       if (homeObject instanceof ObjectValue && homeObject.$IsClassPrototype) {
-        this._serializeClass(val, homeObject, bindingsEmittedSemaphore);
+        this._serializeClass(val, homeObject, bindingsEmittedSemaphore, afterInsertionPoint);
         return;
       }
     }
@@ -1789,8 +1806,10 @@ export class ResidualHeapSerializer {
         return;
       }
     }
+    afterInsertionPoint.push(() => {
+      this._emitObjectProperties(val);
+    });
     bindingsEmittedSemaphore.releaseOne();
-    this._emitObjectProperties(val);
     let additionalEffects = this.additionalFunctionValuesAndEffects.get(val);
     if (additionalEffects) this._serializeAdditionalFunction(val, additionalEffects);
   }
@@ -1798,7 +1817,8 @@ export class ResidualHeapSerializer {
   _serializeClass(
     classFunc: ECMAScriptSourceFunctionValue,
     classPrototype: ObjectValue,
-    bindingsEmittedSemaphore: CountingSemaphore
+    bindingsEmittedSemaphore: CountingSemaphore,
+    afterInsertionPoint: Array<() => void>
   ): void {
     let classMethodInstance = this.residualClassMethodInstances.get(classFunc);
     invariant(classMethodInstance !== undefined);
@@ -1995,10 +2015,6 @@ export class ResidualHeapSerializer {
       }
     }
 
-    // Release semaphore so class insertion point precedes any extra static or prototype property mutations.
-    bindingsEmittedSemaphore.releaseOne();
-    this._emitObjectProperties(classFunc, propertiesToSerialize, undefined, undefined, true, symbolsToSerialize);
-
     if (
       protoPropertiesToSerialize.size > 0 ||
       protoSymbolsToSerialize.size > 0 ||
@@ -2009,20 +2025,35 @@ export class ResidualHeapSerializer {
       invariant(prototypeId !== undefined && prototypeId.type === "Identifier");
       this.residualFunctions.setFunctionPrototype(classFunc, prototypeId);
       this._serializedValueWithIdentifiers.add(classPrototype);
-      if (deletedProtoConstructor) {
-        this._deleteProperty(
-          t.memberExpression(this.getSerializeObjectIdentifier(classPrototype), t.identifier("constructor"))
+    }
+
+    afterInsertionPoint.push(() => {
+      this._emitObjectProperties(classFunc, propertiesToSerialize, undefined, undefined, true, symbolsToSerialize);
+
+      if (
+        protoPropertiesToSerialize.size > 0 ||
+        protoSymbolsToSerialize.size > 0 ||
+        classPrototype.unknownProperty !== undefined ||
+        deletedProtoConstructor
+      ) {
+        if (deletedProtoConstructor) {
+          this._deleteProperty(
+            t.memberExpression(this.getSerializeObjectIdentifier(classPrototype), t.identifier("constructor"))
+          );
+        }
+        this._emitObjectProperties(
+          classPrototype,
+          protoPropertiesToSerialize,
+          true,
+          undefined,
+          true,
+          protoSymbolsToSerialize
         );
       }
-      this._emitObjectProperties(
-        classPrototype,
-        protoPropertiesToSerialize,
-        true,
-        undefined,
-        true,
-        protoSymbolsToSerialize
-      );
-    }
+    });
+
+    // Release semaphore so class insertion point precedes any extra static or prototype property mutations.
+    bindingsEmittedSemaphore.releaseOne();
   }
 
   _serializeClassMethod(key: string | SymbolValue, methodFunc: ECMAScriptSourceFunctionValue): void {
@@ -2291,7 +2322,11 @@ export class ResidualHeapSerializer {
       undefined,
       skipPrototype
     );
-    let serializedProto = this.serializeValue(classConstructor ? classConstructor : proto);
+    let targetProto = classConstructor ? classConstructor : proto;
+    if (targetProto instanceof FunctionValue) {
+      this.residualFunctions.addFunctionUsage(targetProto, this.emitter.getBodyReference());
+    }
+    let serializedProto = this.serializeValue(targetProto);
     if (val.temporalAlias === undefined) {
       if (!this.realm.isCompatibleWith(this.realm.MOBILE_JSC_VERSION) && !this.realm.isCompatibleWith("mobile")) {
         return t.callExpression(this.preludeGenerator.memoizeReference("Object.create"), [
