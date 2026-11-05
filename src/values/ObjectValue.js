@@ -179,6 +179,7 @@ export default class ObjectValue extends ConcreteValue {
   $ErrorData: void | {
     // undefined when the property is "missing"
     contextStack: Array<ExecutionContext>,
+    defaultStack?: Value,
     locationData: void | {
       filename: string,
       sourceCode: string,

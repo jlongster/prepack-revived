@@ -113,6 +113,7 @@ export type FactoryFunctionInfo = {
   factoryId: BabelNodeIdentifier,
   functionInfo: FunctionInfo,
   anyContainingAdditionalFunction: boolean,
+  isCurried?: boolean,
 };
 
 export type ResidualFunctionBinding = {
@@ -219,6 +220,8 @@ export type SerializedResult = {
   sourceFilePaths?: { sourceMaps: Array<string>, sourceFiles: Array<{ absolute: string, relative: string }> },
 };
 
+import type { RecomputeRecipe } from "../methods/recompute.js";
+
 export type Scope = FunctionValue | Generator;
 
 export type ResidualHeapInfo = {
@@ -235,4 +238,5 @@ export type ResidualHeapInfo = {
   conditionalFeasibility: Map<AbstractValue, { t: boolean, f: boolean }>,
   // Parents will always be a generator, optimized function value or "GLOBAL"
   additionalGeneratorRoots: Map<Generator, Set<ObjectValue>>,
+  recomputeRecipes?: Map<ObjectValue, RecomputeRecipe>,
 };

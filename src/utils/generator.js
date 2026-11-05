@@ -56,6 +56,7 @@ import { concretize, Join, Utils } from "../singletons.js";
 import type { SerializerOptions } from "../options.js";
 import type { PathConditions, ShapeInformationInterface } from "../types.js";
 import { PreludeGenerator } from "./PreludeGenerator.js";
+import { voidExpression } from "./babelhelpers.js";
 import { PropertyDescriptor } from "../descriptors.js";
 
 export type OperationDescriptorType =
@@ -212,6 +213,7 @@ export type SerializationContext = {|
   emit: BabelNodeStatement => void,
   processValues: (Set<AbstractValue | ObjectValue>) => void,
   canOmit: Value => boolean,
+  isReferenced: Value => boolean,
   declare: (AbstractValue | ObjectValue) => void,
   emitPropertyModification: PropertyBinding => void,
   emitBindingModification: Binding => void,
@@ -394,9 +396,29 @@ export class TemporalOperationEntry extends GeneratorEntry {
       }
     }
     if (!omit) {
-      let nodes = this.args.map((boundArg, i) => context.serializeValue(boundArg));
+      let opType = this.operationDescriptor.type;
+      let nodes = this.args.map((boundArg, i) =>
+        opType === "EMIT_PROPERTY_ASSIGNMENT" && i === 1 && boundArg.mightHaveBeenDeleted()
+          ? voidExpression
+          : context.serializeValue(boundArg)
+      );
       let valuesToProcess = new Set();
       let declaredId = this.declared !== undefined ? this.declared.intrinsicName : undefined;
+      if (
+        declaredId !== undefined &&
+        this.declared instanceof AbstractValue &&
+        (opType === "CALL_BAILOUT" ||
+          opType === "CALL_ABSTRACT_FUNC" ||
+          opType === "CALL_ABSTRACT_FUNC_THIS" ||
+          opType === "DIRECT_CALL_WITH_ARG_LIST" ||
+          opType === "EMIT_CALL_AND_CAPTURE_RESULT" ||
+          opType === "UNKNOWN_ARRAY_METHOD_CALL" ||
+          opType === "UNKNOWN_ARRAY_METHOD_PROPERTY_CALL" ||
+          opType === "OBJECT_ASSIGN") &&
+        !context.isReferenced(this.declared)
+      ) {
+        declaredId = undefined;
+      }
       let node = context.serializeOperationDescriptor(
         this.operationDescriptor,
         nodes,
@@ -672,6 +694,7 @@ export class Generator {
   id: number;
   _name: string;
   pathConditions: PathConditions;
+  _pruned: boolean;
 
   print(printer: Printer): void {
     for (let entry of this._entries) entry.print(printer);
@@ -1170,7 +1193,69 @@ export class Generator {
     return res;
   }
 
+  _pruneRedundantEntries(): void {
+    let entries = this._entries;
+    if (entries.length < 2) return;
+    let keep = new Array(entries.length).fill(true);
+    let anyRemoved = false;
+    for (let i = 0; i < entries.length; i++) {
+      let entry = entries[i];
+      if (entry instanceof BindingAssignmentEntry) {
+        let target = entry.binding;
+        for (let j = i + 1; j < entries.length; j++) {
+          let next = entries[j];
+          if (next instanceof BindingAssignmentEntry) {
+            if (next.binding === target) {
+              keep[i] = false;
+              anyRemoved = true;
+              break;
+            }
+            continue;
+          }
+          if (next instanceof TemporalOperationEntry && next.operationDescriptor.type === "GET_BINDING") {
+            if (next.operationDescriptor.data.binding === target) {
+              next.args = [entry.value];
+              next.operationDescriptor = createOperationDescriptor("SINGLE_ARG");
+              next.isPure = true;
+            }
+            continue;
+          }
+          break;
+        }
+      } else if (
+        entry instanceof TemporalOperationEntry &&
+        entry.operationDescriptor.type === "GLOBAL_ASSIGNMENT" &&
+        entry.args[1] instanceof StringValue
+      ) {
+        let globalKey = entry.args[1].value;
+        for (let j = i + 1; j < entries.length; j++) {
+          let next = entries[j];
+          if (
+            next instanceof TemporalOperationEntry &&
+            next.operationDescriptor.type === "GLOBAL_ASSIGNMENT" &&
+            next.args[1] instanceof StringValue
+          ) {
+            if (next.args[1].value === globalKey) {
+              keep[i] = false;
+              anyRemoved = true;
+              break;
+            }
+            continue;
+          }
+          break;
+        }
+      }
+    }
+    if (anyRemoved) {
+      this._entries = entries.filter((_, idx) => keep[idx]);
+    }
+  }
+
   visit(callbacks: VisitEntryCallbacks): void {
+    if (!this._pruned) {
+      this._pruned = true;
+      this._pruneRedundantEntries();
+    }
     let visitFn = () => {
       for (let entry of this._entries) entry.visit(callbacks, this);
       return null;

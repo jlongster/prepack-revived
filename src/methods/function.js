@@ -38,6 +38,8 @@ import {
 } from "../values/index.js";
 import { OrdinaryCallEvaluateBody, OrdinaryCallBindThis, PrepareForOrdinaryCall, Call } from "./call.js";
 import { tryResidualizeRecursiveCall, withActivation } from "./recursion.js";
+import { evaluateCallWithRecomputeTracking } from "./recompute.js";
+import { tryAvoidInliningExplosion } from "./inlining.js";
 import { SameValue } from "../methods/abstract.js";
 import { Construct } from "../methods/construct.js";
 import { HasOwnProperty, UpdateEmpty } from "../methods/index.js";
@@ -188,47 +190,52 @@ function InternalCall(
     let residualCall = tryResidualizeRecursiveCall(realm, F, thisArgument, argsList);
     if (residualCall !== undefined) return residualCall;
 
-    // 3. Let callerContext be the running execution context.
-    let callerContext = realm.getRunningContext();
+    let uninlinedCall = tryAvoidInliningExplosion(realm, F, thisArgument, argsList);
+    if (uninlinedCall !== undefined) return uninlinedCall;
 
-    // 4. Let calleeContext be PrepareForOrdinaryCall(F, undefined).
-    let calleeContext = PrepareForOrdinaryCall(realm, F, undefined);
-    let calleeEnv = calleeContext.lexicalEnvironment;
+    return evaluateCallWithRecomputeTracking(realm, F, thisArgument, argsList, () => {
+      // 3. Let callerContext be the running execution context.
+      let callerContext = realm.getRunningContext();
 
-    let result;
-    try {
-      for (let t1 of realm.tracers) t1.beforeCall(F, thisArgument, argsList, undefined);
+      // 4. Let calleeContext be PrepareForOrdinaryCall(F, undefined).
+      let calleeContext = PrepareForOrdinaryCall(realm, F, undefined);
+      let calleeEnv = calleeContext.lexicalEnvironment;
 
-      // 5. Assert: calleeContext is now the running execution context.
-      invariant(realm.getRunningContext() === calleeContext, "calleeContext should be current execution context");
+      let result;
+      try {
+        for (let t1 of realm.tracers) t1.beforeCall(F, thisArgument, argsList, undefined);
 
-      // 6. Perform OrdinaryCallBindThis(F, calleeContext, thisArgument).
-      OrdinaryCallBindThis(realm, F, calleeContext, thisArgument);
+        // 5. Assert: calleeContext is now the running execution context.
+        invariant(realm.getRunningContext() === calleeContext, "calleeContext should be current execution context");
 
-      // 7. Let result be OrdinaryCallEvaluateBody(F, argumentsList).
-      result = withActivation(realm, F, argsList, () => OrdinaryCallEvaluateBody(realm, F, argsList));
-    } finally {
-      // 8. Remove calleeContext from the execution context stack and restore callerContext as the running execution context.
-      realm.popContext(calleeContext);
-      realm.onDestroyScope(calleeContext.lexicalEnvironment);
-      if (calleeContext.lexicalEnvironment !== calleeEnv) realm.onDestroyScope(calleeEnv);
-      invariant(realm.getRunningContext() === callerContext);
+        // 6. Perform OrdinaryCallBindThis(F, calleeContext, thisArgument).
+        OrdinaryCallBindThis(realm, F, calleeContext, thisArgument);
 
-      for (let t2 of realm.tracers) t2.afterCall(F, thisArgument, argsList, undefined, (result: any));
-    }
+        // 7. Let result be OrdinaryCallEvaluateBody(F, argumentsList).
+        result = withActivation(realm, F, argsList, () => OrdinaryCallEvaluateBody(realm, F, argsList));
+      } finally {
+        // 8. Remove calleeContext from the execution context stack and restore callerContext as the running execution context.
+        realm.popContext(calleeContext);
+        realm.onDestroyScope(calleeContext.lexicalEnvironment);
+        if (calleeContext.lexicalEnvironment !== calleeEnv) realm.onDestroyScope(calleeEnv);
+        invariant(realm.getRunningContext() === callerContext);
 
-    // 9. If result.[[Type]] is return, return NormalCompletion(result.[[Value]]).
-    if (result instanceof ReturnCompletion) {
-      return result.value;
-    }
+        for (let t2 of realm.tracers) t2.afterCall(F, thisArgument, argsList, undefined, (result: any));
+      }
 
-    // 10. ReturnIfAbrupt(result).
-    if (result instanceof AbruptCompletion) {
-      throw result;
-    }
+      // 9. If result.[[Type]] is return, return NormalCompletion(result.[[Value]]).
+      if (result instanceof ReturnCompletion) {
+        return result.value;
+      }
 
-    // 11. Return NormalCompletion(undefined).
-    return realm.intrinsics.undefined;
+      // 10. ReturnIfAbrupt(result).
+      if (result instanceof AbruptCompletion) {
+        throw result;
+      }
+
+      // 11. Return NormalCompletion(undefined).
+      return realm.intrinsics.undefined;
+    });
   } finally {
     realm.endCall();
   }

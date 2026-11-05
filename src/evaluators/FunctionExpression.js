@@ -78,6 +78,7 @@ export default function(
       closure.loc = ast.loc;
       MakeConstructor(realm, closure);
     }
+    closure.__originalName = name;
 
     Functions.SetFunctionName(realm, closure, new StringValue(realm, name));
     if (isNormal) {

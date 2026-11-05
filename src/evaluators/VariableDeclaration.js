@@ -118,6 +118,7 @@ export default function(
       if (
         declar.id &&
         declar.id.name !== undefined &&
+        value.__originalName === undefined &&
         !(value instanceof ECMAScriptFunctionValue && value.$HomeObject !== undefined)
       ) {
         value.__originalName = bindingId;
