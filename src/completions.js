@@ -74,6 +74,14 @@ export class Completion {
       if (clone.alternate.value === bottomValue) {
         return clone.consequent;
       }
+      if (
+        clone instanceof JoinedNormalAndAbruptCompletions &&
+        clone.composedWith === undefined &&
+        clone.consequent instanceof AbruptCompletion &&
+        clone.alternate instanceof AbruptCompletion
+      ) {
+        return new JoinedAbruptCompletions(clone.joinCondition, clone.consequent, clone.alternate);
+      }
     }
     return clone;
   }

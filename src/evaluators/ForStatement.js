@@ -187,8 +187,13 @@ function ForBodyEvaluation(
       }
       return realm.returnOrThrowCompletion(result);
     }
-    if (result instanceof JoinedNormalAndAbruptCompletions) {
-      result = Completion.normalizeSelectedCompletions(c => c instanceof ContinueCompletion, result);
+    let matchesCurrentLoopContinue = (c: Completion) =>
+      c instanceof ContinueCompletion && (!c.target || (labelSet != null && labelSet.indexOf(c.target) >= 0));
+    if (
+      (result instanceof JoinedNormalAndAbruptCompletions || result instanceof JoinedAbruptCompletions) &&
+      result.containsSelectedCompletion(matchesCurrentLoopContinue)
+    ) {
+      result = Completion.normalizeSelectedCompletions(matchesCurrentLoopContinue, result);
     }
     invariant(result instanceof Completion);
     result = realm.composeWithSavedCompletion(result);

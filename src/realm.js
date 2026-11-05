@@ -1018,9 +1018,7 @@ export class Realm {
       };
       let effects = this.evaluateForEffects(f, undefined, "evaluateWithUndoForDiagnostic");
       this.applyEffects(effects);
-      let resultVal = effects.result;
-      if (resultVal instanceof AbruptCompletion) throw resultVal;
-      return resultVal.value;
+      return this.returnOrThrowCompletion(effects.result);
     } catch (e) {
       if (diagnostic !== undefined) return diagnostic;
       throw e;
@@ -1235,7 +1233,16 @@ export class Realm {
       }
       return completion;
     } else {
-      let cc = Join.composeCompletions(this.savedCompletion, completion);
+      let savedPathConditions = this.pathConditions;
+      if (this.savedCompletion.pathConditionsAtCreation !== undefined) {
+        this.pathConditions = this.savedCompletion.pathConditionsAtCreation;
+      }
+      let cc;
+      try {
+        cc = Join.composeCompletions(this.savedCompletion, completion);
+      } finally {
+        this.pathConditions = savedPathConditions;
+      }
       if (cc instanceof JoinedNormalAndAbruptCompletions) {
         this.savedCompletion = cc;
         this.pushPathConditionsLeadingToNormalCompletions(completion);
