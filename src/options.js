@@ -61,6 +61,9 @@ export const DiagnosticSeverityValues = ["FatalError", "RecoverableError", "Warn
 export type ReactOutputTypes = "create-element" | "jsx" | "bytecode";
 export const ReactOutputValues = ["create-element", "jsx", "bytecode"];
 
+export type SmtMode = "off" | "fallback" | "audit";
+export const SmtModeValues = ["off", "fallback", "audit"];
+
 export type RealmOptions = {
   check?: Array<number>,
   compatibility?: Compatibility,
@@ -90,6 +93,7 @@ export type RealmOptions = {
   hasExplicitCompatibility?: boolean,
   assumptions?: { [string]: mixed },
   fallbackMode?: AssumptionFallbackMode,
+  smt?: SmtMode,
 };
 
 export type SerializerOptions = {

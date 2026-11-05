@@ -140,6 +140,9 @@ export function AbstractRelationalComparison(
     } else {
       res = AbstractValue.createFromBinaryOp(realm, op, py, px);
     }
+    if (res instanceof BooleanValue && (op === "<=" || op === ">=")) {
+      res = new BooleanValue(realm, !res.value);
+    }
     invariant(res instanceof BooleanValue || res instanceof UndefinedValue || res instanceof AbstractValue);
     return res;
   }

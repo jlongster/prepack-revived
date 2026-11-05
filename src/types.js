@@ -398,6 +398,10 @@ export class PathConditions {
     return new Set();
   }
 
+  getAllConditions(): Array<AbstractValue> {
+    return [];
+  }
+
   refineBaseConditons(realm: Realm, depth?: number = 0): void {}
 }
 

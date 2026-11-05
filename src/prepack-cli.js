@@ -24,6 +24,8 @@ import {
   UnknownGlobalsModeValues,
   type AssumptionFallbackMode,
   AssumptionFallbackModeValues,
+  type SmtMode,
+  SmtModeValues,
 } from "./options.js";
 import { parseCliAssumption } from "./intrinsics/env/assumptions.js";
 import { type SerializedResult } from "./serializer/types.js";
@@ -97,6 +99,7 @@ function run(
     --assumptionsFile PATH   JSON file mapping environment assumption expressions/paths to expected values.
     --fallbackMode           Action when a runtime assumption guard fails: "inline" (default: run embedded original code) or "throw".
     --profileEnv TARGET      Probe environment assumptions against "node" or "browser" before prepacking.
+    --smt                    Z3 path-condition solver mode: off | fallback | audit (default = fallback when z3 is available, or $PREPACK_SMT).
   `;
   let args = Array.from(process.argv);
   args.splice(0, 2);
@@ -121,6 +124,7 @@ function run(
   let cpuprofilePath: void | string;
   let invariantMode: void | InvariantModeTypes;
   let invariantLevel: void | number;
+  let smt: void | SmtMode;
   let reproMode: void | "reproUnconditionally" | "reproOnFatalError";
   let debugReproPackager: void | DebugReproPackager;
   // Indicates where to find a zip with prepack runtime. Used in environments where
@@ -319,6 +323,15 @@ function run(
           invariantMode = (arg: any);
           reproArguments.push("--invariantMode", invariantMode);
           break;
+        case "smt":
+          arg = args.shift();
+          if (!SmtModeValues.includes(arg)) {
+            console.error(`Unsupported smt mode: ${arg}`);
+            process.exit(1);
+          }
+          smt = (arg: any);
+          reproArguments.push("--smt", smt);
+          break;
         case "invariantLevel":
           let invariantLevelString = args.shift();
           if (isNaN(invariantLevelString)) {
@@ -416,6 +429,7 @@ function run(
             "--warnAsError",
             "--diagnosticAsError PPxxxx,PPyyyy,...",
             "--noDiagnostic PPxxxx,PPyyyy,...",
+            "--smt " + SmtModeValues.join(" | "),
           ];
           for (let flag of Object.keys(flags)) options.push(`--${flag}`);
 
@@ -455,6 +469,7 @@ function run(
       reactOutput,
       invariantMode,
       invariantLevel,
+      smt,
       debuggerConfigArgs,
       debugReproArgs,
       modulesToInitialize,

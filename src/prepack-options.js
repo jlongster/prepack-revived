@@ -77,6 +77,7 @@ export type PrepackOptions = {|
   assumptions?: { [string]: mixed },
   fallbackMode?: AssumptionFallbackMode,
   profileEnv?: "node" | "browser",
+  smt?: "off" | "fallback" | "audit",
 |};
 
 export function getRealmOptions({
@@ -109,6 +110,7 @@ export function getRealmOptions({
   unknownGlobals,
   assumptions,
   fallbackMode,
+  smt,
 }: PrepackOptions): RealmOptions {
   return {
     compatibility: compatibility !== undefined ? compatibility : "browser",
@@ -141,6 +143,7 @@ export function getRealmOptions({
     unknownGlobals,
     assumptions,
     fallbackMode,
+    smt,
   };
 }
 
