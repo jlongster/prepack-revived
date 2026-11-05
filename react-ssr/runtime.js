@@ -19,9 +19,12 @@
 //   isAbstract(v)          is v unknown at specialization time
 //   types(v)               comma separated possible typeof results (see __possibleTypes)
 //   condParts(v)           [cond, a, b] if v is an abstract conditional, else undefined
-//   str(fn, a, b, c)       residual call fn(a, b, c) whose result is a string
-//   bool(fn, a, b)         residual call fn(a, b) whose result is a boolean
-//   num(fn, a, b, c)       residual call fn(a, b, c) whose result is a number
+//   concatParts(v)         [a, b] if v is an abstract string concatenation a + b, else undefined
+//   str1/str2/str3(fn, ...) residual call of fn with 1/2/3 arguments, whose result is a string
+//                          (pure: fn must not throw or depend on state; results may be shared)
+//   bool2(fn, a, b)        pure residual call fn(a, b) whose result is a boolean
+//   strT2/boolT2(fn, a, b) residual call kept in order (fn may throw)
+//   num3(fn, a, b, c)      residual call fn(a, b, c) whose result is a number
 //   widen(array)           a view of an array of unknown length whose map callbacks get
 //                          specialized (undefined if impossible)
 //   bail(message)          refuse to specialize (Prepack: fatal diagnostic; Node: throws)
@@ -336,30 +339,41 @@ var __SSR = (function (HOST) {
   // ---------------------------------------------------------------------------------------------
   // Tree context (ReactFizzTreeContext): ids for useId.
 
+  // A tree context is either concrete ({ id, overflow }) or, below an array of unknown length,
+  // lazy ({ parent, totalChildren, index }): ids are only computed (by residual code) when useId
+  // reads them, so that rendering without useId pays nothing for the tree position bookkeeping.
   function getTreeId(context) {
-    var overflow = context.overflow;
-    var idWithLeadingBit = context.id;
+    var concrete = materializeTreeContext(context);
+    var overflow = concrete.overflow;
+    var idWithLeadingBit = concrete.id;
     if (HOST.isAbstract(idWithLeadingBit) || HOST.isAbstract(overflow)) {
-      return HOST.str(__ssrTreeId, idWithLeadingBit, overflow);
+      return HOST.str2(__ssrTreeId, idWithLeadingBit, overflow);
     }
     var id = idWithLeadingBit & ~getLeadingBit(idWithLeadingBit);
     return id.toString(32) + overflow;
   }
 
+  function materializeTreeContext(context) {
+    if (context.parent === undefined) return context;
+    var base = materializeTreeContext(context.parent);
+    return {
+      id: HOST.num3(__ssrTreeContextId, base.id, context.totalChildren, context.index),
+      overflow: HOST.str3(__ssrTreeContextOverflow, base.id, base.overflow, context.totalChildren),
+    };
+  }
+
   function pushTreeContext(baseContext, totalChildren, index) {
-    var baseIdWithLeadingBit = baseContext.id;
-    var baseOverflow = baseContext.overflow;
     if (
-      HOST.isAbstract(baseIdWithLeadingBit) ||
-      HOST.isAbstract(baseOverflow) ||
+      baseContext.parent !== undefined ||
+      HOST.isAbstract(baseContext.id) ||
+      HOST.isAbstract(baseContext.overflow) ||
       HOST.isAbstract(totalChildren) ||
       HOST.isAbstract(index)
     ) {
-      return {
-        id: HOST.num(__ssrTreeContextId, baseIdWithLeadingBit, totalChildren, index),
-        overflow: HOST.str(__ssrTreeContextOverflow, baseIdWithLeadingBit, baseOverflow, totalChildren),
-      };
+      return { parent: baseContext, totalChildren: totalChildren, index: index };
     }
+    var baseIdWithLeadingBit = baseContext.id;
+    var baseOverflow = baseContext.overflow;
     var baseLength = getBitLength(baseIdWithLeadingBit) - 1;
     var baseId = baseIdWithLeadingBit & ~(1 << baseLength);
     var slot = index + 1;
@@ -430,7 +444,20 @@ var __SSR = (function (HOST) {
 
   function escapeTextForBrowser(text) {
     if (typeof text === "boolean" || typeof text === "number") return "" + text;
-    if (HOST.isAbstract(text)) return HOST.str(__ssrEscape, text);
+    if (HOST.isAbstract(text)) {
+      // Escaping distributes over conditionals and over string concatenation (it maps each
+      // character independently, and `a + b` converts both operands as "" + x does), so constant
+      // parts are escaped now and only the unknown parts at runtime.
+      var parts = HOST.condParts(text);
+      if (parts !== undefined) {
+        if (parts[0]) return escapeTextForBrowser(parts[1]);
+        return escapeTextForBrowser(parts[2]);
+      }
+      var operands = HOST.concatParts(text);
+      if (operands !== undefined) return escapeTextForBrowser(operands[0]) + escapeTextForBrowser(operands[1]);
+      if (HOST.types(text) === "number") return "" + text;
+      return HOST.str1(__ssrEscape, text);
+    }
     return escapeHtml(text);
   }
 
@@ -445,7 +472,7 @@ var __SSR = (function (HOST) {
   }
 
   function styleValueString(styleValue) {
-    if (HOST.isAbstract(styleValue)) return HOST.str(__ssrTrimEscape, styleValue);
+    if (HOST.isAbstract(styleValue)) return HOST.str1(__ssrTrimEscape, styleValue);
     return escapeTextForBrowser(("" + styleValue).trim());
   }
 
@@ -1086,8 +1113,8 @@ var __SSR = (function (HOST) {
     if (embedded === UNKNOWN_TEXT_STATE) {
       HOST.bail("a child of unknown type at the start of an item of an array of unknown length is not supported");
     }
-    var html = HOST.str(__ssrRenderPrimitiveChild, node, embedded);
-    state.lastText = HOST.bool(__ssrIsTextChild, node, embedded);
+    var html = HOST.strT2(__ssrRenderPrimitiveChild, node, embedded);
+    state.lastText = HOST.boolT2(__ssrIsTextChild, node, embedded);
     return html;
   }
 

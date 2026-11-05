@@ -435,6 +435,31 @@ export default function(realm: Realm): void {
     })
   );
 
+  // __residual_pure(typeName, function, arg0, ...) is like __residual_unsafe, but the call is
+  // pure: it does not depend on or change any state and cannot throw for the given arguments. The
+  // result is an ordinary (non temporal) abstract value, so calls with the same arguments are
+  // shared, and calls whose results are not used are not emitted.
+  global.$DefineOwnProperty(
+    "__residual_pure",
+    new PropertyDescriptor({
+      value: new NativeFunctionValue(realm, "global.__residual_pure", "__residual_pure", 2, (context, [typeName, f, ...args]) => {
+        if (!realm.useAbstractInterpretation) {
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "realm is not partial");
+        }
+        let { type, template } = parseTypeNameOrTemplate(realm, typeName);
+        if (template !== undefined || !(f instanceof FunctionValue)) {
+          throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "__residual_pure expects a type name and a function");
+        }
+        f.isResidual = true;
+        f.isUnsafeResidual = true;
+        return AbstractValue.createFromBuildFunction(realm, type, [f].concat(args), createOperationDescriptor("RESIDUAL_CALL"));
+      }),
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
   // Helper function that identifies a variant of the residual function that has implicit dependencies. This version of residual will infer the dependencies
   // and rewrite the function body to do the same thing as the original residual function.
   global.$DefineOwnProperty(
@@ -745,6 +770,23 @@ export default function(realm: Realm): void {
         else if (value.kind === "&&") parts = [value.args[0], value.args[1], value.args[0]];
         else return realm.intrinsics.undefined;
         return Create.CreateArrayFromList(realm, parts);
+      }),
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    })
+  );
+
+  // __concatParts(value) returns [left, right] when value is an abstract string concatenation
+  // left + right, and undefined otherwise.
+  global.$DefineOwnProperty(
+    "__concatParts",
+    new PropertyDescriptor({
+      value: new NativeFunctionValue(realm, "global.__concatParts", "__concatParts", 1, (context, [value]) => {
+        if (value instanceof AbstractValue && value.kind === "+" && value.getType() === StringValue) {
+          return Create.CreateArrayFromList(realm, [value.args[0], value.args[1]]);
+        }
+        return realm.intrinsics.undefined;
       }),
       writable: true,
       enumerable: false,
