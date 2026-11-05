@@ -37,13 +37,7 @@ export default function(realm: Realm): void {
   // when explicitly running in closed-world mode or React/fb-www compiler modes.
   // In the safe open-world default, `window`, `self`, and `document` are resolved on demand via
   // src/intrinsics/env/models.js so `typeof window` / `typeof document` stay residual across environments.
-  if (
-    realm.closedWorld ||
-    realm.react.enabled ||
-    realm.isCompatibleWith("fb-www") ||
-    realm.isCompatibleWith("node-react") ||
-    !realm.useAbstractInterpretation
-  ) {
+  if (realm.closedWorld || realm.isCompatibleWith("fb-www") || !realm.useAbstractInterpretation) {
     global.$DefineOwnProperty(
       "self",
       new PropertyDescriptor({

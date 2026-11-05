@@ -381,6 +381,21 @@ export default class AbstractObjectValue extends AbstractValue {
     let P = _P;
     if (P instanceof StringValue) P = P.value;
     if (this.values.isTop()) {
+      if (this.isEnvironmentValue && typeof P === "string") {
+        let realm = this.$Realm;
+        let Desc = _Desc.throwIfNotConcrete(realm);
+        let generator = realm.generator;
+        if (generator !== undefined) {
+          let targetObj: any = this.kind === "explicit conversion to object" ? this.args[0] : this;
+          if (realm.isInPureScope()) {
+            if (Desc.value instanceof Value) Leak.value(realm, Desc.value);
+            if (Desc.get instanceof Value) Leak.value(realm, Desc.get);
+            if (Desc.set instanceof Value) Leak.value(realm, Desc.set);
+          }
+          generator.emitDefineProperty(targetObj, P, Desc);
+        }
+        return true;
+      }
       AbstractValue.reportIntrospectionError(this, P);
       throw new FatalError();
     }

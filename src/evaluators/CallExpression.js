@@ -42,7 +42,7 @@ import type { BabelNodeCallExpression } from "@babel/types";
 import invariant from "../invariant.js";
 import SuperCall from "./SuperCall.js";
 import { createOperationDescriptor } from "../utils/generator.js";
-import { createEnvironmentCallResult } from "../intrinsics/env/models.js";
+import { createEnvironmentCallResult, isEnvironmentDerived } from "../intrinsics/env/models.js";
 
 export default function(
   ast: BabelNodeCallExpression,
@@ -355,7 +355,7 @@ function EvaluateCall(
         return callBothFunctionsAndJoinTheirEffects(leftValue, rightValue, leftValue, ast, strictCode, env, realm);
       }
     }
-    if (!Value.isTypeCompatibleWith(func.getType(), FunctionValue) && !func.isEnvironmentValue) {
+    if (!Value.isTypeCompatibleWith(func.getType(), FunctionValue) && !isEnvironmentDerived(func)) {
       if (!realm.isInPureScope()) {
         // If this is not a function, this call might throw which can change the state of the program.
         // If this is called from a pure function we handle it using evaluateWithPossiblyAbruptCompletion.

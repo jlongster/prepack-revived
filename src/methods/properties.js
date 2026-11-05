@@ -17,6 +17,7 @@ import {
   ArrayValue,
   BooleanValue,
   ConcreteValue,
+  EmptyValue,
   NullValue,
   NumberValue,
   ObjectValue,
@@ -2038,10 +2039,28 @@ export class PropertiesImplementation {
     keyArray = keyArray.filter(x => {
       let pb = O.properties.get(x);
       if (!pb || pb.descriptor === undefined) return false;
-      let pv = pb.descriptor.throwIfNotConcrete(realm).value;
+      let desc = pb.descriptor;
+      if (desc instanceof AbstractJoinedDescriptor) {
+        if (Path.implies(desc.joinCondition)) desc = desc.descriptor1;
+        else if (Path.impliesNot(desc.joinCondition)) desc = desc.descriptor2;
+        if (desc === undefined) return false;
+      }
+      let pv = desc.throwIfNotConcrete(realm).value;
       if (pv === undefined) return true;
       invariant(pv instanceof Value);
+      if (pv instanceof EmptyValue) return false;
       if (!pv.mightHaveBeenDeleted()) return true;
+      if (pv instanceof AbstractValue) {
+        let savedPreserving = AbstractValue._preservingEmpty;
+        AbstractValue._preservingEmpty = true;
+        try {
+          pv = realm.simplifyAndRefineAbstractValue(pv);
+        } finally {
+          AbstractValue._preservingEmpty = savedPreserving;
+        }
+        if (pv instanceof EmptyValue) return false;
+        if (!pv.mightHaveBeenDeleted()) return true;
+      }
       // The property may or may not be there at runtime.
       // We can at best return an abstract keys array.
       // For now, unless the caller has told us that is okay,

@@ -39,6 +39,7 @@ import {
 } from "../../methods/index.js";
 import { Create, Leak, Materialize, Properties as Props, To } from "../../singletons.js";
 import { createOperationDescriptor } from "../../utils/generator.js";
+import { isEnvironmentDerived, findEnvEnumerationSplitCondition } from "../env/models.js";
 import invariant from "../../invariant.js";
 import { PropertyDescriptor } from "../../descriptors.js";
 
@@ -462,6 +463,20 @@ export default function(realm: Realm): NativeFunctionValue {
 
   // ECMA262 19.1.2.7
   func.defineNativeMethod("getOwnPropertyNames", 1, (context, [O]) => {
+    if (
+      realm.useAbstractInterpretation &&
+      !realm.closedWorld &&
+      realm.generator !== undefined &&
+      (O === realm.$GlobalObject || (O instanceof AbstractValue && isEnvironmentDerived(O)))
+    ) {
+      return ArrayValue.createTemporalWithWidenedNumericProperty(
+        realm,
+        [O],
+        createOperationDescriptor("ABSTRACT_FROM_TEMPLATE", {
+          templateSource: "global.Object.getOwnPropertyNames(A)",
+        })
+      );
+    }
     // 1. Return ? GetOwnPropertyKeys(O, String).
     return GetOwnPropertyKeys(realm, O, StringValue);
   });
@@ -589,6 +604,14 @@ export default function(realm: Realm): NativeFunctionValue {
       );
     }
 
+    let splitCond = findEnvEnumerationSplitCondition(realm, obj);
+    if (splitCond !== undefined) {
+      return realm.evaluateWithAbstractConditional(
+        splitCond,
+        () => realm.evaluateForEffects(() => objectKeys.$Call(context, [obj]), undefined, "ObjectKeys/1"),
+        () => realm.evaluateForEffects(() => objectKeys.$Call(context, [obj]), undefined, "ObjectKeys/2")
+      );
+    }
     // 2. Let nameList be ? EnumerableOwnProperties(obj, "key").
     let nameList = EnumerableOwnProperties(realm, obj.throwIfNotConcreteObject(), "key");
 

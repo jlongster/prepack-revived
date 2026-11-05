@@ -125,7 +125,9 @@ export class HeapInspector {
       }
       if (
         val.operationDescriptor !== undefined &&
-        (val.operationDescriptor.type === "ENV_GLOBAL" || val.operationDescriptor.type === "TYPEOF_GLOBAL")
+        (val.operationDescriptor.type === "ENV_GLOBAL" ||
+          val.operationDescriptor.type === "TYPEOF_GLOBAL" ||
+          val.envPath === "define.amd")
       ) {
         return true;
       }

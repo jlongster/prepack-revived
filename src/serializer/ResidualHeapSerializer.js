@@ -650,7 +650,7 @@ export class ResidualHeapSerializer {
   emitDefinePropertyBody(
     deleteIfMightHaveBeenDeleted: boolean,
     locationFunction: void | (() => BabelNodeLVal),
-    val: ObjectValue,
+    val: ObjectValue | AbstractObjectValue,
     key: string | SymbolValue | AbstractValue,
     desc: Descriptor
   ): BabelNodeStatement {
@@ -681,7 +681,7 @@ export class ResidualHeapSerializer {
       invariant(false);
     }
     invariant(desc instanceof PropertyDescriptor);
-    if (locationFunction !== undefined && this._canEmbedProperty(val, key, desc)) {
+    if (locationFunction !== undefined && val instanceof ObjectValue && this._canEmbedProperty(val, key, desc)) {
       let descValue = desc.value;
       invariant(descValue instanceof Value);
       invariant(!this.emitter.getReasonToWaitForDependencies([descValue, val]), "precondition of _emitProperty");

@@ -626,6 +626,10 @@ export const GeneratedShapes: { +[string]: ModelShapeSpec } = {
       },
       "vlinkColor": {
         "t": "string"
+      },
+      "documentMode": {
+        "t": "number",
+        "o": true
       }
     },
     "methods": {

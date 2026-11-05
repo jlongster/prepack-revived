@@ -32,6 +32,7 @@ import {
 import { Environment, Leak, To } from "../singletons.js";
 import type { BabelBinaryOperator, BabelNodeBinaryExpression, BabelNodeSourceLocation } from "@babel/types";
 import { createOperationDescriptor } from "../utils/generator.js";
+import { isKnownGlobal } from "../intrinsics/env/models.js";
 import invariant from "../invariant.js";
 
 export default function(
@@ -290,6 +291,27 @@ export function computeBinary(
       }
       invariant(lval instanceof ConcreteValue);
       invariant(rval instanceof ConcreteValue);
+      if (
+        op === "in" &&
+        realm.useAbstractInterpretation &&
+        !realm.closedWorld &&
+        rval === realm.$GlobalObject &&
+        lval instanceof StringValue &&
+        !realm.$GlobalObject.properties.has(lval.value) &&
+        !realm.intrinsics.ObjectPrototype.properties.has(lval.value) &&
+        isKnownGlobal(realm, lval.value)
+      ) {
+        resultType = BooleanValue;
+        let inVal = AbstractValue.createTemporalFromBuildFunction(
+          realm,
+          BooleanValue,
+          [lval, rval],
+          createOperationDescriptor("BINARY_EXPRESSION", { binaryOperator: "in" }),
+          { isPure: true, skipInvariant: true }
+        );
+        inVal.isEnvironmentValue = true;
+        return inVal;
+      }
       const result = ValuesDomain.computeBinary(realm, op, lval, rval);
       resultType = result.getType();
       return result;

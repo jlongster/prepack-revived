@@ -129,6 +129,32 @@ export function resolveTypeofGlobal(realm: Realm, name: string, loc: ?BabelNodeS
   if (!realm.useAbstractInterpretation || realm.closedWorld) {
     return new StringValue(realm, "undefined");
   }
+  // When the user explicitly declared a target `--compatibility`, resolve module-wrapper typeof probes:
+  // Note: host feature globals (`window`, `document`, `navigator`, `Intl`, `MessageChannel`) stay residual
+  // even under `--compatibility browser` so feature-detection guards remain safe in partial/SSR environments.
+  if (realm.hasExplicitCompatibility) {
+    if (
+      realm.isCompatibleWith("browser") ||
+      realm.isCompatibleWith(realm.MOBILE_JSC_VERSION) ||
+      realm.isCompatibleWith("mobile") ||
+      realm.isCompatibleWith("node-react") ||
+      realm.isCompatibleWith("fb-www")
+    ) {
+      if (name === "exports" || name === "module" || name === "define") {
+        return new StringValue(realm, "undefined");
+      }
+    } else if (realm.isCompatibleWith("node")) {
+      if (name === "module" || name === "exports" || name === "global") {
+        return new StringValue(realm, "object");
+      }
+      if (name === "require") {
+        return new StringValue(realm, "function");
+      }
+      if (name === "define") {
+        return new StringValue(realm, "undefined");
+      }
+    }
+  }
   if (realm.unknownGlobals === "error" && !isKnownGlobal(realm, name)) {
     reportUnmodeledGlobalError(realm, name, loc);
   }
@@ -187,6 +213,13 @@ export function resolveFreeGlobal(realm: Realm, name: string, loc: ?BabelNodeSou
   }
   if (realm.unknownGlobals === "error" && !isKnownGlobal(realm, name)) {
     reportUnmodeledGlobalError(realm, name, loc);
+  }
+
+  // Whenever `window` or `self` exists at runtime, it aliases the global object (`globalThis`).
+  // Returning `realm.$GlobalObject` unifies `window`, `self`, `global`, and `globalThis` while
+  // keeping `typeof window` and `typeof self` residual when `--compatibility` was not declared.
+  if (name === "window" || name === "self") {
+    return realm.$GlobalObject;
   }
 
   let cached = realm._envGlobals.get(name);
@@ -252,6 +285,11 @@ export function resolveGlobalObjectProperty(realm: Realm, P: PropertyKeyValue): 
   let assumed = lookupValueAssumption(realm, P);
   if (assumed !== undefined) return assumed;
 
+  // `self.self === self` and `window.window === window` hold on the global object.
+  if (P === "self" || P === "window") {
+    return realm.$GlobalObject;
+  }
+
   let spec = getGlobalSpec(realm, P);
   if (spec === undefined) return undefined;
 
@@ -301,11 +339,75 @@ export function isEnvironmentDerived(val: Value): boolean {
     (val.kind === "conditional" || val.kind === "||" || val.kind === "&&" || val.kind === "abstractConcreteUnion") &&
     val.args.length >= 2
   ) {
-    for (let i = val.kind === "conditional" ? 1 : 0; i < val.args.length; i++) {
+    for (let i = 0; i < val.args.length; i++) {
       if (isEnvironmentDerived(val.args[i])) return true;
     }
   }
+  if ((val.kind === "!" || val.kind === "typeof") && val.args.length === 1) {
+    return isEnvironmentDerived(val.args[0]);
+  }
+  if (
+    (val.kind === "===" ||
+      val.kind === "!==" ||
+      val.kind === "==" ||
+      val.kind === "!=" ||
+      val.kind === "<" ||
+      val.kind === "in") &&
+    val.args.length === 2
+  ) {
+    return isEnvironmentDerived(val.args[0]) || isEnvironmentDerived(val.args[1]);
+  }
   return false;
+}
+
+function unwrapAtomicEnvCondition(realm: Realm, rawCond: AbstractValue): void | AbstractValue {
+  let cond = realm.simplifyAndRefineAbstractCondition(rawCond);
+  while (cond instanceof AbstractValue && (cond.kind === "&&" || cond.kind === "||" || cond.kind === "!")) {
+    if (cond.kind === "!") {
+      cond = realm.simplifyAndRefineAbstractCondition((cond.args[0]: any));
+      continue;
+    }
+    let left = realm.simplifyAndRefineAbstractCondition((cond.args[0]: any));
+    if (left instanceof AbstractValue) {
+      cond = left;
+    } else {
+      cond = realm.simplifyAndRefineAbstractCondition((cond.args[1]: any));
+    }
+  }
+  if (cond instanceof AbstractValue && isEnvironmentDerived(cond)) return cond;
+  return undefined;
+}
+
+export function findEnvEnumerationSplitCondition(realm: Realm, val: Value): void | AbstractValue {
+  if (val instanceof AbstractObjectValue && val.kind === "conditional") {
+    return unwrapAtomicEnvCondition(realm, (val.args[0]: any));
+  }
+  if (!(val instanceof ObjectValue)) return undefined;
+  for (let [, pb] of val.properties) {
+    if (!pb || pb.descriptor === undefined) continue;
+    let desc = pb.descriptor;
+    if (desc.joinCondition instanceof AbstractValue) {
+      let c = unwrapAtomicEnvCondition(realm, desc.joinCondition);
+      if (c !== undefined) return c;
+      continue;
+    }
+    let pv = (desc: any).value;
+    if (pv instanceof AbstractValue && pv.mightHaveBeenDeleted()) {
+      let saved = AbstractValue._preservingEmpty;
+      AbstractValue._preservingEmpty = true;
+      let simplified;
+      try {
+        simplified = realm.simplifyAndRefineAbstractValue(pv);
+      } finally {
+        AbstractValue._preservingEmpty = saved;
+      }
+      if (simplified instanceof AbstractValue && simplified.kind === "conditional") {
+        let c = unwrapAtomicEnvCondition(realm, (simplified.args[0]: any));
+        if (c !== undefined) return c;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function getEnvironmentProperty(
@@ -325,6 +427,23 @@ export function getEnvironmentProperty(
   if (nextPath !== undefined) {
     let assumed = lookupValueAssumption(realm, nextPath);
     if (assumed !== undefined) return assumed;
+  }
+
+  // Memoize `define.amd` so multi-UMD bundles share the identical AMD guard condition across headers.
+  if (nextPath === "define.amd") {
+    let cachedAmd = realm._envGlobals.get("define.amd");
+    if (cachedAmd !== undefined) return cachedAmd;
+    let amdVal = AbstractValue.createFromBuildFunction(
+      realm,
+      Value,
+      [ob, new StringValue(realm, "amd")],
+      createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
+      { kind: AbstractValue.makeKind("envGlobal", "define.amd"), skipInvariant: true }
+    );
+    amdVal.isEnvironmentValue = true;
+    amdVal.envPath = "define.amd";
+    realm._envGlobals.set("define.amd", amdVal);
+    return amdVal;
   }
 
   let baseType: typeof Value = Value;
@@ -358,7 +477,7 @@ export function getEnvironmentProperty(
         baseType = scalarTypeToAbstractType(p.t);
         shapeName = p.s;
         nullable = !!p.n;
-        optional = !!p.o;
+        optional = !!p.o || ownerShapeName === "Window";
       }
     } else if (shape.index !== undefined) {
       let idx = shape.index;

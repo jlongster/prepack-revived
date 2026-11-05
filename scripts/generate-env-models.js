@@ -574,6 +574,11 @@ function main() {
     index: { t: "string" },
   });
 
+  // Legacy IE Document.documentMode probed by React DOM (number | undefined)
+  if (shapes.Document && shapes.Document.props) {
+    shapes.Document.props.documentMode = { t: "number", o: true };
+  }
+
   // NodeJS.ProcessEnv: process.env[K] is string | undefined
   shapes["NodeJS.ProcessEnv"] = {
     index: { t: "string", o: true },

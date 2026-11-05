@@ -229,6 +229,9 @@ export class EnvironmentImplementation {
               );
               return this._dereference(realm, consequentRef);
             }
+            if (!realm.isInPureScope() && (consequentVal instanceof UndefinedValue || consequentVal instanceof NullValue)) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
+            }
             return this._dereference(realm, ref, false);
           },
           null,
@@ -246,6 +249,9 @@ export class EnvironmentImplementation {
                 ref.thisValue
               );
               return this._dereference(realm, alternateRef);
+            }
+            if (!realm.isInPureScope() && (alternateVal instanceof UndefinedValue || alternateVal instanceof NullValue)) {
+              throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
             }
             return this._dereference(realm, ref, false);
           },
