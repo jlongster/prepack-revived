@@ -750,6 +750,7 @@ export class ToImplementation {
       // If the property is not a string we need to coerce it.
       let coerceToString = createOperationDescriptor("COERCE_TO_STRING");
       if (value.mightBeObject() && !value.isSimpleObject()) {
+        if (!realm.isInPureScope()) value.throwIfNotConcrete();
         // If this might be a non-simple object, we need to coerce this at a
         // temporal point since it can have side-effects.
         // We can't rely on comparison to do it later, even if

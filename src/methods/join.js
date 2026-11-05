@@ -102,7 +102,7 @@ export class JoinImplementation {
   composeCompletions(leftCompletion: void | Completion | Value, rightCompletion: Completion | Value): Completion {
     if (leftCompletion instanceof AbruptCompletion) return leftCompletion;
     if (leftCompletion instanceof JoinedNormalAndAbruptCompletions) {
-      if (rightCompletion instanceof JoinedNormalAndAbruptCompletions) {
+      if (rightCompletion instanceof JoinedNormalAndAbruptCompletions && leftCompletion.savedEffects !== undefined) {
         rightCompletion.composedWith = leftCompletion;
         rightCompletion.pathConditionsAtCreation = leftCompletion.pathConditionsAtCreation;
         return rightCompletion;

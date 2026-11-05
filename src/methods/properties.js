@@ -268,10 +268,11 @@ export class PropertiesImplementation {
       Leak.value(realm, V);
       // The receiver might leak to a getter so if it's not already leaked, we need to leak it.
       Leak.value(realm, Receiver);
-      if (realm.generator !== undefined) {
+      let generator = realm.generator;
+      if (generator !== undefined) {
         // The assignment might invoke a setter that throws.
         realm.reportPossibleThrowInsideTry();
-        realm.generator.emitPropertyAssignment(Receiver, StringKey(P), V);
+        generator.emitPropertyAssignment(Receiver, StringKey(P), V);
       }
       return true;
     }
@@ -729,9 +730,10 @@ export class PropertiesImplementation {
     if (!desc) {
       ensureIsNotFinal(realm, O, P);
       if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
-        if (realm.generator !== undefined) {
+        let generator = realm.generator;
+        if (generator !== undefined) {
           realm.reportPossibleThrowInsideTry();
-          realm.generator.emitPropertyDelete(O, StringKey(P));
+          generator.emitPropertyDelete(O, StringKey(P));
         }
       }
       return true;
@@ -743,9 +745,10 @@ export class PropertiesImplementation {
     if (desc.configurable) {
       ensureIsNotFinal(realm, O, P);
       if (O.mightBeLeakedObject()) {
-        if (realm.generator !== undefined) {
+        let generator = realm.generator;
+        if (generator !== undefined) {
           realm.reportPossibleThrowInsideTry();
-          realm.generator.emitPropertyDelete(O, StringKey(P));
+          generator.emitPropertyDelete(O, StringKey(P));
         }
         return true;
       }
@@ -876,9 +879,10 @@ export class PropertiesImplementation {
         ensureIsNotFinal(realm, O, P);
         if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
           leakDescriptor(realm, Desc);
-          if (realm.generator !== undefined) {
+          let generator = realm.generator;
+          if (generator !== undefined) {
             realm.reportPossibleThrowInsideTry();
-            realm.generator.emitDefineProperty(O, StringKey(P), Desc.throwIfNotConcrete(realm));
+            generator.emitDefineProperty(O, StringKey(P), Desc.throwIfNotConcrete(realm));
           }
           return true;
         }
@@ -996,9 +1000,10 @@ export class PropertiesImplementation {
       ensureIsNotFinal(realm, O, P);
       if (!realm.ignoreLeakLogic && O.mightBeLeakedObject()) {
         leakDescriptor(realm, Desc);
-        if (realm.generator !== undefined) {
+        let generator = realm.generator;
+        if (generator !== undefined) {
           realm.reportPossibleThrowInsideTry();
-          realm.generator.emitDefineProperty(O, StringKey(P), Desc);
+          generator.emitDefineProperty(O, StringKey(P), Desc);
         }
         return true;
       }

@@ -77,21 +77,14 @@ function AbstractCaseBlockEvaluation(
     invariant(sc !== undefined);
     result = sc;
 
+    if (result instanceof BreakCompletion && !result.target) {
+      return result.value;
+    }
     if (result instanceof JoinedAbruptCompletions || result instanceof JoinedNormalAndAbruptCompletions) {
       let selector = c => c instanceof BreakCompletion && !c.target;
-      let jc = AbstractValue.createJoinConditionForSelectedCompletions(selector, result);
-      let jv = AbstractValue.createFromConditionalOp(realm, jc, realm.intrinsics.empty, result.value);
       result = Completion.normalizeSelectedCompletions(selector, result);
-      realm.composeWithSavedCompletion(result);
-      return jv;
-    } else if (result instanceof BreakCompletion) {
-      return result.value;
-    } else if (result instanceof AbruptCompletion) {
-      throw result;
-    } else {
-      invariant(result instanceof Value);
-      return result;
     }
+    return realm.returnOrThrowCompletion(result);
   };
 
   let AbstractCaseEvaluation = (caseIndex: number): Value => {

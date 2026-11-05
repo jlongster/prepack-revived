@@ -120,9 +120,10 @@ function joinTryAndCatch(
   let result = blockRes;
   let selector = c => c instanceof ThrowCompletion;
   if (handler && blockRes instanceof Completion && blockRes.containsSelectedCompletion(selector)) {
+    let catchHandler = handler;
     if (blockRes instanceof ThrowCompletion) {
       result = realm.evaluateCompletionInSavedCompletionScope(() =>
-        env.evaluateCompletionDeref(handler, strictCode, blockRes)
+        env.evaluateCompletionDeref(catchHandler, strictCode, blockRes)
       );
     } else {
       invariant(blockRes instanceof JoinedAbruptCompletions || blockRes instanceof JoinedNormalAndAbruptCompletions);
@@ -133,7 +134,7 @@ function joinTryAndCatch(
           let handlerEffects = Path.withCondition(joinCondition, () => {
             invariant(blockRes instanceof Completion);
             let joinedThrow = new ThrowCompletion(Join.joinValuesOfSelectedCompletions(selector, blockRes));
-            let handlerEval = () => env.evaluateCompletionDeref(handler, strictCode, joinedThrow);
+            let handlerEval = () => env.evaluateCompletionDeref(catchHandler, strictCode, joinedThrow);
             return realm.evaluateForEffects(handlerEval, undefined, "joinTryBlockWithHandlers");
           });
           Completion.makeSelectedCompletionsInfeasible(selector, blockRes);
@@ -286,6 +287,7 @@ function emitResidualTryStatement(
     invariant(blockEffects !== undefined);
     addPreexistingModifiedState(blockEffects, firstNewEnvironmentId, bindings, objects);
     if (bindings.size + objects.size === stateSize) {
+      invariant(leakEffects !== undefined);
       realm.applyEffects(leakEffects);
       return emitResidualTryStatementForBlockEffects(handler, loc, strictCode, env, realm, blockEffects);
     }
@@ -312,6 +314,7 @@ function addPreexistingModifiedState(
     if (binding.environment.id < firstNewEnvironmentId) bindings.add(binding);
   });
   effects.modifiedProperties.forEach((desc, propertyBinding) => {
+    if (ObjectValue.refuseSerializationOnPropertyBinding(propertyBinding)) return;
     let object = propertyBinding.object;
     if (object instanceof ObjectValue && !effects.createdObjects.has(object)) objects.add(object);
   });
@@ -331,16 +334,22 @@ function emitResidualTryStatementForBlockEffects(
   let blockResult = blockEffects.result;
   let blockCanCompleteWithoutThrow = true;
   // Throws that Prepack does model are emitted as residual throw statements, so that the residual try statement
-  // catches them too.
+  // catches them too. Temporarily apply blockEffects while emitting them so newly created Error objects are valid.
   if (blockResult instanceof ThrowCompletion) {
-    blockGenerator.emitThrow(blockResult.value);
+    let thrownValue = blockResult.value;
+    realm.withEffectsAppliedInGlobalEnv(() => {
+      blockGenerator.emitThrow(thrownValue);
+      return true;
+    }, blockEffects);
     blockCanCompleteWithoutThrow = false;
   } else if (
     (blockResult instanceof JoinedAbruptCompletions || blockResult instanceof JoinedNormalAndAbruptCompletions) &&
     blockResult.containsSelectedCompletion(throwSelector)
   ) {
-    blockGenerator.emitConditionalThrow(Join.joinValuesOfSelectedCompletions(throwSelector, blockResult, true));
-    blockResult = Completion.makeSelectedCompletionsInfeasibleInCopy(throwSelector, blockResult);
+    blockResult = realm.withEffectsAppliedInGlobalEnv(() => {
+      blockGenerator.emitConditionalThrow(Join.joinValuesOfSelectedCompletions(throwSelector, blockResult, true));
+      return Completion.makeSelectedCompletionsInfeasibleInCopy(throwSelector, blockResult);
+    }, blockEffects);
     if (blockResult.value === bottom) blockCanCompleteWithoutThrow = false;
   }
 
@@ -380,6 +389,20 @@ function emitResidualTryStatementForBlockEffects(
       blockEffects.createdAbstracts
     );
     effects = Join.joinEffects(threw, handlerEffects, blockPostEffects);
+  } else {
+    blockEffects.modifiedBindings.forEach((val, key) => {
+      if (!handlerEffects.modifiedBindings.has(key)) handlerEffects.modifiedBindings.set(key, val);
+    });
+    blockEffects.modifiedProperties.forEach((desc, pb) => {
+      if (
+        !handlerEffects.modifiedProperties.has(pb) &&
+        (blockEffects.createdObjects.has(pb.object) || ObjectValue.refuseSerializationOnPropertyBinding(pb))
+      ) {
+        handlerEffects.modifiedProperties.set(pb, desc);
+      }
+    });
+    blockEffects.createdObjects.forEach(o => handlerEffects.createdObjects.add(o));
+    blockEffects.createdAbstracts.forEach(a => handlerEffects.createdAbstracts.add(a));
   }
   realm.applyEffects(effects);
   let result = effects.result;
