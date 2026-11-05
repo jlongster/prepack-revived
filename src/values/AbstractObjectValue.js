@@ -567,12 +567,14 @@ export default class AbstractObjectValue extends AbstractValue {
             typeof P === "string" &&
             !realm.isInPureScope() &&
             ((ob1 instanceof AbstractObjectValue &&
-              ob1.isEnvironmentValue &&
+              ob1.isEnvironmentValue === true &&
+              ob2 instanceof ObjectValue &&
               ob2 === realm.$GlobalObject &&
               !ob2.properties.has(P) &&
               !realm.intrinsics.ObjectPrototype.properties.has(P)) ||
               (ob2 instanceof AbstractObjectValue &&
-                ob2.isEnvironmentValue &&
+                ob2.isEnvironmentValue === true &&
+                ob1 instanceof ObjectValue &&
                 ob1 === realm.$GlobalObject &&
                 !ob1.properties.has(P) &&
                 !realm.intrinsics.ObjectPrototype.properties.has(P)))
@@ -587,7 +589,8 @@ export default class AbstractObjectValue extends AbstractValue {
           );
         }
       }
-      if (this.envElementType !== undefined && typeof P === "string") {
+      let elemType = this.envElementType;
+      if (elemType !== undefined && typeof P === "string") {
         let realm = this.$Realm;
         let protoBinding = realm.intrinsics.ArrayPrototype.properties.get(P);
         if (
@@ -610,24 +613,26 @@ export default class AbstractObjectValue extends AbstractValue {
         if (P === "0") {
           let elem = AbstractValue.createTemporalFromBuildFunction(
             realm,
-            this.envElementType,
+            elemType,
             [ob, new StringValue(realm, "0")],
             createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
             { skipInvariant: true, isPure: true }
           );
-          if (this.isEnvironmentValue) elem.isEnvironmentValue = true;
+          invariant(elem instanceof AbstractValue);
+          if (this.isEnvironmentValue === true) elem.isEnvironmentValue = true;
           return elem;
         }
         if (String(+P) === P && +P > 0) {
           let elem = AbstractValue.createTemporalFromBuildFunction(
             realm,
-            this.envElementType,
+            elemType,
             [ob, new StringValue(realm, P)],
             createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
             { skipInvariant: true, isPure: true }
           );
+          invariant(elem instanceof AbstractValue);
           let union = AbstractValue.createAbstractConcreteUnion(realm, elem, [realm.intrinsics.undefined]);
-          if (this.isEnvironmentValue) union.isEnvironmentValue = true;
+          if (this.isEnvironmentValue === true) union.isEnvironmentValue = true;
           return union;
         }
       }
@@ -752,30 +757,32 @@ export default class AbstractObjectValue extends AbstractValue {
 
   $GetPartial(P: AbstractValue | PropertyKeyValue, Receiver: Value): Value {
     if (!(P instanceof AbstractValue)) return this.$Get(P, Receiver);
+    let keyVal: AbstractValue = P;
     if (this.values.isTop() || !this.isSimpleObject()) {
       if (this.isSimpleObject() && this.isIntrinsic()) {
         return AbstractValue.createTemporalFromBuildFunction(
           this.$Realm,
           Value,
-          [this, P],
+          [this, keyVal],
           createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
           { skipInvariant: true, isPure: true }
         );
       }
-      if (this.isEnvironmentValue) {
+      if (this.isEnvironmentValue === true) {
         let ob = this.kind === "explicit conversion to object" ? this.args[0] : Receiver;
         if (this.$Realm.isInPureScope()) {
           Leak.value(this.$Realm, ob);
-          Leak.value(this.$Realm, P);
+          Leak.value(this.$Realm, keyVal);
           return this.$Realm.evaluateWithPossibleThrowCompletion(
             () => {
               let res = AbstractValue.createTemporalFromBuildFunction(
                 this.$Realm,
                 Value,
-                [ob, P],
+                [ob, keyVal],
                 createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
                 { skipInvariant: true, isPure: true }
               );
+              invariant(res instanceof AbstractValue);
               res.isEnvironmentValue = true;
               return res;
             },
@@ -786,10 +793,11 @@ export default class AbstractObjectValue extends AbstractValue {
         let res = AbstractValue.createTemporalFromBuildFunction(
           this.$Realm,
           Value,
-          [ob, P],
+          [ob, keyVal],
           createOperationDescriptor("ABSTRACT_OBJECT_GET_PARTIAL"),
           { skipInvariant: true, isPure: true }
         );
+        invariant(res instanceof AbstractValue);
         res.isEnvironmentValue = true;
         return res;
       }

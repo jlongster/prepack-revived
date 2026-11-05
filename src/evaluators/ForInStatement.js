@@ -77,7 +77,11 @@ function evaluateForIn(
       undefined,
       "ForInProbe"
     );
-    if (probeEffects.result instanceof SimpleNormalCompletion && probeEffects.modifiedBindings.size === 0 && probeEffects.modifiedProperties.size === 0) {
+    if (
+      probeEffects.result instanceof SimpleNormalCompletion &&
+      probeEffects.modifiedBindings.size === 0 &&
+      probeEffects.modifiedProperties.size === 0
+    ) {
       let splitCond = findEnvEnumerationSplitCondition(realm, probeEffects.result.value);
       if (splitCond !== undefined) {
         return realm.evaluateWithAbstractConditional(

@@ -343,10 +343,16 @@ export function SameValueZero(realm: Realm, x: ConcreteValue, y: ConcreteValue):
   return SameValueNonNumber(realm, x, y);
 }
 
+function getConcreteElementsIfFinite(v: Value): void | Array<ConcreteValue> {
+  if (v instanceof ConcreteValue) return [v];
+  if (v instanceof AbstractValue && !v.values.isTop()) return Array.from(v.values.getElements());
+  return undefined;
+}
+
 export function SameValueZeroPartial(realm: Realm, x: Value, y: Value): boolean {
   if (x === y || x.equals(y)) return true;
-  let xElems = x instanceof ConcreteValue ? [x] : !x.values.isTop() ? Array.from(x.values.getElements()) : undefined;
-  let yElems = y instanceof ConcreteValue ? [y] : !y.values.isTop() ? Array.from(y.values.getElements()) : undefined;
+  let xElems = getConcreteElementsIfFinite(x);
+  let yElems = getConcreteElementsIfFinite(y);
   if (xElems !== undefined && yElems !== undefined && xElems.length * yElems.length <= 64) {
     let anyTrue = false;
     let anyFalse = false;
@@ -393,8 +399,8 @@ export function SameValue(realm: Realm, x: ConcreteValue, y: ConcreteValue): boo
 
 export function SameValuePartial(realm: Realm, x: Value, y: Value): boolean {
   if (x === y || x.equals(y)) return true;
-  let xElems = x instanceof ConcreteValue ? [x] : !x.values.isTop() ? Array.from(x.values.getElements()) : undefined;
-  let yElems = y instanceof ConcreteValue ? [y] : !y.values.isTop() ? Array.from(y.values.getElements()) : undefined;
+  let xElems = getConcreteElementsIfFinite(x);
+  let yElems = getConcreteElementsIfFinite(y);
   if (xElems !== undefined && yElems !== undefined && xElems.length * yElems.length <= 64) {
     let anyTrue = false;
     let anyFalse = false;

@@ -13,6 +13,7 @@ import type { Realm } from "../../realm.js";
 import type { PropertyKeyValue } from "../../types.js";
 import type { BabelNodeSourceLocation } from "@babel/types";
 import { CompilerDiagnostic, FatalError } from "../../errors.js";
+import { AbstractJoinedDescriptor } from "../../descriptors.js";
 import {
   AbstractObjectValue,
   AbstractValue,
@@ -37,11 +38,7 @@ import {
   type ModelMethodSpec,
   type ModelScalarType,
 } from "./generatedModels.js";
-import {
-  lookupTypeofGlobalAssumption,
-  lookupTypeofPathAssumption,
-  lookupValueAssumption,
-} from "./assumptions.js";
+import { lookupTypeofGlobalAssumption, lookupTypeofPathAssumption, lookupValueAssumption } from "./assumptions.js";
 
 function scalarTypeToAbstractType(scalar: ModelScalarType): typeof Value {
   switch (scalar) {
@@ -167,8 +164,9 @@ export function resolveTypeofGlobal(realm: Realm, name: string, loc: ?BabelNodeS
     StringValue,
     [],
     createOperationDescriptor("TYPEOF_GLOBAL", { id: name }),
-    { kind: AbstractValue.makeKind("typeofGlobal", name), skipInvariant: true }
+    { kind: AbstractValue.makeKind("typeofGlobal", name) }
   );
+  invariant(abs instanceof AbstractValue);
   abs.isEnvironmentValue = true;
   abs.envPath = `typeof ${name}`;
   realm._typeofGlobalValues.set(name, abs);
@@ -184,7 +182,7 @@ export function resolveTypeofEnvironmentValue(realm: Realm, val: AbstractValue):
   // Primitive non-optional modeled properties (e.g. navigator.userAgent: string) have a known typeof.
   let t = val.getType();
   if (
-    (t === StringValue || t === NumberValue || t === BooleanValue || t === SymbolValue) &&
+    (t === StringValue || t === NumberValue || t === BooleanValue || t === SymbolValue || t === FunctionValue) &&
     !val.mightBeNull() &&
     !val.mightBeUndefined()
   ) {
@@ -197,10 +195,11 @@ export function resolveTypeofEnvironmentValue(realm: Realm, val: AbstractValue):
     StringValue,
     [val],
     createOperationDescriptor("UNARY_EXPRESSION", { unaryOperator: "typeof", prefix: true }),
-    { kind: "typeof", skipInvariant: true }
+    { kind: "typeof" }
   );
+  invariant(res instanceof AbstractValue);
   res = AbstractValue.convertToTemporalIfArgsAreTemporal(realm, res, [val]);
-  if (res instanceof AbstractValue) res.isEnvironmentValue = true;
+  res.isEnvironmentValue = true;
   return res;
 }
 
@@ -249,6 +248,9 @@ export function resolveFreeGlobal(realm: Realm, name: string, loc: ?BabelNodeSou
     } else if (spec.k === "ctor") {
       baseType = FunctionValue;
       ctorShape = spec.s;
+      if (ctorShape !== undefined && Object.prototype.hasOwnProperty.call(GeneratedShapes, `${ctorShape}Constructor`)) {
+        shapeName = `${ctorShape}Constructor`;
+      }
     }
   }
 
@@ -257,8 +259,9 @@ export function resolveFreeGlobal(realm: Realm, name: string, loc: ?BabelNodeSou
     baseType,
     [],
     createOperationDescriptor("ENV_GLOBAL", { id: name }),
-    { kind: AbstractValue.makeKind("envGlobal", name), skipInvariant: true }
+    { kind: AbstractValue.makeKind("envGlobal", name) }
   );
+  invariant(abs instanceof AbstractValue);
   abs.isEnvironmentValue = true;
   abs.envPath = name;
   if (shapeName !== undefined) abs.envShapeName = shapeName;
@@ -313,6 +316,9 @@ export function resolveGlobalObjectProperty(realm: Realm, P: PropertyKeyValue): 
   } else if (spec.k === "ctor") {
     baseType = FunctionValue;
     ctorShape = spec.s;
+    if (ctorShape !== undefined && Object.prototype.hasOwnProperty.call(GeneratedShapes, `${ctorShape}Constructor`)) {
+      shapeName = `${ctorShape}Constructor`;
+    }
   }
 
   let propNode = new StringValue(realm, P);
@@ -323,6 +329,7 @@ export function resolveGlobalObjectProperty(realm: Realm, P: PropertyKeyValue): 
     createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
     { skipInvariant: true, isPure: true }
   );
+  invariant(abs instanceof AbstractValue);
   abs.isEnvironmentValue = true;
   abs.envPath = P;
   if (shapeName !== undefined) abs.envShapeName = shapeName;
@@ -343,7 +350,10 @@ export function isEnvironmentDerived(val: Value): boolean {
       if (isEnvironmentDerived(val.args[i])) return true;
     }
   }
-  if ((val.kind === "!" || val.kind === "typeof") && val.args.length === 1) {
+  if (
+    (val.kind === "!" || val.kind === "typeof" || val.kind === "explicit conversion to object") &&
+    val.args.length === 1
+  ) {
     return isEnvironmentDerived(val.args[0]);
   }
   if (
@@ -386,7 +396,7 @@ export function findEnvEnumerationSplitCondition(realm: Realm, val: Value): void
   for (let [, pb] of val.properties) {
     if (!pb || pb.descriptor === undefined) continue;
     let desc = pb.descriptor;
-    if (desc.joinCondition instanceof AbstractValue) {
+    if (desc instanceof AbstractJoinedDescriptor) {
       let c = unwrapAtomicEnvCondition(realm, desc.joinCondition);
       if (c !== undefined) return c;
       continue;
@@ -438,8 +448,9 @@ export function getEnvironmentProperty(
       Value,
       [ob, new StringValue(realm, "amd")],
       createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
-      { kind: AbstractValue.makeKind("envGlobal", "define.amd"), skipInvariant: true }
+      { kind: AbstractValue.makeKind("envGlobal", "define.amd") }
     );
+    invariant(amdVal instanceof AbstractValue);
     amdVal.isEnvironmentValue = true;
     amdVal.envPath = "define.amd";
     realm._envGlobals.set("define.amd", amdVal);
@@ -462,12 +473,17 @@ export function getEnvironmentProperty(
   }
 
   let ownerShapeName = baseObj.envShapeName;
-  if (propNameStr !== undefined && ownerShapeName !== undefined && Object.prototype.hasOwnProperty.call(GeneratedShapes, ownerShapeName)) {
+  if (
+    propNameStr !== undefined &&
+    ownerShapeName !== undefined &&
+    Object.prototype.hasOwnProperty.call(GeneratedShapes, ownerShapeName)
+  ) {
     let shape = GeneratedShapes[ownerShapeName];
     if (shape.methods && Object.prototype.hasOwnProperty.call(shape.methods, propNameStr)) {
       let m = shape.methods[propNameStr];
       baseType = FunctionValue;
       methodSpec = m;
+      optional = true;
     } else if (shape.props && Object.prototype.hasOwnProperty.call(shape.props, propNameStr)) {
       let p = shape.props[propNameStr];
       if (p.t === "constructor") {
@@ -496,6 +512,7 @@ export function getEnvironmentProperty(
     createOperationDescriptor("ABSTRACT_OBJECT_GET", {}),
     { skipInvariant: true, isPure: true }
   );
+  invariant(abs instanceof AbstractValue);
   abs.isEnvironmentValue = true;
   if (nextPath !== undefined) abs.envPath = nextPath;
   if (shapeName !== undefined) abs.envShapeName = shapeName;
@@ -529,6 +546,7 @@ export function createEnvironmentCallResult(
         argsWithCallee,
         createOperationDescriptor("CALL_BAILOUT", { propRef: (propName: any), thisArg })
       );
+      invariant(res instanceof AbstractValue);
       res.isEnvironmentValue = true;
       res.envShapeName = modShape;
       res.envPath = `require(${JSON.stringify(modName)})`;
@@ -537,7 +555,12 @@ export function createEnvironmentCallResult(
   }
 
   let methodSpec: void | ModelMethodSpec = func instanceof AbstractValue ? func.envMethodSpec : undefined;
-  if (methodSpec === undefined && thisArg instanceof AbstractValue && thisArg.envShapeName !== undefined && typeof propName === "string") {
+  if (
+    methodSpec === undefined &&
+    thisArg instanceof AbstractValue &&
+    thisArg.envShapeName !== undefined &&
+    typeof propName === "string"
+  ) {
     let ownerShape = GeneratedShapes[thisArg.envShapeName];
     if (ownerShape && ownerShape.methods && Object.prototype.hasOwnProperty.call(ownerShape.methods, propName)) {
       methodSpec = ownerShape.methods[propName];
@@ -554,6 +577,7 @@ export function createEnvironmentCallResult(
     argsWithCallee,
     createOperationDescriptor("CALL_BAILOUT", { propRef: (propName: any), thisArg })
   );
+  invariant(res instanceof AbstractValue);
   res.isEnvironmentValue = true;
   if (methodSpec !== undefined) {
     if (methodSpec.s !== undefined) res.envShapeName = methodSpec.s;

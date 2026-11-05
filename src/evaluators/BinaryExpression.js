@@ -19,6 +19,7 @@ import {
   AbstractValue,
   BooleanValue,
   ConcreteValue,
+  FunctionValue,
   NullValue,
   NumberValue,
   IntegralValue,
@@ -32,7 +33,7 @@ import {
 import { Environment, Leak, To } from "../singletons.js";
 import type { BabelBinaryOperator, BabelNodeBinaryExpression, BabelNodeSourceLocation } from "@babel/types";
 import { createOperationDescriptor } from "../utils/generator.js";
-import { isKnownGlobal } from "../intrinsics/env/models.js";
+import { isEnvironmentDerived, isKnownGlobal } from "../intrinsics/env/models.js";
 import invariant from "../invariant.js";
 
 export default function(
@@ -160,11 +161,11 @@ export function getPureBinaryOperationResultType(
     }
     if (!rval.mightNotBeObject()) {
       // Simple object won't throw here, aren't proxy objects or typed arrays and do not have @@hasInstance properties.
-      let isWellBehaved = function checkWellBehaved(v: Value): boolean {
+      let isWellBehaved = function isWellBehaved(v: Value): boolean {
         if (v.isSimpleObject()) return true;
-        if (v instanceof AbstractObjectValue && v.isEnvironmentValue) return true;
+        if (v instanceof AbstractObjectValue && isEnvironmentDerived(v)) return true;
         if (v instanceof AbstractObjectValue && v.kind === "conditional") {
-          return checkWellBehaved(v.args[1]) && checkWellBehaved(v.args[2]);
+          return isWellBehaved(v.args[1]) && isWellBehaved(v.args[2]);
         }
         return false;
       };
@@ -222,9 +223,55 @@ export function computeBinary(
         return realm.intrinsics.false;
       }
 
+      if (op === "in" && lval === realm.intrinsics.SymbolToStringTag && rval instanceof AbstractObjectValue) {
+        if (rval.kind === "conditional" && isEnvironmentDerived(rval)) {
+          let [condition, consequentR, alternateR] = rval.args;
+          invariant(condition instanceof AbstractValue);
+          return realm.evaluateWithAbstractConditional(
+            condition,
+            () =>
+              realm.evaluateForEffects(
+                () => computeBinary(realm, op, lval, consequentR, lloc, rloc, loc),
+                undefined,
+                "SymToStringTagIn/1"
+              ),
+            () =>
+              realm.evaluateForEffects(
+                () => computeBinary(realm, op, lval, alternateR, lloc, rloc, loc),
+                undefined,
+                "SymToStringTagIn/2"
+              )
+          );
+        }
+        if (
+          rval.isEnvironmentValue === true &&
+          (rval.getType() === FunctionValue ||
+            (rval.kind === "explicit conversion to object" && rval.args[0].getType() === FunctionValue))
+        ) {
+          return realm.intrinsics.false;
+        }
+      }
+
       try {
-        // generate error if binary operation might throw or have side effects
-        resultType = getPureBinaryOperationResultType(realm, op, lval, rval, lloc, rloc);
+        // When either operand is a conditional abstract value and `getPureBinaryOperationResultType`
+        // would emit a recoverable diagnostic (e.g. PP0004 on `sym in (c ? fn1 : fn2)`), fail fast
+        // without reporting the diagnostic so the `catch (FatalError)` below splits the conditional
+        // and evaluates each arm precisely first.
+        let hasConditionalOperand =
+          (lval instanceof AbstractValue && lval.kind === "conditional" && isEnvironmentDerived(lval)) ||
+          (rval instanceof AbstractValue && rval.kind === "conditional" && isEnvironmentDerived(rval));
+        if (hasConditionalOperand) {
+          let savedErrorHandler = realm.errorHandler;
+          realm.errorHandler = () => "Fail";
+          try {
+            resultType = getPureBinaryOperationResultType(realm, op, lval, rval, lloc, rloc);
+          } finally {
+            realm.errorHandler = savedErrorHandler;
+          }
+        } else {
+          // generate error if binary operation might throw or have side effects
+          resultType = getPureBinaryOperationResultType(realm, op, lval, rval, lloc, rloc);
+        }
         let result = AbstractValue.createFromBinaryOp(realm, op, lval, rval, loc);
 
         if ((op === "in" || op === "instanceof") && result instanceof AbstractValue && rvalIsAbstract)
@@ -295,9 +342,10 @@ export function computeBinary(
         op === "in" &&
         realm.useAbstractInterpretation &&
         !realm.closedWorld &&
+        rval instanceof ObjectValue &&
         rval === realm.$GlobalObject &&
         lval instanceof StringValue &&
-        !realm.$GlobalObject.properties.has(lval.value) &&
+        !rval.properties.has(lval.value) &&
         !realm.intrinsics.ObjectPrototype.properties.has(lval.value) &&
         isKnownGlobal(realm, lval.value)
       ) {
@@ -309,6 +357,7 @@ export function computeBinary(
           createOperationDescriptor("BINARY_EXPRESSION", { binaryOperator: "in" }),
           { isPure: true, skipInvariant: true }
         );
+        invariant(inVal instanceof AbstractValue);
         inVal.isEnvironmentValue = true;
         return inVal;
       }

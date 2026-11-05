@@ -274,7 +274,8 @@ export default function(ast: BabelNodeProgram, strictCode: boolean, env: Lexical
         !realm.closedWorld &&
         res.value instanceof ObjectValue &&
         (res.value.$IsEngineError === true ||
-          (res.value.$ErrorData !== undefined && !realm.$GlobalObject.properties.has("__d")))
+          (res.value.$ErrorData !== undefined &&
+            (!(realm.$GlobalObject instanceof ObjectValue) || !realm.$GlobalObject.properties.has("__d"))))
       ) {
         let message = "Global initialization unconditionally terminates with exception";
         if (res.value instanceof ObjectValue) {

@@ -364,6 +364,8 @@ function main() {
     "NodeJS.ReadStream",
     "NodeModule",
     "NodeRequire",
+    "Buffer",
+    "BufferConstructor",
   ]);
 
   function normalizeInterfaceRef(refName) {
@@ -396,8 +398,7 @@ function main() {
       const lit = typeNode.literal;
       if (ts.isStringLiteral(lit)) return { type: "string" };
       if (ts.isNumericLiteral(lit)) return { type: "number" };
-      if (lit.kind === ts.SyntaxKind.TrueKeyword || lit.kind === ts.SyntaxKind.FalseKeyword)
-        return { type: "boolean" };
+      if (lit.kind === ts.SyntaxKind.TrueKeyword || lit.kind === ts.SyntaxKind.FalseKeyword) return { type: "boolean" };
       if (lit.kind === ts.SyntaxKind.NullKeyword) return { type: "null" };
     }
     if (ts.isParenthesizedTypeNode(typeNode)) return classifyTypeNode(typeNode.type, typeParams, depth + 1);
@@ -491,8 +492,8 @@ function main() {
     const visited = new Set();
     const props = {};
     const methods = {};
-    let indexValue = undefined;
-    let callReturn = undefined;
+    let indexValue;
+    let callReturn;
 
     function visit(ifaceName) {
       if (visited.has(ifaceName)) return;
@@ -760,8 +761,12 @@ export type ModelGlobalSpec =
     `export const GeneratedUMDGlobals: { +[string]: ModelGlobalSpec } = ${JSON.stringify(umdGlobals, null, 2)};\n\n` +
     `export const GeneratedNodeModules: { +[string]: string } = ${JSON.stringify(nodeBuiltinModules, null, 2)};\n`;
 
+  const prettier = require("prettier");
+  const prettierConfig = JSON.parse(fs.readFileSync(path.join(ROOT, ".prettierrc"), "utf8"));
+  const formatted = prettier.format(header + body, Object.assign({ parser: "flow" }, prettierConfig));
+
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
-  fs.writeFileSync(outFile, header + body);
+  fs.writeFileSync(outFile, formatted);
   console.log(
     `Wrote ${path.relative(ROOT, outFile)} (${Object.keys(shapes).length} shapes, ` +
       `${Object.keys(domGlobals).length} DOM globals, ${Object.keys(nodeGlobals).length} Node globals)`

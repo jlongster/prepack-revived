@@ -13,6 +13,7 @@ import { Realm } from "../realm.js";
 import type { Descriptor, PropertyBinding } from "../types.js";
 import { IsArray, Get } from "../methods/index.js";
 import {
+  AbstractObjectValue,
   AbstractValue,
   BooleanValue,
   BoundFunctionValue,

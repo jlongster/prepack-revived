@@ -55,7119 +55,7372 @@ export type ModelGlobalSpec =
   | {| +k: "ctor", +s?: string |};
 
 export const GeneratedShapes: { +[string]: ModelShapeSpec } = {
-  "Window": {
-    "props": {
-      "localStorage": {
-        "t": "object",
-        "s": "Storage"
+  Window: {
+    props: {
+      localStorage: {
+        t: "object",
+        s: "Storage",
       },
-      "caches": {
-        "t": "object"
+      caches: {
+        t: "object",
       },
-      "crossOriginIsolated": {
-        "t": "boolean"
+      crossOriginIsolated: {
+        t: "boolean",
       },
-      "crypto": {
-        "t": "object",
-        "s": "Crypto"
+      crypto: {
+        t: "object",
+        s: "Crypto",
       },
-      "indexedDB": {
-        "t": "object"
+      indexedDB: {
+        t: "object",
       },
-      "isSecureContext": {
-        "t": "boolean"
+      isSecureContext: {
+        t: "boolean",
       },
-      "origin": {
-        "t": "string"
+      origin: {
+        t: "string",
       },
-      "performance": {
-        "t": "object",
-        "s": "Performance"
+      performance: {
+        t: "object",
+        s: "Performance",
       },
-      "sessionStorage": {
-        "t": "object",
-        "s": "Storage"
+      sessionStorage: {
+        t: "object",
+        s: "Storage",
       },
-      "clientInformation": {
-        "t": "object",
-        "s": "Navigator"
+      clientInformation: {
+        t: "object",
+        s: "Navigator",
       },
-      "closed": {
-        "t": "boolean"
+      closed: {
+        t: "boolean",
       },
-      "customElements": {
-        "t": "object"
+      customElements: {
+        t: "object",
       },
-      "devicePixelRatio": {
-        "t": "number"
+      devicePixelRatio: {
+        t: "number",
       },
-      "document": {
-        "t": "object",
-        "s": "Document"
+      document: {
+        t: "object",
+        s: "Document",
       },
-      "event": {
-        "t": "object",
-        "s": "Event",
-        "o": true
+      event: {
+        t: "object",
+        s: "Event",
+        o: true,
       },
-      "external": {
-        "t": "object"
+      external: {
+        t: "object",
       },
-      "frameElement": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      frameElement: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "frames": {
-        "t": "object",
-        "s": "Window"
+      frames: {
+        t: "object",
+        s: "Window",
       },
-      "history": {
-        "t": "object",
-        "s": "History"
+      history: {
+        t: "object",
+        s: "History",
       },
-      "innerHeight": {
-        "t": "number"
+      innerHeight: {
+        t: "number",
       },
-      "innerWidth": {
-        "t": "number"
+      innerWidth: {
+        t: "number",
       },
-      "length": {
-        "t": "number"
+      length: {
+        t: "number",
       },
-      "location": {
-        "t": "object",
-        "s": "Location"
+      location: {
+        t: "object",
+        s: "Location",
       },
-      "locationbar": {
-        "t": "object"
+      locationbar: {
+        t: "object",
       },
-      "menubar": {
-        "t": "object"
+      menubar: {
+        t: "object",
       },
-      "name": {
-        "t": "string"
+      name: {
+        t: "string",
       },
-      "navigator": {
-        "t": "object",
-        "s": "Navigator"
+      navigator: {
+        t: "object",
+        s: "Navigator",
       },
-      "opener": {
-        "t": "top"
+      opener: {
+        t: "top",
       },
-      "orientation": {
-        "t": "number"
+      orientation: {
+        t: "number",
       },
-      "outerHeight": {
-        "t": "number"
+      outerHeight: {
+        t: "number",
       },
-      "outerWidth": {
-        "t": "number"
+      outerWidth: {
+        t: "number",
       },
-      "pageXOffset": {
-        "t": "number"
+      pageXOffset: {
+        t: "number",
       },
-      "pageYOffset": {
-        "t": "number"
+      pageYOffset: {
+        t: "number",
       },
-      "parent": {
-        "t": "object",
-        "s": "Window"
+      parent: {
+        t: "object",
+        s: "Window",
       },
-      "personalbar": {
-        "t": "object"
+      personalbar: {
+        t: "object",
       },
-      "screen": {
-        "t": "object",
-        "s": "Screen"
+      screen: {
+        t: "object",
+        s: "Screen",
       },
-      "screenLeft": {
-        "t": "number"
+      screenLeft: {
+        t: "number",
       },
-      "screenTop": {
-        "t": "number"
+      screenTop: {
+        t: "number",
       },
-      "screenX": {
-        "t": "number"
+      screenX: {
+        t: "number",
       },
-      "screenY": {
-        "t": "number"
+      screenY: {
+        t: "number",
       },
-      "scrollX": {
-        "t": "number"
+      scrollX: {
+        t: "number",
       },
-      "scrollY": {
-        "t": "number"
+      scrollY: {
+        t: "number",
       },
-      "scrollbars": {
-        "t": "object"
+      scrollbars: {
+        t: "object",
       },
-      "self": {
-        "t": "top"
+      self: {
+        t: "top",
       },
-      "speechSynthesis": {
-        "t": "object"
+      speechSynthesis: {
+        t: "object",
       },
-      "status": {
-        "t": "string"
+      status: {
+        t: "string",
       },
-      "statusbar": {
-        "t": "object"
+      statusbar: {
+        t: "object",
       },
-      "toolbar": {
-        "t": "object"
+      toolbar: {
+        t: "object",
       },
-      "top": {
-        "t": "object",
-        "s": "Window",
-        "n": true
+      top: {
+        t: "object",
+        s: "Window",
+        n: true,
       },
-      "visualViewport": {
-        "t": "object",
-        "n": true
+      visualViewport: {
+        t: "object",
+        n: true,
       },
-      "window": {
-        "t": "top"
-      }
+      window: {
+        t: "top",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      dispatchEvent: {
+        r: "boolean",
       },
-      "removeEventListener": {
-        "r": "undefined"
+      removeEventListener: {
+        r: "undefined",
       },
-      "cancelAnimationFrame": {
-        "r": "undefined"
+      cancelAnimationFrame: {
+        r: "undefined",
       },
-      "requestAnimationFrame": {
-        "r": "number"
+      requestAnimationFrame: {
+        r: "number",
       },
-      "atob": {
-        "r": "string"
+      atob: {
+        r: "string",
       },
-      "btoa": {
-        "r": "string"
+      btoa: {
+        r: "string",
       },
-      "clearInterval": {
-        "r": "undefined"
+      clearInterval: {
+        r: "undefined",
       },
-      "clearTimeout": {
-        "r": "undefined"
+      clearTimeout: {
+        r: "undefined",
       },
-      "createImageBitmap": {
-        "r": "object"
+      createImageBitmap: {
+        r: "object",
       },
-      "fetch": {
-        "r": "object"
+      fetch: {
+        r: "object",
       },
-      "queueMicrotask": {
-        "r": "undefined"
+      queueMicrotask: {
+        r: "undefined",
       },
-      "reportError": {
-        "r": "undefined"
+      reportError: {
+        r: "undefined",
       },
-      "setInterval": {
-        "r": "number"
+      setInterval: {
+        r: "number",
       },
-      "setTimeout": {
-        "r": "number"
+      setTimeout: {
+        r: "number",
       },
-      "structuredClone": {
-        "r": "top"
+      structuredClone: {
+        r: "top",
       },
-      "alert": {
-        "r": "undefined"
+      alert: {
+        r: "undefined",
       },
-      "blur": {
-        "r": "undefined"
+      blur: {
+        r: "undefined",
       },
-      "cancelIdleCallback": {
-        "r": "undefined"
+      cancelIdleCallback: {
+        r: "undefined",
       },
-      "captureEvents": {
-        "r": "undefined"
+      captureEvents: {
+        r: "undefined",
       },
-      "close": {
-        "r": "undefined"
+      close: {
+        r: "undefined",
       },
-      "confirm": {
-        "r": "boolean"
+      confirm: {
+        r: "boolean",
       },
-      "focus": {
-        "r": "undefined"
+      focus: {
+        r: "undefined",
       },
-      "getComputedStyle": {
-        "r": "object",
-        "s": "CSSStyleDeclaration"
+      getComputedStyle: {
+        r: "object",
+        s: "CSSStyleDeclaration",
       },
-      "getSelection": {
-        "r": "object",
-        "s": "Selection",
-        "n": true
+      getSelection: {
+        r: "object",
+        s: "Selection",
+        n: true,
       },
-      "matchMedia": {
-        "r": "object",
-        "s": "MediaQueryList"
+      matchMedia: {
+        r: "object",
+        s: "MediaQueryList",
       },
-      "moveBy": {
-        "r": "undefined"
+      moveBy: {
+        r: "undefined",
       },
-      "moveTo": {
-        "r": "undefined"
+      moveTo: {
+        r: "undefined",
       },
-      "open": {
-        "r": "object",
-        "s": "Window",
-        "n": true
+      open: {
+        r: "object",
+        s: "Window",
+        n: true,
       },
-      "postMessage": {
-        "r": "undefined"
+      postMessage: {
+        r: "undefined",
       },
-      "print": {
-        "r": "undefined"
+      print: {
+        r: "undefined",
       },
-      "prompt": {
-        "r": "string",
-        "n": true
+      prompt: {
+        r: "string",
+        n: true,
       },
-      "releaseEvents": {
-        "r": "undefined"
+      releaseEvents: {
+        r: "undefined",
       },
-      "requestIdleCallback": {
-        "r": "number"
+      requestIdleCallback: {
+        r: "number",
       },
-      "resizeBy": {
-        "r": "undefined"
+      resizeBy: {
+        r: "undefined",
       },
-      "resizeTo": {
-        "r": "undefined"
+      resizeTo: {
+        r: "undefined",
       },
-      "scroll": {
-        "r": "undefined"
+      scroll: {
+        r: "undefined",
       },
-      "scrollBy": {
-        "r": "undefined"
+      scrollBy: {
+        r: "undefined",
       },
-      "scrollTo": {
-        "r": "undefined"
+      scrollTo: {
+        r: "undefined",
       },
-      "stop": {
-        "r": "undefined"
-      }
+      stop: {
+        r: "undefined",
+      },
     },
-    "index": {
-      "t": "object",
-      "s": "Window"
-    }
-  },
-  "Document": {
-    "props": {
-      "baseURI": {
-        "t": "string"
-      },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
-      },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "isConnected": {
-        "t": "boolean"
-      },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nodeName": {
-        "t": "string"
-      },
-      "nodeType": {
-        "t": "number"
-      },
-      "nodeValue": {
-        "t": "string",
-        "n": true
-      },
-      "ownerDocument": {
-        "t": "null"
-      },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "textContent": {
-        "t": "string",
-        "n": true
-      },
-      "activeElement": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "adoptedStyleSheets": {
-        "t": "object"
-      },
-      "fullscreenElement": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "pictureInPictureElement": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "pointerLockElement": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "styleSheets": {
-        "t": "object"
-      },
-      "fonts": {
-        "t": "object"
-      },
-      "childElementCount": {
-        "t": "number"
-      },
-      "children": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "firstElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "lastElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "URL": {
-        "t": "string"
-      },
-      "alinkColor": {
-        "t": "string"
-      },
-      "all": {
-        "t": "object"
-      },
-      "anchors": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "applets": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "bgColor": {
-        "t": "string"
-      },
-      "body": {
-        "t": "object",
-        "s": "HTMLElement"
-      },
-      "characterSet": {
-        "t": "string"
-      },
-      "charset": {
-        "t": "string"
-      },
-      "compatMode": {
-        "t": "string"
-      },
-      "contentType": {
-        "t": "string"
-      },
-      "cookie": {
-        "t": "string"
-      },
-      "currentScript": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "defaultView": {
-        "t": "top",
-        "n": true
-      },
-      "designMode": {
-        "t": "string"
-      },
-      "dir": {
-        "t": "string"
-      },
-      "doctype": {
-        "t": "object",
-        "n": true
-      },
-      "documentElement": {
-        "t": "object",
-        "s": "HTMLElement"
-      },
-      "documentURI": {
-        "t": "string"
-      },
-      "domain": {
-        "t": "string"
-      },
-      "embeds": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "fgColor": {
-        "t": "string"
-      },
-      "forms": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "fragmentDirective": {
-        "t": "object"
-      },
-      "fullscreen": {
-        "t": "boolean"
-      },
-      "fullscreenEnabled": {
-        "t": "boolean"
-      },
-      "head": {
-        "t": "object",
-        "s": "HTMLElement"
-      },
-      "hidden": {
-        "t": "boolean"
-      },
-      "images": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "implementation": {
-        "t": "object"
-      },
-      "inputEncoding": {
-        "t": "string"
-      },
-      "lastModified": {
-        "t": "string"
-      },
-      "linkColor": {
-        "t": "string"
-      },
-      "links": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "location": {
-        "t": "object",
-        "s": "Location"
-      },
-      "pictureInPictureEnabled": {
-        "t": "boolean"
-      },
-      "plugins": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "readyState": {
-        "t": "string"
-      },
-      "referrer": {
-        "t": "string"
-      },
-      "rootElement": {
-        "t": "object",
-        "s": "SVGElement",
-        "n": true
-      },
-      "scripts": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "scrollingElement": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "timeline": {
-        "t": "object"
-      },
-      "title": {
-        "t": "string"
-      },
-      "visibilityState": {
-        "t": "string"
-      },
-      "vlinkColor": {
-        "t": "string"
-      },
-      "documentMode": {
-        "t": "number",
-        "o": true
-      }
+    index: {
+      t: "object",
+      s: "Window",
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "compareDocumentPosition": {
-        "r": "number"
-      },
-      "contains": {
-        "r": "boolean"
-      },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "hasChildNodes": {
-        "r": "boolean"
-      },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
-      },
-      "isDefaultNamespace": {
-        "r": "boolean"
-      },
-      "isEqualNode": {
-        "r": "boolean"
-      },
-      "isSameNode": {
-        "r": "boolean"
-      },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
-      },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
-      },
-      "normalize": {
-        "r": "undefined"
-      },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "elementFromPoint": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "elementsFromPoint": {
-        "r": "object"
-      },
-      "getAnimations": {
-        "r": "object"
-      },
-      "getElementById": {
-        "r": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "append": {
-        "r": "undefined"
-      },
-      "prepend": {
-        "r": "undefined"
-      },
-      "querySelector": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "querySelectorAll": {
-        "r": "object",
-        "s": "NodeList"
-      },
-      "replaceChildren": {
-        "r": "undefined"
-      },
-      "createExpression": {
-        "r": "object"
-      },
-      "createNSResolver": {
-        "r": "object",
-        "s": "Node"
-      },
-      "evaluate": {
-        "r": "object"
-      },
-      "adoptNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "captureEvents": {
-        "r": "undefined"
-      },
-      "caretPositionFromPoint": {
-        "r": "object",
-        "n": true
-      },
-      "caretRangeFromPoint": {
-        "r": "object",
-        "s": "Range",
-        "n": true
-      },
-      "clear": {
-        "r": "undefined"
-      },
-      "close": {
-        "r": "undefined"
-      },
-      "createAttribute": {
-        "r": "object",
-        "s": "Attr"
-      },
-      "createAttributeNS": {
-        "r": "object",
-        "s": "Attr"
-      },
-      "createCDATASection": {
-        "r": "object"
-      },
-      "createComment": {
-        "r": "object",
-        "s": "Comment"
-      },
-      "createDocumentFragment": {
-        "r": "object",
-        "s": "DocumentFragment"
-      },
-      "createElement": {
-        "r": "object",
-        "s": "HTMLElement"
-      },
-      "createElementNS": {
-        "r": "object",
-        "s": "Element"
-      },
-      "createEvent": {
-        "r": "object",
-        "s": "Event"
-      },
-      "createNodeIterator": {
-        "r": "object"
-      },
-      "createProcessingInstruction": {
-        "r": "object"
-      },
-      "createRange": {
-        "r": "object",
-        "s": "Range"
-      },
-      "createTextNode": {
-        "r": "object",
-        "s": "Text"
-      },
-      "createTreeWalker": {
-        "r": "object"
-      },
-      "execCommand": {
-        "r": "boolean"
-      },
-      "exitFullscreen": {
-        "r": "object"
-      },
-      "exitPictureInPicture": {
-        "r": "object"
-      },
-      "exitPointerLock": {
-        "r": "undefined"
-      },
-      "getElementsByClassName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByName": {
-        "r": "object",
-        "s": "NodeList"
-      },
-      "getElementsByTagName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByTagNameNS": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getSelection": {
-        "r": "object",
-        "s": "Selection",
-        "n": true
-      },
-      "hasFocus": {
-        "r": "boolean"
-      },
-      "hasStorageAccess": {
-        "r": "object"
-      },
-      "importNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "open": {
-        "r": "object",
-        "s": "Window",
-        "n": true
-      },
-      "queryCommandEnabled": {
-        "r": "boolean"
-      },
-      "queryCommandIndeterm": {
-        "r": "boolean"
-      },
-      "queryCommandState": {
-        "r": "boolean"
-      },
-      "queryCommandSupported": {
-        "r": "boolean"
-      },
-      "queryCommandValue": {
-        "r": "string"
-      },
-      "releaseEvents": {
-        "r": "undefined"
-      },
-      "requestStorageAccess": {
-        "r": "object"
-      },
-      "startViewTransition": {
-        "r": "object"
-      },
-      "write": {
-        "r": "undefined"
-      },
-      "writeln": {
-        "r": "undefined"
-      }
-    }
   },
-  "Node": {
-    "props": {
-      "baseURI": {
-        "t": "string"
+  Document: {
+    props: {
+      baseURI: {
+        t: "string",
       },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
+      childNodes: {
+        t: "object",
+        s: "NodeList",
       },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "isConnected": {
-        "t": "boolean"
+      isConnected: {
+        t: "boolean",
       },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "nodeName": {
-        "t": "string"
+      nodeName: {
+        t: "string",
       },
-      "nodeType": {
-        "t": "number"
+      nodeType: {
+        t: "number",
       },
-      "nodeValue": {
-        "t": "string",
-        "n": true
+      nodeValue: {
+        t: "string",
+        n: true,
       },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document",
-        "n": true
+      ownerDocument: {
+        t: "null",
       },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
       },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "textContent": {
-        "t": "string",
-        "n": true
-      }
+      textContent: {
+        t: "string",
+        n: true,
+      },
+      activeElement: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      adoptedStyleSheets: {
+        t: "object",
+      },
+      fullscreenElement: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      pictureInPictureElement: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      pointerLockElement: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      styleSheets: {
+        t: "object",
+      },
+      fonts: {
+        t: "object",
+      },
+      childElementCount: {
+        t: "number",
+      },
+      children: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      firstElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      lastElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      URL: {
+        t: "string",
+      },
+      alinkColor: {
+        t: "string",
+      },
+      all: {
+        t: "object",
+      },
+      anchors: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      applets: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      bgColor: {
+        t: "string",
+      },
+      body: {
+        t: "object",
+        s: "HTMLElement",
+      },
+      characterSet: {
+        t: "string",
+      },
+      charset: {
+        t: "string",
+      },
+      compatMode: {
+        t: "string",
+      },
+      contentType: {
+        t: "string",
+      },
+      cookie: {
+        t: "string",
+      },
+      currentScript: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      defaultView: {
+        t: "top",
+        n: true,
+      },
+      designMode: {
+        t: "string",
+      },
+      dir: {
+        t: "string",
+      },
+      doctype: {
+        t: "object",
+        n: true,
+      },
+      documentElement: {
+        t: "object",
+        s: "HTMLElement",
+      },
+      documentURI: {
+        t: "string",
+      },
+      domain: {
+        t: "string",
+      },
+      embeds: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      fgColor: {
+        t: "string",
+      },
+      forms: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      fragmentDirective: {
+        t: "object",
+      },
+      fullscreen: {
+        t: "boolean",
+      },
+      fullscreenEnabled: {
+        t: "boolean",
+      },
+      head: {
+        t: "object",
+        s: "HTMLElement",
+      },
+      hidden: {
+        t: "boolean",
+      },
+      images: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      implementation: {
+        t: "object",
+      },
+      inputEncoding: {
+        t: "string",
+      },
+      lastModified: {
+        t: "string",
+      },
+      linkColor: {
+        t: "string",
+      },
+      links: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      location: {
+        t: "object",
+        s: "Location",
+      },
+      pictureInPictureEnabled: {
+        t: "boolean",
+      },
+      plugins: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      readyState: {
+        t: "string",
+      },
+      referrer: {
+        t: "string",
+      },
+      rootElement: {
+        t: "object",
+        s: "SVGElement",
+        n: true,
+      },
+      scripts: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      scrollingElement: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      timeline: {
+        t: "object",
+      },
+      title: {
+        t: "string",
+      },
+      visibilityState: {
+        t: "string",
+      },
+      vlinkColor: {
+        t: "string",
+      },
+      documentMode: {
+        t: "number",
+        o: true,
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      dispatchEvent: {
+        r: "boolean",
       },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "compareDocumentPosition": {
-        "r": "number"
-      },
-      "contains": {
-        "r": "boolean"
-      },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "hasChildNodes": {
-        "r": "boolean"
-      },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
-      },
-      "isDefaultNamespace": {
-        "r": "boolean"
-      },
-      "isEqualNode": {
-        "r": "boolean"
-      },
-      "isSameNode": {
-        "r": "boolean"
-      },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
-      },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
-      },
-      "normalize": {
-        "r": "undefined"
-      },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
-      }
-    }
-  },
-  "Element": {
-    "props": {
-      "baseURI": {
-        "t": "string"
-      },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
-      },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "isConnected": {
-        "t": "boolean"
-      },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nodeName": {
-        "t": "string"
-      },
-      "nodeType": {
-        "t": "number"
-      },
-      "nodeValue": {
-        "t": "string",
-        "n": true
-      },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
-      },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "textContent": {
-        "t": "string",
-        "n": true
-      },
-      "ariaAtomic": {
-        "t": "string",
-        "n": true
-      },
-      "ariaAutoComplete": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBrailleLabel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBrailleRoleDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBusy": {
-        "t": "string",
-        "n": true
-      },
-      "ariaChecked": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColCount": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColIndex": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColIndexText": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColSpan": {
-        "t": "string",
-        "n": true
-      },
-      "ariaCurrent": {
-        "t": "string",
-        "n": true
-      },
-      "ariaDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaDisabled": {
-        "t": "string",
-        "n": true
-      },
-      "ariaExpanded": {
-        "t": "string",
-        "n": true
-      },
-      "ariaHasPopup": {
-        "t": "string",
-        "n": true
-      },
-      "ariaHidden": {
-        "t": "string",
-        "n": true
-      },
-      "ariaInvalid": {
-        "t": "string",
-        "n": true
-      },
-      "ariaKeyShortcuts": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLabel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLevel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLive": {
-        "t": "string",
-        "n": true
-      },
-      "ariaModal": {
-        "t": "string",
-        "n": true
-      },
-      "ariaMultiLine": {
-        "t": "string",
-        "n": true
-      },
-      "ariaMultiSelectable": {
-        "t": "string",
-        "n": true
-      },
-      "ariaOrientation": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPlaceholder": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPosInSet": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPressed": {
-        "t": "string",
-        "n": true
-      },
-      "ariaReadOnly": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRelevant": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRequired": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRoleDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowCount": {
-        "t": "string",
-        "n": true
+      removeEventListener: {
+        r: "undefined",
       },
-      "ariaRowIndex": {
-        "t": "string",
-        "n": true
+      appendChild: {
+        r: "object",
+        s: "Node",
       },
-      "ariaRowIndexText": {
-        "t": "string",
-        "n": true
+      cloneNode: {
+        r: "object",
+        s: "Node",
       },
-      "ariaRowSpan": {
-        "t": "string",
-        "n": true
+      compareDocumentPosition: {
+        r: "number",
       },
-      "ariaSelected": {
-        "t": "string",
-        "n": true
+      contains: {
+        r: "boolean",
       },
-      "ariaSetSize": {
-        "t": "string",
-        "n": true
+      getRootNode: {
+        r: "object",
+        s: "Node",
       },
-      "ariaSort": {
-        "t": "string",
-        "n": true
+      hasChildNodes: {
+        r: "boolean",
       },
-      "ariaValueMax": {
-        "t": "string",
-        "n": true
+      insertBefore: {
+        r: "object",
+        s: "Node",
       },
-      "ariaValueMin": {
-        "t": "string",
-        "n": true
+      isDefaultNamespace: {
+        r: "boolean",
       },
-      "ariaValueNow": {
-        "t": "string",
-        "n": true
+      isEqualNode: {
+        r: "boolean",
       },
-      "ariaValueText": {
-        "t": "string",
-        "n": true
+      isSameNode: {
+        r: "boolean",
       },
-      "role": {
-        "t": "string",
-        "n": true
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
       },
-      "nextElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      lookupPrefix: {
+        r: "string",
+        n: true,
       },
-      "previousElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      normalize: {
+        r: "undefined",
       },
-      "childElementCount": {
-        "t": "number"
+      removeChild: {
+        r: "object",
+        s: "Node",
       },
-      "children": {
-        "t": "object",
-        "s": "HTMLCollection"
+      replaceChild: {
+        r: "object",
+        s: "Node",
       },
-      "firstElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      elementFromPoint: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "lastElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      elementsFromPoint: {
+        r: "object",
       },
-      "assignedSlot": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      getAnimations: {
+        r: "object",
       },
-      "attributes": {
-        "t": "object",
-        "s": "NamedNodeMap"
+      getElementById: {
+        r: "object",
+        s: "HTMLElement",
+        n: true,
       },
-      "classList": {
-        "t": "object",
-        "s": "DOMTokenList"
+      append: {
+        r: "undefined",
       },
-      "className": {
-        "t": "string"
+      prepend: {
+        r: "undefined",
       },
-      "clientHeight": {
-        "t": "number"
+      querySelector: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "clientLeft": {
-        "t": "number"
+      querySelectorAll: {
+        r: "object",
+        s: "NodeList",
       },
-      "clientTop": {
-        "t": "number"
+      replaceChildren: {
+        r: "undefined",
       },
-      "clientWidth": {
-        "t": "number"
+      createExpression: {
+        r: "object",
       },
-      "currentCSSZoom": {
-        "t": "number"
+      createNSResolver: {
+        r: "object",
+        s: "Node",
       },
-      "id": {
-        "t": "string"
+      evaluate: {
+        r: "object",
       },
-      "innerHTML": {
-        "t": "string"
+      adoptNode: {
+        r: "object",
+        s: "Node",
       },
-      "localName": {
-        "t": "string"
+      captureEvents: {
+        r: "undefined",
       },
-      "namespaceURI": {
-        "t": "string",
-        "n": true
+      caretPositionFromPoint: {
+        r: "object",
+        n: true,
       },
-      "outerHTML": {
-        "t": "string"
+      caretRangeFromPoint: {
+        r: "object",
+        s: "Range",
+        n: true,
       },
-      "part": {
-        "t": "object",
-        "s": "DOMTokenList"
+      clear: {
+        r: "undefined",
       },
-      "prefix": {
-        "t": "string",
-        "n": true
+      close: {
+        r: "undefined",
       },
-      "scrollHeight": {
-        "t": "number"
+      createAttribute: {
+        r: "object",
+        s: "Attr",
       },
-      "scrollLeft": {
-        "t": "number"
+      createAttributeNS: {
+        r: "object",
+        s: "Attr",
       },
-      "scrollTop": {
-        "t": "number"
+      createCDATASection: {
+        r: "object",
       },
-      "scrollWidth": {
-        "t": "number"
+      createComment: {
+        r: "object",
+        s: "Comment",
       },
-      "shadowRoot": {
-        "t": "object",
-        "n": true
+      createDocumentFragment: {
+        r: "object",
+        s: "DocumentFragment",
       },
-      "slot": {
-        "t": "string"
+      createElement: {
+        r: "object",
+        s: "HTMLElement",
       },
-      "tagName": {
-        "t": "string"
-      }
+      createElementNS: {
+        r: "object",
+        s: "Element",
+      },
+      createEvent: {
+        r: "object",
+        s: "Event",
+      },
+      createNodeIterator: {
+        r: "object",
+      },
+      createProcessingInstruction: {
+        r: "object",
+      },
+      createRange: {
+        r: "object",
+        s: "Range",
+      },
+      createTextNode: {
+        r: "object",
+        s: "Text",
+      },
+      createTreeWalker: {
+        r: "object",
+      },
+      execCommand: {
+        r: "boolean",
+      },
+      exitFullscreen: {
+        r: "object",
+      },
+      exitPictureInPicture: {
+        r: "object",
+      },
+      exitPointerLock: {
+        r: "undefined",
+      },
+      getElementsByClassName: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getElementsByName: {
+        r: "object",
+        s: "NodeList",
+      },
+      getElementsByTagName: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getElementsByTagNameNS: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getSelection: {
+        r: "object",
+        s: "Selection",
+        n: true,
+      },
+      hasFocus: {
+        r: "boolean",
+      },
+      hasStorageAccess: {
+        r: "object",
+      },
+      importNode: {
+        r: "object",
+        s: "Node",
+      },
+      open: {
+        r: "object",
+        s: "Window",
+        n: true,
+      },
+      queryCommandEnabled: {
+        r: "boolean",
+      },
+      queryCommandIndeterm: {
+        r: "boolean",
+      },
+      queryCommandState: {
+        r: "boolean",
+      },
+      queryCommandSupported: {
+        r: "boolean",
+      },
+      queryCommandValue: {
+        r: "string",
+      },
+      releaseEvents: {
+        r: "undefined",
+      },
+      requestStorageAccess: {
+        r: "object",
+      },
+      startViewTransition: {
+        r: "object",
+      },
+      write: {
+        r: "undefined",
+      },
+      writeln: {
+        r: "undefined",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "compareDocumentPosition": {
-        "r": "number"
-      },
-      "contains": {
-        "r": "boolean"
-      },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "hasChildNodes": {
-        "r": "boolean"
-      },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
-      },
-      "isDefaultNamespace": {
-        "r": "boolean"
-      },
-      "isEqualNode": {
-        "r": "boolean"
-      },
-      "isSameNode": {
-        "r": "boolean"
-      },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
-      },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
-      },
-      "normalize": {
-        "r": "undefined"
-      },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "animate": {
-        "r": "object"
-      },
-      "getAnimations": {
-        "r": "object"
-      },
-      "after": {
-        "r": "undefined"
-      },
-      "before": {
-        "r": "undefined"
-      },
-      "remove": {
-        "r": "undefined"
-      },
-      "replaceWith": {
-        "r": "undefined"
-      },
-      "append": {
-        "r": "undefined"
-      },
-      "prepend": {
-        "r": "undefined"
-      },
-      "querySelector": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "querySelectorAll": {
-        "r": "object",
-        "s": "NodeList"
-      },
-      "replaceChildren": {
-        "r": "undefined"
-      },
-      "attachShadow": {
-        "r": "object"
-      },
-      "checkVisibility": {
-        "r": "boolean"
-      },
-      "closest": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "computedStyleMap": {
-        "r": "object"
-      },
-      "getAttribute": {
-        "r": "string",
-        "n": true
-      },
-      "getAttributeNS": {
-        "r": "string",
-        "n": true
-      },
-      "getAttributeNames": {
-        "r": "object"
-      },
-      "getAttributeNode": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "getAttributeNodeNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "getBoundingClientRect": {
-        "r": "object"
-      },
-      "getClientRects": {
-        "r": "object"
-      },
-      "getElementsByClassName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByTagName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByTagNameNS": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getHTML": {
-        "r": "string"
-      },
-      "hasAttribute": {
-        "r": "boolean"
-      },
-      "hasAttributeNS": {
-        "r": "boolean"
-      },
-      "hasAttributes": {
-        "r": "boolean"
-      },
-      "hasPointerCapture": {
-        "r": "boolean"
-      },
-      "insertAdjacentElement": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "insertAdjacentHTML": {
-        "r": "undefined"
-      },
-      "insertAdjacentText": {
-        "r": "undefined"
-      },
-      "matches": {
-        "r": "boolean"
-      },
-      "releasePointerCapture": {
-        "r": "undefined"
-      },
-      "removeAttribute": {
-        "r": "undefined"
-      },
-      "removeAttributeNS": {
-        "r": "undefined"
-      },
-      "removeAttributeNode": {
-        "r": "object",
-        "s": "Attr"
-      },
-      "requestFullscreen": {
-        "r": "object"
-      },
-      "requestPointerLock": {
-        "r": "object"
-      },
-      "scroll": {
-        "r": "undefined"
-      },
-      "scrollBy": {
-        "r": "undefined"
-      },
-      "scrollIntoView": {
-        "r": "undefined"
-      },
-      "scrollTo": {
-        "r": "undefined"
-      },
-      "setAttribute": {
-        "r": "undefined"
-      },
-      "setAttributeNS": {
-        "r": "undefined"
-      },
-      "setAttributeNode": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "setAttributeNodeNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "setHTMLUnsafe": {
-        "r": "undefined"
-      },
-      "setPointerCapture": {
-        "r": "undefined"
-      },
-      "toggleAttribute": {
-        "r": "boolean"
-      },
-      "webkitMatchesSelector": {
-        "r": "boolean"
-      }
-    }
   },
-  "HTMLElement": {
-    "props": {
-      "baseURI": {
-        "t": "string"
+  Node: {
+    props: {
+      baseURI: {
+        t: "string",
+      },
+      childNodes: {
+        t: "object",
+        s: "NodeList",
+      },
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      isConnected: {
+        t: "boolean",
+      },
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nodeName: {
+        t: "string",
+      },
+      nodeType: {
+        t: "number",
+      },
+      nodeValue: {
+        t: "string",
+        n: true,
+      },
+      ownerDocument: {
+        t: "object",
+        s: "Document",
+        n: true,
+      },
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      textContent: {
+        t: "string",
+        n: true,
       },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
-      },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "isConnected": {
-        "t": "boolean"
-      },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nodeName": {
-        "t": "string"
-      },
-      "nodeType": {
-        "t": "number"
-      },
-      "nodeValue": {
-        "t": "string",
-        "n": true
-      },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
-      },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "textContent": {
-        "t": "string",
-        "n": true
-      },
-      "ariaAtomic": {
-        "t": "string",
-        "n": true
-      },
-      "ariaAutoComplete": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBrailleLabel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBrailleRoleDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBusy": {
-        "t": "string",
-        "n": true
-      },
-      "ariaChecked": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColCount": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColIndex": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColIndexText": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColSpan": {
-        "t": "string",
-        "n": true
-      },
-      "ariaCurrent": {
-        "t": "string",
-        "n": true
-      },
-      "ariaDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaDisabled": {
-        "t": "string",
-        "n": true
-      },
-      "ariaExpanded": {
-        "t": "string",
-        "n": true
-      },
-      "ariaHasPopup": {
-        "t": "string",
-        "n": true
-      },
-      "ariaHidden": {
-        "t": "string",
-        "n": true
-      },
-      "ariaInvalid": {
-        "t": "string",
-        "n": true
-      },
-      "ariaKeyShortcuts": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLabel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLevel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLive": {
-        "t": "string",
-        "n": true
-      },
-      "ariaModal": {
-        "t": "string",
-        "n": true
-      },
-      "ariaMultiLine": {
-        "t": "string",
-        "n": true
-      },
-      "ariaMultiSelectable": {
-        "t": "string",
-        "n": true
-      },
-      "ariaOrientation": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPlaceholder": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPosInSet": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPressed": {
-        "t": "string",
-        "n": true
-      },
-      "ariaReadOnly": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRelevant": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRequired": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRoleDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowCount": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowIndex": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowIndexText": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowSpan": {
-        "t": "string",
-        "n": true
-      },
-      "ariaSelected": {
-        "t": "string",
-        "n": true
-      },
-      "ariaSetSize": {
-        "t": "string",
-        "n": true
-      },
-      "ariaSort": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueMax": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueMin": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueNow": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueText": {
-        "t": "string",
-        "n": true
-      },
-      "role": {
-        "t": "string",
-        "n": true
-      },
-      "nextElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "previousElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "childElementCount": {
-        "t": "number"
-      },
-      "children": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "firstElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "lastElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "assignedSlot": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "attributes": {
-        "t": "object",
-        "s": "NamedNodeMap"
-      },
-      "classList": {
-        "t": "object",
-        "s": "DOMTokenList"
-      },
-      "className": {
-        "t": "string"
-      },
-      "clientHeight": {
-        "t": "number"
-      },
-      "clientLeft": {
-        "t": "number"
-      },
-      "clientTop": {
-        "t": "number"
-      },
-      "clientWidth": {
-        "t": "number"
-      },
-      "currentCSSZoom": {
-        "t": "number"
-      },
-      "id": {
-        "t": "string"
-      },
-      "innerHTML": {
-        "t": "string"
-      },
-      "localName": {
-        "t": "string"
-      },
-      "namespaceURI": {
-        "t": "string",
-        "n": true
-      },
-      "outerHTML": {
-        "t": "string"
-      },
-      "part": {
-        "t": "object",
-        "s": "DOMTokenList"
-      },
-      "prefix": {
-        "t": "string",
-        "n": true
-      },
-      "scrollHeight": {
-        "t": "number"
-      },
-      "scrollLeft": {
-        "t": "number"
-      },
-      "scrollTop": {
-        "t": "number"
-      },
-      "scrollWidth": {
-        "t": "number"
-      },
-      "shadowRoot": {
-        "t": "object",
-        "n": true
-      },
-      "slot": {
-        "t": "string"
-      },
-      "tagName": {
-        "t": "string"
-      },
-      "attributeStyleMap": {
-        "t": "object"
-      },
-      "style": {
-        "t": "object",
-        "s": "CSSStyleDeclaration"
-      },
-      "contentEditable": {
-        "t": "string"
-      },
-      "enterKeyHint": {
-        "t": "string"
-      },
-      "inputMode": {
-        "t": "string"
-      },
-      "isContentEditable": {
-        "t": "boolean"
-      },
-      "autofocus": {
-        "t": "boolean"
-      },
-      "dataset": {
-        "t": "object",
-        "s": "DOMStringMap"
-      },
-      "nonce": {
-        "t": "string",
-        "o": true
-      },
-      "tabIndex": {
-        "t": "number"
-      },
-      "accessKey": {
-        "t": "string"
-      },
-      "accessKeyLabel": {
-        "t": "string"
-      },
-      "autocapitalize": {
-        "t": "string"
-      },
-      "dir": {
-        "t": "string"
-      },
-      "draggable": {
-        "t": "boolean"
-      },
-      "hidden": {
-        "t": "boolean"
-      },
-      "inert": {
-        "t": "boolean"
-      },
-      "innerText": {
-        "t": "string"
-      },
-      "lang": {
-        "t": "string"
-      },
-      "offsetHeight": {
-        "t": "number"
-      },
-      "offsetLeft": {
-        "t": "number"
-      },
-      "offsetParent": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "offsetTop": {
-        "t": "number"
-      },
-      "offsetWidth": {
-        "t": "number"
-      },
-      "outerText": {
-        "t": "string"
-      },
-      "popover": {
-        "t": "string",
-        "n": true
-      },
-      "spellcheck": {
-        "t": "boolean"
-      },
-      "title": {
-        "t": "string"
-      },
-      "translate": {
-        "t": "boolean"
-      },
-      "writingSuggestions": {
-        "t": "string"
-      }
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      dispatchEvent: {
+        r: "boolean",
       },
-      "removeEventListener": {
-        "r": "undefined"
+      removeEventListener: {
+        r: "undefined",
       },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
+      appendChild: {
+        r: "object",
+        s: "Node",
       },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
+      cloneNode: {
+        r: "object",
+        s: "Node",
       },
-      "compareDocumentPosition": {
-        "r": "number"
+      compareDocumentPosition: {
+        r: "number",
       },
-      "contains": {
-        "r": "boolean"
+      contains: {
+        r: "boolean",
       },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
+      getRootNode: {
+        r: "object",
+        s: "Node",
       },
-      "hasChildNodes": {
-        "r": "boolean"
+      hasChildNodes: {
+        r: "boolean",
       },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
+      insertBefore: {
+        r: "object",
+        s: "Node",
       },
-      "isDefaultNamespace": {
-        "r": "boolean"
+      isDefaultNamespace: {
+        r: "boolean",
       },
-      "isEqualNode": {
-        "r": "boolean"
+      isEqualNode: {
+        r: "boolean",
       },
-      "isSameNode": {
-        "r": "boolean"
+      isSameNode: {
+        r: "boolean",
       },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
       },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
+      lookupPrefix: {
+        r: "string",
+        n: true,
       },
-      "normalize": {
-        "r": "undefined"
+      normalize: {
+        r: "undefined",
       },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
+      removeChild: {
+        r: "object",
+        s: "Node",
       },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
+      replaceChild: {
+        r: "object",
+        s: "Node",
       },
-      "animate": {
-        "r": "object"
-      },
-      "getAnimations": {
-        "r": "object"
-      },
-      "after": {
-        "r": "undefined"
-      },
-      "before": {
-        "r": "undefined"
-      },
-      "remove": {
-        "r": "undefined"
-      },
-      "replaceWith": {
-        "r": "undefined"
-      },
-      "append": {
-        "r": "undefined"
-      },
-      "prepend": {
-        "r": "undefined"
-      },
-      "querySelector": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "querySelectorAll": {
-        "r": "object",
-        "s": "NodeList"
-      },
-      "replaceChildren": {
-        "r": "undefined"
-      },
-      "attachShadow": {
-        "r": "object"
-      },
-      "checkVisibility": {
-        "r": "boolean"
-      },
-      "closest": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "computedStyleMap": {
-        "r": "object"
-      },
-      "getAttribute": {
-        "r": "string",
-        "n": true
-      },
-      "getAttributeNS": {
-        "r": "string",
-        "n": true
-      },
-      "getAttributeNames": {
-        "r": "object"
-      },
-      "getAttributeNode": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "getAttributeNodeNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "getBoundingClientRect": {
-        "r": "object"
-      },
-      "getClientRects": {
-        "r": "object"
-      },
-      "getElementsByClassName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByTagName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByTagNameNS": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getHTML": {
-        "r": "string"
-      },
-      "hasAttribute": {
-        "r": "boolean"
-      },
-      "hasAttributeNS": {
-        "r": "boolean"
-      },
-      "hasAttributes": {
-        "r": "boolean"
-      },
-      "hasPointerCapture": {
-        "r": "boolean"
-      },
-      "insertAdjacentElement": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "insertAdjacentHTML": {
-        "r": "undefined"
-      },
-      "insertAdjacentText": {
-        "r": "undefined"
-      },
-      "matches": {
-        "r": "boolean"
-      },
-      "releasePointerCapture": {
-        "r": "undefined"
-      },
-      "removeAttribute": {
-        "r": "undefined"
-      },
-      "removeAttributeNS": {
-        "r": "undefined"
-      },
-      "removeAttributeNode": {
-        "r": "object",
-        "s": "Attr"
-      },
-      "requestFullscreen": {
-        "r": "object"
-      },
-      "requestPointerLock": {
-        "r": "object"
-      },
-      "scroll": {
-        "r": "undefined"
-      },
-      "scrollBy": {
-        "r": "undefined"
-      },
-      "scrollIntoView": {
-        "r": "undefined"
-      },
-      "scrollTo": {
-        "r": "undefined"
-      },
-      "setAttribute": {
-        "r": "undefined"
-      },
-      "setAttributeNS": {
-        "r": "undefined"
-      },
-      "setAttributeNode": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "setAttributeNodeNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "setHTMLUnsafe": {
-        "r": "undefined"
-      },
-      "setPointerCapture": {
-        "r": "undefined"
-      },
-      "toggleAttribute": {
-        "r": "boolean"
-      },
-      "webkitMatchesSelector": {
-        "r": "boolean"
-      },
-      "blur": {
-        "r": "undefined"
-      },
-      "focus": {
-        "r": "undefined"
-      },
-      "attachInternals": {
-        "r": "object"
-      },
-      "click": {
-        "r": "undefined"
-      },
-      "hidePopover": {
-        "r": "undefined"
-      },
-      "showPopover": {
-        "r": "undefined"
-      },
-      "togglePopover": {
-        "r": "boolean"
-      }
-    }
-  },
-  "SVGElement": {
-    "props": {
-      "baseURI": {
-        "t": "string"
-      },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
-      },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "isConnected": {
-        "t": "boolean"
-      },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "nodeName": {
-        "t": "string"
-      },
-      "nodeType": {
-        "t": "number"
-      },
-      "nodeValue": {
-        "t": "string",
-        "n": true
-      },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
-      },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "textContent": {
-        "t": "string",
-        "n": true
-      },
-      "ariaAtomic": {
-        "t": "string",
-        "n": true
-      },
-      "ariaAutoComplete": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBrailleLabel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBrailleRoleDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaBusy": {
-        "t": "string",
-        "n": true
-      },
-      "ariaChecked": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColCount": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColIndex": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColIndexText": {
-        "t": "string",
-        "n": true
-      },
-      "ariaColSpan": {
-        "t": "string",
-        "n": true
-      },
-      "ariaCurrent": {
-        "t": "string",
-        "n": true
-      },
-      "ariaDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaDisabled": {
-        "t": "string",
-        "n": true
-      },
-      "ariaExpanded": {
-        "t": "string",
-        "n": true
-      },
-      "ariaHasPopup": {
-        "t": "string",
-        "n": true
-      },
-      "ariaHidden": {
-        "t": "string",
-        "n": true
-      },
-      "ariaInvalid": {
-        "t": "string",
-        "n": true
-      },
-      "ariaKeyShortcuts": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLabel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLevel": {
-        "t": "string",
-        "n": true
-      },
-      "ariaLive": {
-        "t": "string",
-        "n": true
-      },
-      "ariaModal": {
-        "t": "string",
-        "n": true
-      },
-      "ariaMultiLine": {
-        "t": "string",
-        "n": true
-      },
-      "ariaMultiSelectable": {
-        "t": "string",
-        "n": true
-      },
-      "ariaOrientation": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPlaceholder": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPosInSet": {
-        "t": "string",
-        "n": true
-      },
-      "ariaPressed": {
-        "t": "string",
-        "n": true
-      },
-      "ariaReadOnly": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRelevant": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRequired": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRoleDescription": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowCount": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowIndex": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowIndexText": {
-        "t": "string",
-        "n": true
-      },
-      "ariaRowSpan": {
-        "t": "string",
-        "n": true
-      },
-      "ariaSelected": {
-        "t": "string",
-        "n": true
-      },
-      "ariaSetSize": {
-        "t": "string",
-        "n": true
-      },
-      "ariaSort": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueMax": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueMin": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueNow": {
-        "t": "string",
-        "n": true
-      },
-      "ariaValueText": {
-        "t": "string",
-        "n": true
-      },
-      "role": {
-        "t": "string",
-        "n": true
-      },
-      "nextElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "previousElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "childElementCount": {
-        "t": "number"
-      },
-      "children": {
-        "t": "object",
-        "s": "HTMLCollection"
-      },
-      "firstElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "lastElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      },
-      "assignedSlot": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
-      },
-      "attributes": {
-        "t": "object",
-        "s": "NamedNodeMap"
-      },
-      "classList": {
-        "t": "object",
-        "s": "DOMTokenList"
-      },
-      "className": {
-        "t": "top"
-      },
-      "clientHeight": {
-        "t": "number"
-      },
-      "clientLeft": {
-        "t": "number"
-      },
-      "clientTop": {
-        "t": "number"
-      },
-      "clientWidth": {
-        "t": "number"
-      },
-      "currentCSSZoom": {
-        "t": "number"
-      },
-      "id": {
-        "t": "string"
-      },
-      "innerHTML": {
-        "t": "string"
-      },
-      "localName": {
-        "t": "string"
-      },
-      "namespaceURI": {
-        "t": "string",
-        "n": true
-      },
-      "outerHTML": {
-        "t": "string"
-      },
-      "part": {
-        "t": "object",
-        "s": "DOMTokenList"
-      },
-      "prefix": {
-        "t": "string",
-        "n": true
-      },
-      "scrollHeight": {
-        "t": "number"
-      },
-      "scrollLeft": {
-        "t": "number"
-      },
-      "scrollTop": {
-        "t": "number"
-      },
-      "scrollWidth": {
-        "t": "number"
-      },
-      "shadowRoot": {
-        "t": "object",
-        "n": true
-      },
-      "slot": {
-        "t": "string"
-      },
-      "tagName": {
-        "t": "string"
-      },
-      "attributeStyleMap": {
-        "t": "object"
-      },
-      "style": {
-        "t": "object",
-        "s": "CSSStyleDeclaration"
-      },
-      "autofocus": {
-        "t": "boolean"
-      },
-      "dataset": {
-        "t": "object",
-        "s": "DOMStringMap"
-      },
-      "nonce": {
-        "t": "string",
-        "o": true
-      },
-      "tabIndex": {
-        "t": "number"
-      },
-      "ownerSVGElement": {
-        "t": "object",
-        "s": "SVGElement",
-        "n": true
-      },
-      "viewportElement": {
-        "t": "object",
-        "s": "SVGElement",
-        "n": true
-      }
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "compareDocumentPosition": {
-        "r": "number"
-      },
-      "contains": {
-        "r": "boolean"
-      },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "hasChildNodes": {
-        "r": "boolean"
-      },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
-      },
-      "isDefaultNamespace": {
-        "r": "boolean"
-      },
-      "isEqualNode": {
-        "r": "boolean"
-      },
-      "isSameNode": {
-        "r": "boolean"
-      },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
-      },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
-      },
-      "normalize": {
-        "r": "undefined"
-      },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "animate": {
-        "r": "object"
-      },
-      "getAnimations": {
-        "r": "object"
-      },
-      "after": {
-        "r": "undefined"
-      },
-      "before": {
-        "r": "undefined"
-      },
-      "remove": {
-        "r": "undefined"
-      },
-      "replaceWith": {
-        "r": "undefined"
-      },
-      "append": {
-        "r": "undefined"
-      },
-      "prepend": {
-        "r": "undefined"
-      },
-      "querySelector": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "querySelectorAll": {
-        "r": "object",
-        "s": "NodeList"
-      },
-      "replaceChildren": {
-        "r": "undefined"
-      },
-      "attachShadow": {
-        "r": "object"
-      },
-      "checkVisibility": {
-        "r": "boolean"
-      },
-      "closest": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "computedStyleMap": {
-        "r": "object"
-      },
-      "getAttribute": {
-        "r": "string",
-        "n": true
-      },
-      "getAttributeNS": {
-        "r": "string",
-        "n": true
-      },
-      "getAttributeNames": {
-        "r": "object"
-      },
-      "getAttributeNode": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "getAttributeNodeNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "getBoundingClientRect": {
-        "r": "object"
-      },
-      "getClientRects": {
-        "r": "object"
-      },
-      "getElementsByClassName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByTagName": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getElementsByTagNameNS": {
-        "r": "object",
-        "s": "HTMLCollection"
-      },
-      "getHTML": {
-        "r": "string"
-      },
-      "hasAttribute": {
-        "r": "boolean"
-      },
-      "hasAttributeNS": {
-        "r": "boolean"
-      },
-      "hasAttributes": {
-        "r": "boolean"
-      },
-      "hasPointerCapture": {
-        "r": "boolean"
-      },
-      "insertAdjacentElement": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      },
-      "insertAdjacentHTML": {
-        "r": "undefined"
-      },
-      "insertAdjacentText": {
-        "r": "undefined"
-      },
-      "matches": {
-        "r": "boolean"
-      },
-      "releasePointerCapture": {
-        "r": "undefined"
-      },
-      "removeAttribute": {
-        "r": "undefined"
-      },
-      "removeAttributeNS": {
-        "r": "undefined"
-      },
-      "removeAttributeNode": {
-        "r": "object",
-        "s": "Attr"
-      },
-      "requestFullscreen": {
-        "r": "object"
-      },
-      "requestPointerLock": {
-        "r": "object"
-      },
-      "scroll": {
-        "r": "undefined"
-      },
-      "scrollBy": {
-        "r": "undefined"
-      },
-      "scrollIntoView": {
-        "r": "undefined"
-      },
-      "scrollTo": {
-        "r": "undefined"
-      },
-      "setAttribute": {
-        "r": "undefined"
-      },
-      "setAttributeNS": {
-        "r": "undefined"
-      },
-      "setAttributeNode": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "setAttributeNodeNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      },
-      "setHTMLUnsafe": {
-        "r": "undefined"
-      },
-      "setPointerCapture": {
-        "r": "undefined"
-      },
-      "toggleAttribute": {
-        "r": "boolean"
-      },
-      "webkitMatchesSelector": {
-        "r": "boolean"
-      },
-      "blur": {
-        "r": "undefined"
-      },
-      "focus": {
-        "r": "undefined"
-      }
-    }
   },
-  "DocumentFragment": {
-    "props": {
-      "baseURI": {
-        "t": "string"
+  Element: {
+    props: {
+      baseURI: {
+        t: "string",
       },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
+      childNodes: {
+        t: "object",
+        s: "NodeList",
       },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "isConnected": {
-        "t": "boolean"
+      isConnected: {
+        t: "boolean",
       },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "nodeName": {
-        "t": "string"
+      nodeName: {
+        t: "string",
       },
-      "nodeType": {
-        "t": "number"
+      nodeType: {
+        t: "number",
       },
-      "nodeValue": {
-        "t": "string",
-        "n": true
+      nodeValue: {
+        t: "string",
+        n: true,
       },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
+      ownerDocument: {
+        t: "object",
+        s: "Document",
       },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
       },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "textContent": {
-        "t": "string",
-        "n": true
+      textContent: {
+        t: "string",
+        n: true,
       },
-      "childElementCount": {
-        "t": "number"
+      ariaAtomic: {
+        t: "string",
+        n: true,
       },
-      "children": {
-        "t": "object",
-        "s": "HTMLCollection"
+      ariaAutoComplete: {
+        t: "string",
+        n: true,
       },
-      "firstElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      ariaBrailleLabel: {
+        t: "string",
+        n: true,
       },
-      "lastElementChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
-      }
+      ariaBrailleRoleDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaBusy: {
+        t: "string",
+        n: true,
+      },
+      ariaChecked: {
+        t: "string",
+        n: true,
+      },
+      ariaColCount: {
+        t: "string",
+        n: true,
+      },
+      ariaColIndex: {
+        t: "string",
+        n: true,
+      },
+      ariaColIndexText: {
+        t: "string",
+        n: true,
+      },
+      ariaColSpan: {
+        t: "string",
+        n: true,
+      },
+      ariaCurrent: {
+        t: "string",
+        n: true,
+      },
+      ariaDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaDisabled: {
+        t: "string",
+        n: true,
+      },
+      ariaExpanded: {
+        t: "string",
+        n: true,
+      },
+      ariaHasPopup: {
+        t: "string",
+        n: true,
+      },
+      ariaHidden: {
+        t: "string",
+        n: true,
+      },
+      ariaInvalid: {
+        t: "string",
+        n: true,
+      },
+      ariaKeyShortcuts: {
+        t: "string",
+        n: true,
+      },
+      ariaLabel: {
+        t: "string",
+        n: true,
+      },
+      ariaLevel: {
+        t: "string",
+        n: true,
+      },
+      ariaLive: {
+        t: "string",
+        n: true,
+      },
+      ariaModal: {
+        t: "string",
+        n: true,
+      },
+      ariaMultiLine: {
+        t: "string",
+        n: true,
+      },
+      ariaMultiSelectable: {
+        t: "string",
+        n: true,
+      },
+      ariaOrientation: {
+        t: "string",
+        n: true,
+      },
+      ariaPlaceholder: {
+        t: "string",
+        n: true,
+      },
+      ariaPosInSet: {
+        t: "string",
+        n: true,
+      },
+      ariaPressed: {
+        t: "string",
+        n: true,
+      },
+      ariaReadOnly: {
+        t: "string",
+        n: true,
+      },
+      ariaRelevant: {
+        t: "string",
+        n: true,
+      },
+      ariaRequired: {
+        t: "string",
+        n: true,
+      },
+      ariaRoleDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaRowCount: {
+        t: "string",
+        n: true,
+      },
+      ariaRowIndex: {
+        t: "string",
+        n: true,
+      },
+      ariaRowIndexText: {
+        t: "string",
+        n: true,
+      },
+      ariaRowSpan: {
+        t: "string",
+        n: true,
+      },
+      ariaSelected: {
+        t: "string",
+        n: true,
+      },
+      ariaSetSize: {
+        t: "string",
+        n: true,
+      },
+      ariaSort: {
+        t: "string",
+        n: true,
+      },
+      ariaValueMax: {
+        t: "string",
+        n: true,
+      },
+      ariaValueMin: {
+        t: "string",
+        n: true,
+      },
+      ariaValueNow: {
+        t: "string",
+        n: true,
+      },
+      ariaValueText: {
+        t: "string",
+        n: true,
+      },
+      role: {
+        t: "string",
+        n: true,
+      },
+      nextElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      childElementCount: {
+        t: "number",
+      },
+      children: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      firstElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      lastElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      assignedSlot: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      attributes: {
+        t: "object",
+        s: "NamedNodeMap",
+      },
+      classList: {
+        t: "object",
+        s: "DOMTokenList",
+      },
+      className: {
+        t: "string",
+      },
+      clientHeight: {
+        t: "number",
+      },
+      clientLeft: {
+        t: "number",
+      },
+      clientTop: {
+        t: "number",
+      },
+      clientWidth: {
+        t: "number",
+      },
+      currentCSSZoom: {
+        t: "number",
+      },
+      id: {
+        t: "string",
+      },
+      innerHTML: {
+        t: "string",
+      },
+      localName: {
+        t: "string",
+      },
+      namespaceURI: {
+        t: "string",
+        n: true,
+      },
+      outerHTML: {
+        t: "string",
+      },
+      part: {
+        t: "object",
+        s: "DOMTokenList",
+      },
+      prefix: {
+        t: "string",
+        n: true,
+      },
+      scrollHeight: {
+        t: "number",
+      },
+      scrollLeft: {
+        t: "number",
+      },
+      scrollTop: {
+        t: "number",
+      },
+      scrollWidth: {
+        t: "number",
+      },
+      shadowRoot: {
+        t: "object",
+        n: true,
+      },
+      slot: {
+        t: "string",
+      },
+      tagName: {
+        t: "string",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      dispatchEvent: {
+        r: "boolean",
       },
-      "removeEventListener": {
-        "r": "undefined"
+      removeEventListener: {
+        r: "undefined",
       },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
+      appendChild: {
+        r: "object",
+        s: "Node",
       },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
+      cloneNode: {
+        r: "object",
+        s: "Node",
       },
-      "compareDocumentPosition": {
-        "r": "number"
+      compareDocumentPosition: {
+        r: "number",
       },
-      "contains": {
-        "r": "boolean"
+      contains: {
+        r: "boolean",
       },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
+      getRootNode: {
+        r: "object",
+        s: "Node",
       },
-      "hasChildNodes": {
-        "r": "boolean"
+      hasChildNodes: {
+        r: "boolean",
       },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
+      insertBefore: {
+        r: "object",
+        s: "Node",
       },
-      "isDefaultNamespace": {
-        "r": "boolean"
+      isDefaultNamespace: {
+        r: "boolean",
       },
-      "isEqualNode": {
-        "r": "boolean"
+      isEqualNode: {
+        r: "boolean",
       },
-      "isSameNode": {
-        "r": "boolean"
+      isSameNode: {
+        r: "boolean",
       },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
       },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
+      lookupPrefix: {
+        r: "string",
+        n: true,
       },
-      "normalize": {
-        "r": "undefined"
+      normalize: {
+        r: "undefined",
       },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
+      removeChild: {
+        r: "object",
+        s: "Node",
       },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
+      replaceChild: {
+        r: "object",
+        s: "Node",
       },
-      "getElementById": {
-        "r": "object",
-        "s": "HTMLElement",
-        "n": true
+      animate: {
+        r: "object",
       },
-      "append": {
-        "r": "undefined"
+      getAnimations: {
+        r: "object",
       },
-      "prepend": {
-        "r": "undefined"
+      after: {
+        r: "undefined",
       },
-      "querySelector": {
-        "r": "object",
-        "s": "Element",
-        "n": true
+      before: {
+        r: "undefined",
       },
-      "querySelectorAll": {
-        "r": "object",
-        "s": "NodeList"
+      remove: {
+        r: "undefined",
       },
-      "replaceChildren": {
-        "r": "undefined"
-      }
-    }
-  },
-  "CharacterData": {
-    "props": {
-      "baseURI": {
-        "t": "string"
+      replaceWith: {
+        r: "undefined",
       },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
+      append: {
+        r: "undefined",
       },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      prepend: {
+        r: "undefined",
       },
-      "isConnected": {
-        "t": "boolean"
+      querySelector: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      querySelectorAll: {
+        r: "object",
+        s: "NodeList",
       },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      replaceChildren: {
+        r: "undefined",
       },
-      "nodeName": {
-        "t": "string"
+      attachShadow: {
+        r: "object",
       },
-      "nodeType": {
-        "t": "number"
+      checkVisibility: {
+        r: "boolean",
       },
-      "nodeValue": {
-        "t": "string",
-        "n": true
+      closest: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
+      computedStyleMap: {
+        r: "object",
       },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      getAttribute: {
+        r: "string",
+        n: true,
       },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getAttributeNS: {
+        r: "string",
+        n: true,
       },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getAttributeNames: {
+        r: "object",
       },
-      "textContent": {
-        "t": "string",
-        "n": true
+      getAttributeNode: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "nextElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getAttributeNodeNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "previousElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getBoundingClientRect: {
+        r: "object",
       },
-      "data": {
-        "t": "string"
+      getClientRects: {
+        r: "object",
       },
-      "length": {
-        "t": "number"
-      }
+      getElementsByClassName: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getElementsByTagName: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getElementsByTagNameNS: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getHTML: {
+        r: "string",
+      },
+      hasAttribute: {
+        r: "boolean",
+      },
+      hasAttributeNS: {
+        r: "boolean",
+      },
+      hasAttributes: {
+        r: "boolean",
+      },
+      hasPointerCapture: {
+        r: "boolean",
+      },
+      insertAdjacentElement: {
+        r: "object",
+        s: "Element",
+        n: true,
+      },
+      insertAdjacentHTML: {
+        r: "undefined",
+      },
+      insertAdjacentText: {
+        r: "undefined",
+      },
+      matches: {
+        r: "boolean",
+      },
+      releasePointerCapture: {
+        r: "undefined",
+      },
+      removeAttribute: {
+        r: "undefined",
+      },
+      removeAttributeNS: {
+        r: "undefined",
+      },
+      removeAttributeNode: {
+        r: "object",
+        s: "Attr",
+      },
+      requestFullscreen: {
+        r: "object",
+      },
+      requestPointerLock: {
+        r: "object",
+      },
+      scroll: {
+        r: "undefined",
+      },
+      scrollBy: {
+        r: "undefined",
+      },
+      scrollIntoView: {
+        r: "undefined",
+      },
+      scrollTo: {
+        r: "undefined",
+      },
+      setAttribute: {
+        r: "undefined",
+      },
+      setAttributeNS: {
+        r: "undefined",
+      },
+      setAttributeNode: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      setAttributeNodeNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      setHTMLUnsafe: {
+        r: "undefined",
+      },
+      setPointerCapture: {
+        r: "undefined",
+      },
+      toggleAttribute: {
+        r: "boolean",
+      },
+      webkitMatchesSelector: {
+        r: "boolean",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "compareDocumentPosition": {
-        "r": "number"
-      },
-      "contains": {
-        "r": "boolean"
-      },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "hasChildNodes": {
-        "r": "boolean"
-      },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
-      },
-      "isDefaultNamespace": {
-        "r": "boolean"
-      },
-      "isEqualNode": {
-        "r": "boolean"
-      },
-      "isSameNode": {
-        "r": "boolean"
-      },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
-      },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
-      },
-      "normalize": {
-        "r": "undefined"
-      },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "after": {
-        "r": "undefined"
-      },
-      "before": {
-        "r": "undefined"
-      },
-      "remove": {
-        "r": "undefined"
-      },
-      "replaceWith": {
-        "r": "undefined"
-      },
-      "appendData": {
-        "r": "undefined"
-      },
-      "deleteData": {
-        "r": "undefined"
-      },
-      "insertData": {
-        "r": "undefined"
-      },
-      "replaceData": {
-        "r": "undefined"
-      },
-      "substringData": {
-        "r": "string"
-      }
-    }
   },
-  "Text": {
-    "props": {
-      "baseURI": {
-        "t": "string"
+  HTMLElement: {
+    props: {
+      baseURI: {
+        t: "string",
       },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
+      childNodes: {
+        t: "object",
+        s: "NodeList",
       },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "isConnected": {
-        "t": "boolean"
+      isConnected: {
+        t: "boolean",
       },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "nodeName": {
-        "t": "string"
+      nodeName: {
+        t: "string",
       },
-      "nodeType": {
-        "t": "number"
+      nodeType: {
+        t: "number",
       },
-      "nodeValue": {
-        "t": "string",
-        "n": true
+      nodeValue: {
+        t: "string",
+        n: true,
       },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
+      ownerDocument: {
+        t: "object",
+        s: "Document",
       },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
       },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "textContent": {
-        "t": "string",
-        "n": true
+      textContent: {
+        t: "string",
+        n: true,
       },
-      "nextElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      ariaAtomic: {
+        t: "string",
+        n: true,
       },
-      "previousElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      ariaAutoComplete: {
+        t: "string",
+        n: true,
       },
-      "data": {
-        "t": "string"
+      ariaBrailleLabel: {
+        t: "string",
+        n: true,
       },
-      "length": {
-        "t": "number"
+      ariaBrailleRoleDescription: {
+        t: "string",
+        n: true,
       },
-      "assignedSlot": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      ariaBusy: {
+        t: "string",
+        n: true,
       },
-      "wholeText": {
-        "t": "string"
-      }
+      ariaChecked: {
+        t: "string",
+        n: true,
+      },
+      ariaColCount: {
+        t: "string",
+        n: true,
+      },
+      ariaColIndex: {
+        t: "string",
+        n: true,
+      },
+      ariaColIndexText: {
+        t: "string",
+        n: true,
+      },
+      ariaColSpan: {
+        t: "string",
+        n: true,
+      },
+      ariaCurrent: {
+        t: "string",
+        n: true,
+      },
+      ariaDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaDisabled: {
+        t: "string",
+        n: true,
+      },
+      ariaExpanded: {
+        t: "string",
+        n: true,
+      },
+      ariaHasPopup: {
+        t: "string",
+        n: true,
+      },
+      ariaHidden: {
+        t: "string",
+        n: true,
+      },
+      ariaInvalid: {
+        t: "string",
+        n: true,
+      },
+      ariaKeyShortcuts: {
+        t: "string",
+        n: true,
+      },
+      ariaLabel: {
+        t: "string",
+        n: true,
+      },
+      ariaLevel: {
+        t: "string",
+        n: true,
+      },
+      ariaLive: {
+        t: "string",
+        n: true,
+      },
+      ariaModal: {
+        t: "string",
+        n: true,
+      },
+      ariaMultiLine: {
+        t: "string",
+        n: true,
+      },
+      ariaMultiSelectable: {
+        t: "string",
+        n: true,
+      },
+      ariaOrientation: {
+        t: "string",
+        n: true,
+      },
+      ariaPlaceholder: {
+        t: "string",
+        n: true,
+      },
+      ariaPosInSet: {
+        t: "string",
+        n: true,
+      },
+      ariaPressed: {
+        t: "string",
+        n: true,
+      },
+      ariaReadOnly: {
+        t: "string",
+        n: true,
+      },
+      ariaRelevant: {
+        t: "string",
+        n: true,
+      },
+      ariaRequired: {
+        t: "string",
+        n: true,
+      },
+      ariaRoleDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaRowCount: {
+        t: "string",
+        n: true,
+      },
+      ariaRowIndex: {
+        t: "string",
+        n: true,
+      },
+      ariaRowIndexText: {
+        t: "string",
+        n: true,
+      },
+      ariaRowSpan: {
+        t: "string",
+        n: true,
+      },
+      ariaSelected: {
+        t: "string",
+        n: true,
+      },
+      ariaSetSize: {
+        t: "string",
+        n: true,
+      },
+      ariaSort: {
+        t: "string",
+        n: true,
+      },
+      ariaValueMax: {
+        t: "string",
+        n: true,
+      },
+      ariaValueMin: {
+        t: "string",
+        n: true,
+      },
+      ariaValueNow: {
+        t: "string",
+        n: true,
+      },
+      ariaValueText: {
+        t: "string",
+        n: true,
+      },
+      role: {
+        t: "string",
+        n: true,
+      },
+      nextElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      childElementCount: {
+        t: "number",
+      },
+      children: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      firstElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      lastElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      assignedSlot: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      attributes: {
+        t: "object",
+        s: "NamedNodeMap",
+      },
+      classList: {
+        t: "object",
+        s: "DOMTokenList",
+      },
+      className: {
+        t: "string",
+      },
+      clientHeight: {
+        t: "number",
+      },
+      clientLeft: {
+        t: "number",
+      },
+      clientTop: {
+        t: "number",
+      },
+      clientWidth: {
+        t: "number",
+      },
+      currentCSSZoom: {
+        t: "number",
+      },
+      id: {
+        t: "string",
+      },
+      innerHTML: {
+        t: "string",
+      },
+      localName: {
+        t: "string",
+      },
+      namespaceURI: {
+        t: "string",
+        n: true,
+      },
+      outerHTML: {
+        t: "string",
+      },
+      part: {
+        t: "object",
+        s: "DOMTokenList",
+      },
+      prefix: {
+        t: "string",
+        n: true,
+      },
+      scrollHeight: {
+        t: "number",
+      },
+      scrollLeft: {
+        t: "number",
+      },
+      scrollTop: {
+        t: "number",
+      },
+      scrollWidth: {
+        t: "number",
+      },
+      shadowRoot: {
+        t: "object",
+        n: true,
+      },
+      slot: {
+        t: "string",
+      },
+      tagName: {
+        t: "string",
+      },
+      attributeStyleMap: {
+        t: "object",
+      },
+      style: {
+        t: "object",
+        s: "CSSStyleDeclaration",
+      },
+      contentEditable: {
+        t: "string",
+      },
+      enterKeyHint: {
+        t: "string",
+      },
+      inputMode: {
+        t: "string",
+      },
+      isContentEditable: {
+        t: "boolean",
+      },
+      autofocus: {
+        t: "boolean",
+      },
+      dataset: {
+        t: "object",
+        s: "DOMStringMap",
+      },
+      nonce: {
+        t: "string",
+        o: true,
+      },
+      tabIndex: {
+        t: "number",
+      },
+      accessKey: {
+        t: "string",
+      },
+      accessKeyLabel: {
+        t: "string",
+      },
+      autocapitalize: {
+        t: "string",
+      },
+      dir: {
+        t: "string",
+      },
+      draggable: {
+        t: "boolean",
+      },
+      hidden: {
+        t: "boolean",
+      },
+      inert: {
+        t: "boolean",
+      },
+      innerText: {
+        t: "string",
+      },
+      lang: {
+        t: "string",
+      },
+      offsetHeight: {
+        t: "number",
+      },
+      offsetLeft: {
+        t: "number",
+      },
+      offsetParent: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      offsetTop: {
+        t: "number",
+      },
+      offsetWidth: {
+        t: "number",
+      },
+      outerText: {
+        t: "string",
+      },
+      popover: {
+        t: "string",
+        n: true,
+      },
+      spellcheck: {
+        t: "boolean",
+      },
+      title: {
+        t: "string",
+      },
+      translate: {
+        t: "boolean",
+      },
+      writingSuggestions: {
+        t: "string",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      dispatchEvent: {
+        r: "boolean",
       },
-      "removeEventListener": {
-        "r": "undefined"
+      removeEventListener: {
+        r: "undefined",
       },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
+      appendChild: {
+        r: "object",
+        s: "Node",
       },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
+      cloneNode: {
+        r: "object",
+        s: "Node",
       },
-      "compareDocumentPosition": {
-        "r": "number"
+      compareDocumentPosition: {
+        r: "number",
       },
-      "contains": {
-        "r": "boolean"
+      contains: {
+        r: "boolean",
       },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
+      getRootNode: {
+        r: "object",
+        s: "Node",
       },
-      "hasChildNodes": {
-        "r": "boolean"
+      hasChildNodes: {
+        r: "boolean",
       },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
+      insertBefore: {
+        r: "object",
+        s: "Node",
       },
-      "isDefaultNamespace": {
-        "r": "boolean"
+      isDefaultNamespace: {
+        r: "boolean",
       },
-      "isEqualNode": {
-        "r": "boolean"
+      isEqualNode: {
+        r: "boolean",
       },
-      "isSameNode": {
-        "r": "boolean"
+      isSameNode: {
+        r: "boolean",
       },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
       },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
+      lookupPrefix: {
+        r: "string",
+        n: true,
       },
-      "normalize": {
-        "r": "undefined"
+      normalize: {
+        r: "undefined",
       },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
+      removeChild: {
+        r: "object",
+        s: "Node",
       },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
+      replaceChild: {
+        r: "object",
+        s: "Node",
       },
-      "after": {
-        "r": "undefined"
+      animate: {
+        r: "object",
       },
-      "before": {
-        "r": "undefined"
+      getAnimations: {
+        r: "object",
       },
-      "remove": {
-        "r": "undefined"
+      after: {
+        r: "undefined",
       },
-      "replaceWith": {
-        "r": "undefined"
+      before: {
+        r: "undefined",
       },
-      "appendData": {
-        "r": "undefined"
+      remove: {
+        r: "undefined",
       },
-      "deleteData": {
-        "r": "undefined"
+      replaceWith: {
+        r: "undefined",
       },
-      "insertData": {
-        "r": "undefined"
+      append: {
+        r: "undefined",
       },
-      "replaceData": {
-        "r": "undefined"
+      prepend: {
+        r: "undefined",
       },
-      "substringData": {
-        "r": "string"
+      querySelector: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "splitText": {
-        "r": "object",
-        "s": "Text"
-      }
-    }
-  },
-  "Comment": {
-    "props": {
-      "baseURI": {
-        "t": "string"
+      querySelectorAll: {
+        r: "object",
+        s: "NodeList",
       },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
+      replaceChildren: {
+        r: "undefined",
       },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      attachShadow: {
+        r: "object",
       },
-      "isConnected": {
-        "t": "boolean"
+      checkVisibility: {
+        r: "boolean",
       },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      closest: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      computedStyleMap: {
+        r: "object",
       },
-      "nodeName": {
-        "t": "string"
+      getAttribute: {
+        r: "string",
+        n: true,
       },
-      "nodeType": {
-        "t": "number"
+      getAttributeNS: {
+        r: "string",
+        n: true,
       },
-      "nodeValue": {
-        "t": "string",
-        "n": true
+      getAttributeNames: {
+        r: "object",
       },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
+      getAttributeNode: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      getAttributeNodeNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getBoundingClientRect: {
+        r: "object",
       },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getClientRects: {
+        r: "object",
       },
-      "textContent": {
-        "t": "string",
-        "n": true
+      getElementsByClassName: {
+        r: "object",
+        s: "HTMLCollection",
       },
-      "nextElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getElementsByTagName: {
+        r: "object",
+        s: "HTMLCollection",
       },
-      "previousElementSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      getElementsByTagNameNS: {
+        r: "object",
+        s: "HTMLCollection",
       },
-      "data": {
-        "t": "string"
+      getHTML: {
+        r: "string",
       },
-      "length": {
-        "t": "number"
-      }
+      hasAttribute: {
+        r: "boolean",
+      },
+      hasAttributeNS: {
+        r: "boolean",
+      },
+      hasAttributes: {
+        r: "boolean",
+      },
+      hasPointerCapture: {
+        r: "boolean",
+      },
+      insertAdjacentElement: {
+        r: "object",
+        s: "Element",
+        n: true,
+      },
+      insertAdjacentHTML: {
+        r: "undefined",
+      },
+      insertAdjacentText: {
+        r: "undefined",
+      },
+      matches: {
+        r: "boolean",
+      },
+      releasePointerCapture: {
+        r: "undefined",
+      },
+      removeAttribute: {
+        r: "undefined",
+      },
+      removeAttributeNS: {
+        r: "undefined",
+      },
+      removeAttributeNode: {
+        r: "object",
+        s: "Attr",
+      },
+      requestFullscreen: {
+        r: "object",
+      },
+      requestPointerLock: {
+        r: "object",
+      },
+      scroll: {
+        r: "undefined",
+      },
+      scrollBy: {
+        r: "undefined",
+      },
+      scrollIntoView: {
+        r: "undefined",
+      },
+      scrollTo: {
+        r: "undefined",
+      },
+      setAttribute: {
+        r: "undefined",
+      },
+      setAttributeNS: {
+        r: "undefined",
+      },
+      setAttributeNode: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      setAttributeNodeNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      setHTMLUnsafe: {
+        r: "undefined",
+      },
+      setPointerCapture: {
+        r: "undefined",
+      },
+      toggleAttribute: {
+        r: "boolean",
+      },
+      webkitMatchesSelector: {
+        r: "boolean",
+      },
+      blur: {
+        r: "undefined",
+      },
+      focus: {
+        r: "undefined",
+      },
+      attachInternals: {
+        r: "object",
+      },
+      click: {
+        r: "undefined",
+      },
+      hidePopover: {
+        r: "undefined",
+      },
+      showPopover: {
+        r: "undefined",
+      },
+      togglePopover: {
+        r: "boolean",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "compareDocumentPosition": {
-        "r": "number"
-      },
-      "contains": {
-        "r": "boolean"
-      },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "hasChildNodes": {
-        "r": "boolean"
-      },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
-      },
-      "isDefaultNamespace": {
-        "r": "boolean"
-      },
-      "isEqualNode": {
-        "r": "boolean"
-      },
-      "isSameNode": {
-        "r": "boolean"
-      },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
-      },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
-      },
-      "normalize": {
-        "r": "undefined"
-      },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "after": {
-        "r": "undefined"
-      },
-      "before": {
-        "r": "undefined"
-      },
-      "remove": {
-        "r": "undefined"
-      },
-      "replaceWith": {
-        "r": "undefined"
-      },
-      "appendData": {
-        "r": "undefined"
-      },
-      "deleteData": {
-        "r": "undefined"
-      },
-      "insertData": {
-        "r": "undefined"
-      },
-      "replaceData": {
-        "r": "undefined"
-      },
-      "substringData": {
-        "r": "string"
-      }
-    }
   },
-  "CSSStyleDeclaration": {
-    "props": {
-      "cssText": {
-        "t": "string"
+  SVGElement: {
+    props: {
+      baseURI: {
+        t: "string",
       },
-      "length": {
-        "t": "number"
-      }
+      childNodes: {
+        t: "object",
+        s: "NodeList",
+      },
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      isConnected: {
+        t: "boolean",
+      },
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nodeName: {
+        t: "string",
+      },
+      nodeType: {
+        t: "number",
+      },
+      nodeValue: {
+        t: "string",
+        n: true,
+      },
+      ownerDocument: {
+        t: "object",
+        s: "Document",
+      },
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      textContent: {
+        t: "string",
+        n: true,
+      },
+      ariaAtomic: {
+        t: "string",
+        n: true,
+      },
+      ariaAutoComplete: {
+        t: "string",
+        n: true,
+      },
+      ariaBrailleLabel: {
+        t: "string",
+        n: true,
+      },
+      ariaBrailleRoleDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaBusy: {
+        t: "string",
+        n: true,
+      },
+      ariaChecked: {
+        t: "string",
+        n: true,
+      },
+      ariaColCount: {
+        t: "string",
+        n: true,
+      },
+      ariaColIndex: {
+        t: "string",
+        n: true,
+      },
+      ariaColIndexText: {
+        t: "string",
+        n: true,
+      },
+      ariaColSpan: {
+        t: "string",
+        n: true,
+      },
+      ariaCurrent: {
+        t: "string",
+        n: true,
+      },
+      ariaDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaDisabled: {
+        t: "string",
+        n: true,
+      },
+      ariaExpanded: {
+        t: "string",
+        n: true,
+      },
+      ariaHasPopup: {
+        t: "string",
+        n: true,
+      },
+      ariaHidden: {
+        t: "string",
+        n: true,
+      },
+      ariaInvalid: {
+        t: "string",
+        n: true,
+      },
+      ariaKeyShortcuts: {
+        t: "string",
+        n: true,
+      },
+      ariaLabel: {
+        t: "string",
+        n: true,
+      },
+      ariaLevel: {
+        t: "string",
+        n: true,
+      },
+      ariaLive: {
+        t: "string",
+        n: true,
+      },
+      ariaModal: {
+        t: "string",
+        n: true,
+      },
+      ariaMultiLine: {
+        t: "string",
+        n: true,
+      },
+      ariaMultiSelectable: {
+        t: "string",
+        n: true,
+      },
+      ariaOrientation: {
+        t: "string",
+        n: true,
+      },
+      ariaPlaceholder: {
+        t: "string",
+        n: true,
+      },
+      ariaPosInSet: {
+        t: "string",
+        n: true,
+      },
+      ariaPressed: {
+        t: "string",
+        n: true,
+      },
+      ariaReadOnly: {
+        t: "string",
+        n: true,
+      },
+      ariaRelevant: {
+        t: "string",
+        n: true,
+      },
+      ariaRequired: {
+        t: "string",
+        n: true,
+      },
+      ariaRoleDescription: {
+        t: "string",
+        n: true,
+      },
+      ariaRowCount: {
+        t: "string",
+        n: true,
+      },
+      ariaRowIndex: {
+        t: "string",
+        n: true,
+      },
+      ariaRowIndexText: {
+        t: "string",
+        n: true,
+      },
+      ariaRowSpan: {
+        t: "string",
+        n: true,
+      },
+      ariaSelected: {
+        t: "string",
+        n: true,
+      },
+      ariaSetSize: {
+        t: "string",
+        n: true,
+      },
+      ariaSort: {
+        t: "string",
+        n: true,
+      },
+      ariaValueMax: {
+        t: "string",
+        n: true,
+      },
+      ariaValueMin: {
+        t: "string",
+        n: true,
+      },
+      ariaValueNow: {
+        t: "string",
+        n: true,
+      },
+      ariaValueText: {
+        t: "string",
+        n: true,
+      },
+      role: {
+        t: "string",
+        n: true,
+      },
+      nextElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      childElementCount: {
+        t: "number",
+      },
+      children: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      firstElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      lastElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      assignedSlot: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      attributes: {
+        t: "object",
+        s: "NamedNodeMap",
+      },
+      classList: {
+        t: "object",
+        s: "DOMTokenList",
+      },
+      className: {
+        t: "top",
+      },
+      clientHeight: {
+        t: "number",
+      },
+      clientLeft: {
+        t: "number",
+      },
+      clientTop: {
+        t: "number",
+      },
+      clientWidth: {
+        t: "number",
+      },
+      currentCSSZoom: {
+        t: "number",
+      },
+      id: {
+        t: "string",
+      },
+      innerHTML: {
+        t: "string",
+      },
+      localName: {
+        t: "string",
+      },
+      namespaceURI: {
+        t: "string",
+        n: true,
+      },
+      outerHTML: {
+        t: "string",
+      },
+      part: {
+        t: "object",
+        s: "DOMTokenList",
+      },
+      prefix: {
+        t: "string",
+        n: true,
+      },
+      scrollHeight: {
+        t: "number",
+      },
+      scrollLeft: {
+        t: "number",
+      },
+      scrollTop: {
+        t: "number",
+      },
+      scrollWidth: {
+        t: "number",
+      },
+      shadowRoot: {
+        t: "object",
+        n: true,
+      },
+      slot: {
+        t: "string",
+      },
+      tagName: {
+        t: "string",
+      },
+      attributeStyleMap: {
+        t: "object",
+      },
+      style: {
+        t: "object",
+        s: "CSSStyleDeclaration",
+      },
+      autofocus: {
+        t: "boolean",
+      },
+      dataset: {
+        t: "object",
+        s: "DOMStringMap",
+      },
+      nonce: {
+        t: "string",
+        o: true,
+      },
+      tabIndex: {
+        t: "number",
+      },
+      ownerSVGElement: {
+        t: "object",
+        s: "SVGElement",
+        n: true,
+      },
+      viewportElement: {
+        t: "object",
+        s: "SVGElement",
+        n: true,
+      },
     },
-    "index": {
-      "t": "string"
-    }
-  },
-  "DOMTokenList": {
-    "props": {
-      "length": {
-        "t": "number"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "value": {
-        "t": "string"
-      }
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      appendChild: {
+        r: "object",
+        s: "Node",
+      },
+      cloneNode: {
+        r: "object",
+        s: "Node",
+      },
+      compareDocumentPosition: {
+        r: "number",
+      },
+      contains: {
+        r: "boolean",
+      },
+      getRootNode: {
+        r: "object",
+        s: "Node",
+      },
+      hasChildNodes: {
+        r: "boolean",
+      },
+      insertBefore: {
+        r: "object",
+        s: "Node",
+      },
+      isDefaultNamespace: {
+        r: "boolean",
+      },
+      isEqualNode: {
+        r: "boolean",
+      },
+      isSameNode: {
+        r: "boolean",
+      },
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
+      },
+      lookupPrefix: {
+        r: "string",
+        n: true,
+      },
+      normalize: {
+        r: "undefined",
+      },
+      removeChild: {
+        r: "object",
+        s: "Node",
+      },
+      replaceChild: {
+        r: "object",
+        s: "Node",
+      },
+      animate: {
+        r: "object",
+      },
+      getAnimations: {
+        r: "object",
+      },
+      after: {
+        r: "undefined",
+      },
+      before: {
+        r: "undefined",
+      },
+      remove: {
+        r: "undefined",
+      },
+      replaceWith: {
+        r: "undefined",
+      },
+      append: {
+        r: "undefined",
+      },
+      prepend: {
+        r: "undefined",
+      },
+      querySelector: {
+        r: "object",
+        s: "Element",
+        n: true,
+      },
+      querySelectorAll: {
+        r: "object",
+        s: "NodeList",
+      },
+      replaceChildren: {
+        r: "undefined",
+      },
+      attachShadow: {
+        r: "object",
+      },
+      checkVisibility: {
+        r: "boolean",
+      },
+      closest: {
+        r: "object",
+        s: "Element",
+        n: true,
+      },
+      computedStyleMap: {
+        r: "object",
+      },
+      getAttribute: {
+        r: "string",
+        n: true,
+      },
+      getAttributeNS: {
+        r: "string",
+        n: true,
+      },
+      getAttributeNames: {
+        r: "object",
+      },
+      getAttributeNode: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      getAttributeNodeNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      getBoundingClientRect: {
+        r: "object",
+      },
+      getClientRects: {
+        r: "object",
+      },
+      getElementsByClassName: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getElementsByTagName: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getElementsByTagNameNS: {
+        r: "object",
+        s: "HTMLCollection",
+      },
+      getHTML: {
+        r: "string",
+      },
+      hasAttribute: {
+        r: "boolean",
+      },
+      hasAttributeNS: {
+        r: "boolean",
+      },
+      hasAttributes: {
+        r: "boolean",
+      },
+      hasPointerCapture: {
+        r: "boolean",
+      },
+      insertAdjacentElement: {
+        r: "object",
+        s: "Element",
+        n: true,
+      },
+      insertAdjacentHTML: {
+        r: "undefined",
+      },
+      insertAdjacentText: {
+        r: "undefined",
+      },
+      matches: {
+        r: "boolean",
+      },
+      releasePointerCapture: {
+        r: "undefined",
+      },
+      removeAttribute: {
+        r: "undefined",
+      },
+      removeAttributeNS: {
+        r: "undefined",
+      },
+      removeAttributeNode: {
+        r: "object",
+        s: "Attr",
+      },
+      requestFullscreen: {
+        r: "object",
+      },
+      requestPointerLock: {
+        r: "object",
+      },
+      scroll: {
+        r: "undefined",
+      },
+      scrollBy: {
+        r: "undefined",
+      },
+      scrollIntoView: {
+        r: "undefined",
+      },
+      scrollTo: {
+        r: "undefined",
+      },
+      setAttribute: {
+        r: "undefined",
+      },
+      setAttributeNS: {
+        r: "undefined",
+      },
+      setAttributeNode: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      setAttributeNodeNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
+      },
+      setHTMLUnsafe: {
+        r: "undefined",
+      },
+      setPointerCapture: {
+        r: "undefined",
+      },
+      toggleAttribute: {
+        r: "boolean",
+      },
+      webkitMatchesSelector: {
+        r: "boolean",
+      },
+      blur: {
+        r: "undefined",
+      },
+      focus: {
+        r: "undefined",
+      },
     },
-    "methods": {
-      "toString": {
-        "r": "string"
+  },
+  DocumentFragment: {
+    props: {
+      baseURI: {
+        t: "string",
       },
-      "add": {
-        "r": "undefined"
+      childNodes: {
+        t: "object",
+        s: "NodeList",
       },
-      "contains": {
-        "r": "boolean"
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "item": {
-        "r": "string",
-        "n": true
+      isConnected: {
+        t: "boolean",
       },
-      "remove": {
-        "r": "undefined"
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "replace": {
-        "r": "boolean"
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "supports": {
-        "r": "boolean"
+      nodeName: {
+        t: "string",
       },
-      "toggle": {
-        "r": "boolean"
+      nodeType: {
+        t: "number",
       },
-      "forEach": {
-        "r": "undefined"
-      }
+      nodeValue: {
+        t: "string",
+        n: true,
+      },
+      ownerDocument: {
+        t: "object",
+        s: "Document",
+      },
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      textContent: {
+        t: "string",
+        n: true,
+      },
+      childElementCount: {
+        t: "number",
+      },
+      children: {
+        t: "object",
+        s: "HTMLCollection",
+      },
+      firstElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      lastElementChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
     },
-    "index": {
-      "t": "string"
-    }
-  },
-  "DOMStringMap": {
-    "index": {
-      "t": "string",
-      "o": true
-    }
-  },
-  "NamedNodeMap": {
-    "props": {
-      "length": {
-        "t": "number"
-      }
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      appendChild: {
+        r: "object",
+        s: "Node",
+      },
+      cloneNode: {
+        r: "object",
+        s: "Node",
+      },
+      compareDocumentPosition: {
+        r: "number",
+      },
+      contains: {
+        r: "boolean",
+      },
+      getRootNode: {
+        r: "object",
+        s: "Node",
+      },
+      hasChildNodes: {
+        r: "boolean",
+      },
+      insertBefore: {
+        r: "object",
+        s: "Node",
+      },
+      isDefaultNamespace: {
+        r: "boolean",
+      },
+      isEqualNode: {
+        r: "boolean",
+      },
+      isSameNode: {
+        r: "boolean",
+      },
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
+      },
+      lookupPrefix: {
+        r: "string",
+        n: true,
+      },
+      normalize: {
+        r: "undefined",
+      },
+      removeChild: {
+        r: "object",
+        s: "Node",
+      },
+      replaceChild: {
+        r: "object",
+        s: "Node",
+      },
+      getElementById: {
+        r: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      append: {
+        r: "undefined",
+      },
+      prepend: {
+        r: "undefined",
+      },
+      querySelector: {
+        r: "object",
+        s: "Element",
+        n: true,
+      },
+      querySelectorAll: {
+        r: "object",
+        s: "NodeList",
+      },
+      replaceChildren: {
+        r: "undefined",
+      },
     },
-    "methods": {
-      "getNamedItem": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
+  },
+  CharacterData: {
+    props: {
+      baseURI: {
+        t: "string",
       },
-      "getNamedItemNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
+      childNodes: {
+        t: "object",
+        s: "NodeList",
       },
-      "item": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "removeNamedItem": {
-        "r": "object",
-        "s": "Attr"
+      isConnected: {
+        t: "boolean",
       },
-      "removeNamedItemNS": {
-        "r": "object",
-        "s": "Attr"
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "setNamedItem": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "setNamedItemNS": {
-        "r": "object",
-        "s": "Attr",
-        "n": true
-      }
+      nodeName: {
+        t: "string",
+      },
+      nodeType: {
+        t: "number",
+      },
+      nodeValue: {
+        t: "string",
+        n: true,
+      },
+      ownerDocument: {
+        t: "object",
+        s: "Document",
+      },
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      textContent: {
+        t: "string",
+        n: true,
+      },
+      nextElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      data: {
+        t: "string",
+      },
+      length: {
+        t: "number",
+      },
     },
-    "index": {
-      "t": "object",
-      "s": "Attr"
-    }
-  },
-  "Attr": {
-    "props": {
-      "baseURI": {
-        "t": "string"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "childNodes": {
-        "t": "object",
-        "s": "NodeList"
+      dispatchEvent: {
+        r: "boolean",
       },
-      "firstChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      removeEventListener: {
+        r: "undefined",
       },
-      "isConnected": {
-        "t": "boolean"
+      appendChild: {
+        r: "object",
+        s: "Node",
       },
-      "lastChild": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      cloneNode: {
+        r: "object",
+        s: "Node",
       },
-      "nextSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      compareDocumentPosition: {
+        r: "number",
       },
-      "nodeName": {
-        "t": "string"
+      contains: {
+        r: "boolean",
       },
-      "nodeType": {
-        "t": "number"
+      getRootNode: {
+        r: "object",
+        s: "Node",
       },
-      "nodeValue": {
-        "t": "string",
-        "n": true
+      hasChildNodes: {
+        r: "boolean",
       },
-      "ownerDocument": {
-        "t": "object",
-        "s": "Document"
+      insertBefore: {
+        r: "object",
+        s: "Node",
       },
-      "parentElement": {
-        "t": "object",
-        "s": "HTMLElement",
-        "n": true
+      isDefaultNamespace: {
+        r: "boolean",
       },
-      "parentNode": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      isEqualNode: {
+        r: "boolean",
       },
-      "previousSibling": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      isSameNode: {
+        r: "boolean",
       },
-      "textContent": {
-        "t": "string",
-        "n": true
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
       },
-      "localName": {
-        "t": "string"
+      lookupPrefix: {
+        r: "string",
+        n: true,
       },
-      "name": {
-        "t": "string"
+      normalize: {
+        r: "undefined",
       },
-      "namespaceURI": {
-        "t": "string",
-        "n": true
+      removeChild: {
+        r: "object",
+        s: "Node",
       },
-      "ownerElement": {
-        "t": "object",
-        "s": "Element",
-        "n": true
+      replaceChild: {
+        r: "object",
+        s: "Node",
       },
-      "prefix": {
-        "t": "string",
-        "n": true
+      after: {
+        r: "undefined",
       },
-      "specified": {
-        "t": "boolean"
+      before: {
+        r: "undefined",
       },
-      "value": {
-        "t": "string"
-      }
+      remove: {
+        r: "undefined",
+      },
+      replaceWith: {
+        r: "undefined",
+      },
+      appendData: {
+        r: "undefined",
+      },
+      deleteData: {
+        r: "undefined",
+      },
+      insertData: {
+        r: "undefined",
+      },
+      replaceData: {
+        r: "undefined",
+      },
+      substringData: {
+        r: "string",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "appendChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "cloneNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "compareDocumentPosition": {
-        "r": "number"
-      },
-      "contains": {
-        "r": "boolean"
-      },
-      "getRootNode": {
-        "r": "object",
-        "s": "Node"
-      },
-      "hasChildNodes": {
-        "r": "boolean"
-      },
-      "insertBefore": {
-        "r": "object",
-        "s": "Node"
-      },
-      "isDefaultNamespace": {
-        "r": "boolean"
-      },
-      "isEqualNode": {
-        "r": "boolean"
-      },
-      "isSameNode": {
-        "r": "boolean"
-      },
-      "lookupNamespaceURI": {
-        "r": "string",
-        "n": true
-      },
-      "lookupPrefix": {
-        "r": "string",
-        "n": true
-      },
-      "normalize": {
-        "r": "undefined"
-      },
-      "removeChild": {
-        "r": "object",
-        "s": "Node"
-      },
-      "replaceChild": {
-        "r": "object",
-        "s": "Node"
-      }
-    }
   },
-  "NodeList": {
-    "props": {
-      "length": {
-        "t": "number"
-      }
+  Text: {
+    props: {
+      baseURI: {
+        t: "string",
+      },
+      childNodes: {
+        t: "object",
+        s: "NodeList",
+      },
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      isConnected: {
+        t: "boolean",
+      },
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nodeName: {
+        t: "string",
+      },
+      nodeType: {
+        t: "number",
+      },
+      nodeValue: {
+        t: "string",
+        n: true,
+      },
+      ownerDocument: {
+        t: "object",
+        s: "Document",
+      },
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      textContent: {
+        t: "string",
+        n: true,
+      },
+      nextElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      data: {
+        t: "string",
+      },
+      length: {
+        t: "number",
+      },
+      assignedSlot: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      wholeText: {
+        t: "string",
+      },
     },
-    "methods": {
-      "item": {
-        "r": "object",
-        "s": "Node",
-        "n": true
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "forEach": {
-        "r": "undefined"
-      }
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      appendChild: {
+        r: "object",
+        s: "Node",
+      },
+      cloneNode: {
+        r: "object",
+        s: "Node",
+      },
+      compareDocumentPosition: {
+        r: "number",
+      },
+      contains: {
+        r: "boolean",
+      },
+      getRootNode: {
+        r: "object",
+        s: "Node",
+      },
+      hasChildNodes: {
+        r: "boolean",
+      },
+      insertBefore: {
+        r: "object",
+        s: "Node",
+      },
+      isDefaultNamespace: {
+        r: "boolean",
+      },
+      isEqualNode: {
+        r: "boolean",
+      },
+      isSameNode: {
+        r: "boolean",
+      },
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
+      },
+      lookupPrefix: {
+        r: "string",
+        n: true,
+      },
+      normalize: {
+        r: "undefined",
+      },
+      removeChild: {
+        r: "object",
+        s: "Node",
+      },
+      replaceChild: {
+        r: "object",
+        s: "Node",
+      },
+      after: {
+        r: "undefined",
+      },
+      before: {
+        r: "undefined",
+      },
+      remove: {
+        r: "undefined",
+      },
+      replaceWith: {
+        r: "undefined",
+      },
+      appendData: {
+        r: "undefined",
+      },
+      deleteData: {
+        r: "undefined",
+      },
+      insertData: {
+        r: "undefined",
+      },
+      replaceData: {
+        r: "undefined",
+      },
+      substringData: {
+        r: "string",
+      },
+      splitText: {
+        r: "object",
+        s: "Text",
+      },
     },
-    "index": {
-      "t": "object",
-      "s": "Node"
-    }
   },
-  "HTMLCollection": {
-    "props": {
-      "length": {
-        "t": "number"
-      }
+  Comment: {
+    props: {
+      baseURI: {
+        t: "string",
+      },
+      childNodes: {
+        t: "object",
+        s: "NodeList",
+      },
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      isConnected: {
+        t: "boolean",
+      },
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      nodeName: {
+        t: "string",
+      },
+      nodeType: {
+        t: "number",
+      },
+      nodeValue: {
+        t: "string",
+        n: true,
+      },
+      ownerDocument: {
+        t: "object",
+        s: "Document",
+      },
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
+      },
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      textContent: {
+        t: "string",
+        n: true,
+      },
+      nextElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      previousElementSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
+      },
+      data: {
+        t: "string",
+      },
+      length: {
+        t: "number",
+      },
     },
-    "methods": {
-      "item": {
-        "r": "object",
-        "s": "Element",
-        "n": true
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "namedItem": {
-        "r": "object",
-        "s": "Element",
-        "n": true
-      }
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      appendChild: {
+        r: "object",
+        s: "Node",
+      },
+      cloneNode: {
+        r: "object",
+        s: "Node",
+      },
+      compareDocumentPosition: {
+        r: "number",
+      },
+      contains: {
+        r: "boolean",
+      },
+      getRootNode: {
+        r: "object",
+        s: "Node",
+      },
+      hasChildNodes: {
+        r: "boolean",
+      },
+      insertBefore: {
+        r: "object",
+        s: "Node",
+      },
+      isDefaultNamespace: {
+        r: "boolean",
+      },
+      isEqualNode: {
+        r: "boolean",
+      },
+      isSameNode: {
+        r: "boolean",
+      },
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
+      },
+      lookupPrefix: {
+        r: "string",
+        n: true,
+      },
+      normalize: {
+        r: "undefined",
+      },
+      removeChild: {
+        r: "object",
+        s: "Node",
+      },
+      replaceChild: {
+        r: "object",
+        s: "Node",
+      },
+      after: {
+        r: "undefined",
+      },
+      before: {
+        r: "undefined",
+      },
+      remove: {
+        r: "undefined",
+      },
+      replaceWith: {
+        r: "undefined",
+      },
+      appendData: {
+        r: "undefined",
+      },
+      deleteData: {
+        r: "undefined",
+      },
+      insertData: {
+        r: "undefined",
+      },
+      replaceData: {
+        r: "undefined",
+      },
+      substringData: {
+        r: "string",
+      },
     },
-    "index": {
-      "t": "object",
-      "s": "Element"
-    }
   },
-  "Navigator": {
-    "props": {
-      "webdriver": {
-        "t": "boolean"
+  CSSStyleDeclaration: {
+    props: {
+      cssText: {
+        t: "string",
       },
-      "hardwareConcurrency": {
-        "t": "number"
+      length: {
+        t: "number",
       },
-      "cookieEnabled": {
-        "t": "boolean"
-      },
-      "appCodeName": {
-        "t": "string"
-      },
-      "appName": {
-        "t": "string"
-      },
-      "appVersion": {
-        "t": "string"
-      },
-      "platform": {
-        "t": "string"
-      },
-      "product": {
-        "t": "string"
-      },
-      "productSub": {
-        "t": "string"
-      },
-      "userAgent": {
-        "t": "string"
-      },
-      "vendor": {
-        "t": "string"
-      },
-      "vendorSub": {
-        "t": "string"
-      },
-      "language": {
-        "t": "string"
-      },
-      "languages": {
-        "t": "object"
-      },
-      "locks": {
-        "t": "object"
-      },
-      "onLine": {
-        "t": "boolean"
-      },
-      "mimeTypes": {
-        "t": "object"
-      },
-      "pdfViewerEnabled": {
-        "t": "boolean"
-      },
-      "plugins": {
-        "t": "object"
-      },
-      "storage": {
-        "t": "object"
-      },
-      "clipboard": {
-        "t": "object"
-      },
-      "credentials": {
-        "t": "object"
-      },
-      "doNotTrack": {
-        "t": "string",
-        "n": true
-      },
-      "geolocation": {
-        "t": "object"
-      },
-      "maxTouchPoints": {
-        "t": "number"
-      },
-      "mediaCapabilities": {
-        "t": "object"
-      },
-      "mediaDevices": {
-        "t": "object"
-      },
-      "mediaSession": {
-        "t": "object"
-      },
-      "permissions": {
-        "t": "object"
-      },
-      "serviceWorker": {
-        "t": "object"
-      },
-      "userActivation": {
-        "t": "object"
-      },
-      "wakeLock": {
-        "t": "object"
-      }
     },
-    "methods": {
-      "clearAppBadge": {
-        "r": "object"
-      },
-      "setAppBadge": {
-        "r": "object"
-      },
-      "registerProtocolHandler": {
-        "r": "undefined"
-      },
-      "javaEnabled": {
-        "r": "boolean"
-      },
-      "canShare": {
-        "r": "boolean"
-      },
-      "getGamepads": {
-        "r": "object"
-      },
-      "requestMIDIAccess": {
-        "r": "object"
-      },
-      "requestMediaKeySystemAccess": {
-        "r": "object"
-      },
-      "sendBeacon": {
-        "r": "boolean"
-      },
-      "share": {
-        "r": "object"
-      },
-      "vibrate": {
-        "r": "boolean"
-      }
-    }
-  },
-  "Location": {
-    "props": {
-      "ancestorOrigins": {
-        "t": "object"
-      },
-      "hash": {
-        "t": "string"
-      },
-      "host": {
-        "t": "string"
-      },
-      "hostname": {
-        "t": "string"
-      },
-      "href": {
-        "t": "string"
-      },
-      "origin": {
-        "t": "string"
-      },
-      "pathname": {
-        "t": "string"
-      },
-      "port": {
-        "t": "string"
-      },
-      "protocol": {
-        "t": "string"
-      },
-      "search": {
-        "t": "string"
-      }
+    index: {
+      t: "string",
     },
-    "methods": {
-      "toString": {
-        "r": "string"
-      },
-      "assign": {
-        "r": "undefined"
-      },
-      "reload": {
-        "r": "undefined"
-      },
-      "replace": {
-        "r": "undefined"
-      }
-    }
   },
-  "History": {
-    "props": {
-      "length": {
-        "t": "number"
+  DOMTokenList: {
+    props: {
+      length: {
+        t: "number",
       },
-      "scrollRestoration": {
-        "t": "string"
+      value: {
+        t: "string",
       },
-      "state": {
-        "t": "top"
-      }
     },
-    "methods": {
-      "back": {
-        "r": "undefined"
+    methods: {
+      toString: {
+        r: "string",
       },
-      "forward": {
-        "r": "undefined"
+      add: {
+        r: "undefined",
       },
-      "go": {
-        "r": "undefined"
+      contains: {
+        r: "boolean",
       },
-      "pushState": {
-        "r": "undefined"
+      item: {
+        r: "string",
+        n: true,
       },
-      "replaceState": {
-        "r": "undefined"
-      }
-    }
-  },
-  "Storage": {
-    "props": {
-      "length": {
-        "t": "number"
-      }
+      remove: {
+        r: "undefined",
+      },
+      replace: {
+        r: "boolean",
+      },
+      supports: {
+        r: "boolean",
+      },
+      toggle: {
+        r: "boolean",
+      },
+      forEach: {
+        r: "undefined",
+      },
     },
-    "methods": {
-      "clear": {
-        "r": "undefined"
-      },
-      "getItem": {
-        "r": "string",
-        "n": true
-      },
-      "key": {
-        "r": "string",
-        "n": true
-      },
-      "removeItem": {
-        "r": "undefined"
-      },
-      "setItem": {
-        "r": "undefined"
-      }
+    index: {
+      t: "string",
     },
-    "index": {
-      "t": "top"
-    }
   },
-  "Screen": {
-    "props": {
-      "availHeight": {
-        "t": "number"
-      },
-      "availWidth": {
-        "t": "number"
-      },
-      "colorDepth": {
-        "t": "number"
-      },
-      "height": {
-        "t": "number"
-      },
-      "orientation": {
-        "t": "object"
-      },
-      "pixelDepth": {
-        "t": "number"
-      },
-      "width": {
-        "t": "number"
-      }
-    }
-  },
-  "Performance": {
-    "props": {
-      "eventCounts": {
-        "t": "object"
-      },
-      "navigation": {
-        "t": "object"
-      },
-      "timeOrigin": {
-        "t": "number"
-      },
-      "timing": {
-        "t": "object",
-        "s": "PerformanceTiming"
-      }
+  DOMStringMap: {
+    index: {
+      t: "string",
+      o: true,
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "clearMarks": {
-        "r": "undefined"
-      },
-      "clearMeasures": {
-        "r": "undefined"
-      },
-      "clearResourceTimings": {
-        "r": "undefined"
-      },
-      "getEntries": {
-        "r": "object"
-      },
-      "getEntriesByName": {
-        "r": "object"
-      },
-      "getEntriesByType": {
-        "r": "object"
-      },
-      "mark": {
-        "r": "object"
-      },
-      "measure": {
-        "r": "object"
-      },
-      "now": {
-        "r": "number"
-      },
-      "setResourceTimingBufferSize": {
-        "r": "undefined"
-      },
-      "toJSON": {
-        "r": "top"
-      }
-    }
   },
-  "PerformanceTiming": {
-    "props": {
-      "connectEnd": {
-        "t": "number"
+  NamedNodeMap: {
+    props: {
+      length: {
+        t: "number",
       },
-      "connectStart": {
-        "t": "number"
-      },
-      "domComplete": {
-        "t": "number"
-      },
-      "domContentLoadedEventEnd": {
-        "t": "number"
-      },
-      "domContentLoadedEventStart": {
-        "t": "number"
-      },
-      "domInteractive": {
-        "t": "number"
-      },
-      "domLoading": {
-        "t": "number"
-      },
-      "domainLookupEnd": {
-        "t": "number"
-      },
-      "domainLookupStart": {
-        "t": "number"
-      },
-      "fetchStart": {
-        "t": "number"
-      },
-      "loadEventEnd": {
-        "t": "number"
-      },
-      "loadEventStart": {
-        "t": "number"
-      },
-      "navigationStart": {
-        "t": "number"
-      },
-      "redirectEnd": {
-        "t": "number"
-      },
-      "redirectStart": {
-        "t": "number"
-      },
-      "requestStart": {
-        "t": "number"
-      },
-      "responseEnd": {
-        "t": "number"
-      },
-      "responseStart": {
-        "t": "number"
-      },
-      "secureConnectionStart": {
-        "t": "number"
-      },
-      "unloadEventEnd": {
-        "t": "number"
-      },
-      "unloadEventStart": {
-        "t": "number"
-      }
     },
-    "methods": {
-      "toJSON": {
-        "r": "top"
-      }
-    }
-  },
-  "Event": {
-    "props": {
-      "bubbles": {
-        "t": "boolean"
+    methods: {
+      getNamedItem: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "cancelBubble": {
-        "t": "boolean"
+      getNamedItemNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "cancelable": {
-        "t": "boolean"
+      item: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "composed": {
-        "t": "boolean"
+      removeNamedItem: {
+        r: "object",
+        s: "Attr",
       },
-      "currentTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
+      removeNamedItemNS: {
+        r: "object",
+        s: "Attr",
       },
-      "defaultPrevented": {
-        "t": "boolean"
+      setNamedItem: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "eventPhase": {
-        "t": "number"
+      setNamedItemNS: {
+        r: "object",
+        s: "Attr",
+        n: true,
       },
-      "isTrusted": {
-        "t": "boolean"
-      },
-      "returnValue": {
-        "t": "boolean"
-      },
-      "srcElement": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "target": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "timeStamp": {
-        "t": "number"
-      },
-      "type": {
-        "t": "string"
-      }
     },
-    "methods": {
-      "composedPath": {
-        "r": "object"
-      },
-      "initEvent": {
-        "r": "undefined"
-      },
-      "preventDefault": {
-        "r": "undefined"
-      },
-      "stopImmediatePropagation": {
-        "r": "undefined"
-      },
-      "stopPropagation": {
-        "r": "undefined"
-      }
-    }
-  },
-  "UIEvent": {
-    "props": {
-      "bubbles": {
-        "t": "boolean"
-      },
-      "cancelBubble": {
-        "t": "boolean"
-      },
-      "cancelable": {
-        "t": "boolean"
-      },
-      "composed": {
-        "t": "boolean"
-      },
-      "currentTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "defaultPrevented": {
-        "t": "boolean"
-      },
-      "eventPhase": {
-        "t": "number"
-      },
-      "isTrusted": {
-        "t": "boolean"
-      },
-      "returnValue": {
-        "t": "boolean"
-      },
-      "srcElement": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "target": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "timeStamp": {
-        "t": "number"
-      },
-      "type": {
-        "t": "string"
-      },
-      "detail": {
-        "t": "number"
-      },
-      "view": {
-        "t": "object",
-        "s": "Window",
-        "n": true
-      },
-      "which": {
-        "t": "number"
-      }
+    index: {
+      t: "object",
+      s: "Attr",
     },
-    "methods": {
-      "composedPath": {
-        "r": "object"
-      },
-      "initEvent": {
-        "r": "undefined"
-      },
-      "preventDefault": {
-        "r": "undefined"
-      },
-      "stopImmediatePropagation": {
-        "r": "undefined"
-      },
-      "stopPropagation": {
-        "r": "undefined"
-      },
-      "initUIEvent": {
-        "r": "undefined"
-      }
-    }
   },
-  "MouseEvent": {
-    "props": {
-      "bubbles": {
-        "t": "boolean"
+  Attr: {
+    props: {
+      baseURI: {
+        t: "string",
       },
-      "cancelBubble": {
-        "t": "boolean"
+      childNodes: {
+        t: "object",
+        s: "NodeList",
       },
-      "cancelable": {
-        "t": "boolean"
+      firstChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "composed": {
-        "t": "boolean"
+      isConnected: {
+        t: "boolean",
       },
-      "currentTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
+      lastChild: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "defaultPrevented": {
-        "t": "boolean"
+      nextSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "eventPhase": {
-        "t": "number"
+      nodeName: {
+        t: "string",
       },
-      "isTrusted": {
-        "t": "boolean"
+      nodeType: {
+        t: "number",
       },
-      "returnValue": {
-        "t": "boolean"
+      nodeValue: {
+        t: "string",
+        n: true,
       },
-      "srcElement": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
+      ownerDocument: {
+        t: "object",
+        s: "Document",
       },
-      "target": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
+      parentElement: {
+        t: "object",
+        s: "HTMLElement",
+        n: true,
       },
-      "timeStamp": {
-        "t": "number"
+      parentNode: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "type": {
-        "t": "string"
+      previousSibling: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "detail": {
-        "t": "number"
+      textContent: {
+        t: "string",
+        n: true,
       },
-      "view": {
-        "t": "object",
-        "s": "Window",
-        "n": true
+      localName: {
+        t: "string",
       },
-      "which": {
-        "t": "number"
+      name: {
+        t: "string",
       },
-      "altKey": {
-        "t": "boolean"
+      namespaceURI: {
+        t: "string",
+        n: true,
       },
-      "button": {
-        "t": "number"
+      ownerElement: {
+        t: "object",
+        s: "Element",
+        n: true,
       },
-      "buttons": {
-        "t": "number"
+      prefix: {
+        t: "string",
+        n: true,
       },
-      "clientX": {
-        "t": "number"
+      specified: {
+        t: "boolean",
       },
-      "clientY": {
-        "t": "number"
+      value: {
+        t: "string",
       },
-      "ctrlKey": {
-        "t": "boolean"
-      },
-      "layerX": {
-        "t": "number"
-      },
-      "layerY": {
-        "t": "number"
-      },
-      "metaKey": {
-        "t": "boolean"
-      },
-      "movementX": {
-        "t": "number"
-      },
-      "movementY": {
-        "t": "number"
-      },
-      "offsetX": {
-        "t": "number"
-      },
-      "offsetY": {
-        "t": "number"
-      },
-      "pageX": {
-        "t": "number"
-      },
-      "pageY": {
-        "t": "number"
-      },
-      "relatedTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "screenX": {
-        "t": "number"
-      },
-      "screenY": {
-        "t": "number"
-      },
-      "shiftKey": {
-        "t": "boolean"
-      },
-      "x": {
-        "t": "number"
-      },
-      "y": {
-        "t": "number"
-      }
     },
-    "methods": {
-      "composedPath": {
-        "r": "object"
+    methods: {
+      addEventListener: {
+        r: "undefined",
       },
-      "initEvent": {
-        "r": "undefined"
+      dispatchEvent: {
+        r: "boolean",
       },
-      "preventDefault": {
-        "r": "undefined"
+      removeEventListener: {
+        r: "undefined",
       },
-      "stopImmediatePropagation": {
-        "r": "undefined"
+      appendChild: {
+        r: "object",
+        s: "Node",
       },
-      "stopPropagation": {
-        "r": "undefined"
+      cloneNode: {
+        r: "object",
+        s: "Node",
       },
-      "initUIEvent": {
-        "r": "undefined"
+      compareDocumentPosition: {
+        r: "number",
       },
-      "getModifierState": {
-        "r": "boolean"
+      contains: {
+        r: "boolean",
       },
-      "initMouseEvent": {
-        "r": "undefined"
-      }
-    }
-  },
-  "KeyboardEvent": {
-    "props": {
-      "bubbles": {
-        "t": "boolean"
+      getRootNode: {
+        r: "object",
+        s: "Node",
       },
-      "cancelBubble": {
-        "t": "boolean"
+      hasChildNodes: {
+        r: "boolean",
       },
-      "cancelable": {
-        "t": "boolean"
+      insertBefore: {
+        r: "object",
+        s: "Node",
       },
-      "composed": {
-        "t": "boolean"
+      isDefaultNamespace: {
+        r: "boolean",
       },
-      "currentTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
+      isEqualNode: {
+        r: "boolean",
       },
-      "defaultPrevented": {
-        "t": "boolean"
+      isSameNode: {
+        r: "boolean",
       },
-      "eventPhase": {
-        "t": "number"
+      lookupNamespaceURI: {
+        r: "string",
+        n: true,
       },
-      "isTrusted": {
-        "t": "boolean"
+      lookupPrefix: {
+        r: "string",
+        n: true,
       },
-      "returnValue": {
-        "t": "boolean"
+      normalize: {
+        r: "undefined",
       },
-      "srcElement": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
+      removeChild: {
+        r: "object",
+        s: "Node",
       },
-      "target": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
+      replaceChild: {
+        r: "object",
+        s: "Node",
       },
-      "timeStamp": {
-        "t": "number"
-      },
-      "type": {
-        "t": "string"
-      },
-      "detail": {
-        "t": "number"
-      },
-      "view": {
-        "t": "object",
-        "s": "Window",
-        "n": true
-      },
-      "which": {
-        "t": "number"
-      },
-      "altKey": {
-        "t": "boolean"
-      },
-      "charCode": {
-        "t": "number"
-      },
-      "code": {
-        "t": "string"
-      },
-      "ctrlKey": {
-        "t": "boolean"
-      },
-      "isComposing": {
-        "t": "boolean"
-      },
-      "key": {
-        "t": "string"
-      },
-      "keyCode": {
-        "t": "number"
-      },
-      "location": {
-        "t": "number"
-      },
-      "metaKey": {
-        "t": "boolean"
-      },
-      "repeat": {
-        "t": "boolean"
-      },
-      "shiftKey": {
-        "t": "boolean"
-      }
     },
-    "methods": {
-      "composedPath": {
-        "r": "object"
-      },
-      "initEvent": {
-        "r": "undefined"
-      },
-      "preventDefault": {
-        "r": "undefined"
-      },
-      "stopImmediatePropagation": {
-        "r": "undefined"
-      },
-      "stopPropagation": {
-        "r": "undefined"
-      },
-      "initUIEvent": {
-        "r": "undefined"
-      },
-      "getModifierState": {
-        "r": "boolean"
-      },
-      "initKeyboardEvent": {
-        "r": "undefined"
-      }
-    }
   },
-  "FocusEvent": {
-    "props": {
-      "bubbles": {
-        "t": "boolean"
+  NodeList: {
+    props: {
+      length: {
+        t: "number",
       },
-      "cancelBubble": {
-        "t": "boolean"
-      },
-      "cancelable": {
-        "t": "boolean"
-      },
-      "composed": {
-        "t": "boolean"
-      },
-      "currentTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "defaultPrevented": {
-        "t": "boolean"
-      },
-      "eventPhase": {
-        "t": "number"
-      },
-      "isTrusted": {
-        "t": "boolean"
-      },
-      "returnValue": {
-        "t": "boolean"
-      },
-      "srcElement": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "target": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "timeStamp": {
-        "t": "number"
-      },
-      "type": {
-        "t": "string"
-      },
-      "detail": {
-        "t": "number"
-      },
-      "view": {
-        "t": "object",
-        "s": "Window",
-        "n": true
-      },
-      "which": {
-        "t": "number"
-      },
-      "relatedTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      }
     },
-    "methods": {
-      "composedPath": {
-        "r": "object"
+    methods: {
+      item: {
+        r: "object",
+        s: "Node",
+        n: true,
       },
-      "initEvent": {
-        "r": "undefined"
+      forEach: {
+        r: "undefined",
       },
-      "preventDefault": {
-        "r": "undefined"
-      },
-      "stopImmediatePropagation": {
-        "r": "undefined"
-      },
-      "stopPropagation": {
-        "r": "undefined"
-      },
-      "initUIEvent": {
-        "r": "undefined"
-      }
-    }
-  },
-  "InputEvent": {
-    "props": {
-      "bubbles": {
-        "t": "boolean"
-      },
-      "cancelBubble": {
-        "t": "boolean"
-      },
-      "cancelable": {
-        "t": "boolean"
-      },
-      "composed": {
-        "t": "boolean"
-      },
-      "currentTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "defaultPrevented": {
-        "t": "boolean"
-      },
-      "eventPhase": {
-        "t": "number"
-      },
-      "isTrusted": {
-        "t": "boolean"
-      },
-      "returnValue": {
-        "t": "boolean"
-      },
-      "srcElement": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "target": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "timeStamp": {
-        "t": "number"
-      },
-      "type": {
-        "t": "string"
-      },
-      "detail": {
-        "t": "number"
-      },
-      "view": {
-        "t": "object",
-        "s": "Window",
-        "n": true
-      },
-      "which": {
-        "t": "number"
-      },
-      "data": {
-        "t": "string",
-        "n": true
-      },
-      "dataTransfer": {
-        "t": "object",
-        "n": true
-      },
-      "inputType": {
-        "t": "string"
-      },
-      "isComposing": {
-        "t": "boolean"
-      }
     },
-    "methods": {
-      "composedPath": {
-        "r": "object"
-      },
-      "initEvent": {
-        "r": "undefined"
-      },
-      "preventDefault": {
-        "r": "undefined"
-      },
-      "stopImmediatePropagation": {
-        "r": "undefined"
-      },
-      "stopPropagation": {
-        "r": "undefined"
-      },
-      "initUIEvent": {
-        "r": "undefined"
-      },
-      "getTargetRanges": {
-        "r": "object"
-      }
-    }
-  },
-  "CustomEvent": {
-    "props": {
-      "bubbles": {
-        "t": "boolean"
-      },
-      "cancelBubble": {
-        "t": "boolean"
-      },
-      "cancelable": {
-        "t": "boolean"
-      },
-      "composed": {
-        "t": "boolean"
-      },
-      "currentTarget": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "defaultPrevented": {
-        "t": "boolean"
-      },
-      "eventPhase": {
-        "t": "number"
-      },
-      "isTrusted": {
-        "t": "boolean"
-      },
-      "returnValue": {
-        "t": "boolean"
-      },
-      "srcElement": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "target": {
-        "t": "object",
-        "s": "EventTarget",
-        "n": true
-      },
-      "timeStamp": {
-        "t": "number"
-      },
-      "type": {
-        "t": "string"
-      },
-      "detail": {
-        "t": "top"
-      }
+    index: {
+      t: "object",
+      s: "Node",
     },
-    "methods": {
-      "composedPath": {
-        "r": "object"
-      },
-      "initEvent": {
-        "r": "undefined"
-      },
-      "preventDefault": {
-        "r": "undefined"
-      },
-      "stopImmediatePropagation": {
-        "r": "undefined"
-      },
-      "stopPropagation": {
-        "r": "undefined"
-      },
-      "initCustomEvent": {
-        "r": "undefined"
-      }
-    }
   },
-  "EventTarget": {
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+  HTMLCollection: {
+    props: {
+      length: {
+        t: "number",
       },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      }
-    }
-  },
-  "MessageChannel": {
-    "props": {
-      "port1": {
-        "t": "object",
-        "s": "MessagePort"
-      },
-      "port2": {
-        "t": "object",
-        "s": "MessagePort"
-      }
-    }
-  },
-  "MessagePort": {
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "close": {
-        "r": "undefined"
-      },
-      "postMessage": {
-        "r": "undefined"
-      },
-      "start": {
-        "r": "undefined"
-      }
-    }
-  },
-  "MutationObserver": {
-    "methods": {
-      "disconnect": {
-        "r": "undefined"
-      },
-      "observe": {
-        "r": "undefined"
-      },
-      "takeRecords": {
-        "r": "object"
-      }
-    }
-  },
-  "IntersectionObserver": {
-    "props": {
-      "root": {
-        "t": "object",
-        "n": true
-      },
-      "rootMargin": {
-        "t": "string"
-      },
-      "thresholds": {
-        "t": "object"
-      }
     },
-    "methods": {
-      "disconnect": {
-        "r": "undefined"
+    methods: {
+      item: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "observe": {
-        "r": "undefined"
+      namedItem: {
+        r: "object",
+        s: "Element",
+        n: true,
       },
-      "takeRecords": {
-        "r": "object"
-      },
-      "unobserve": {
-        "r": "undefined"
-      }
-    }
-  },
-  "ResizeObserver": {
-    "methods": {
-      "disconnect": {
-        "r": "undefined"
-      },
-      "observe": {
-        "r": "undefined"
-      },
-      "unobserve": {
-        "r": "undefined"
-      }
-    }
-  },
-  "URL": {
-    "props": {
-      "hash": {
-        "t": "string"
-      },
-      "host": {
-        "t": "string"
-      },
-      "hostname": {
-        "t": "string"
-      },
-      "href": {
-        "t": "string"
-      },
-      "origin": {
-        "t": "string"
-      },
-      "password": {
-        "t": "string"
-      },
-      "pathname": {
-        "t": "string"
-      },
-      "port": {
-        "t": "string"
-      },
-      "protocol": {
-        "t": "string"
-      },
-      "search": {
-        "t": "string"
-      },
-      "searchParams": {
-        "t": "object",
-        "s": "URLSearchParams"
-      },
-      "username": {
-        "t": "string"
-      }
     },
-    "methods": {
-      "toString": {
-        "r": "string"
-      },
-      "toJSON": {
-        "r": "string"
-      }
-    }
-  },
-  "URLSearchParams": {
-    "props": {
-      "size": {
-        "t": "number"
-      }
+    index: {
+      t: "object",
+      s: "Element",
     },
-    "methods": {
-      "append": {
-        "r": "undefined"
-      },
-      "delete": {
-        "r": "undefined"
-      },
-      "get": {
-        "r": "string",
-        "n": true
-      },
-      "getAll": {
-        "r": "object"
-      },
-      "has": {
-        "r": "boolean"
-      },
-      "set": {
-        "r": "undefined"
-      },
-      "sort": {
-        "r": "undefined"
-      },
-      "toString": {
-        "r": "string"
-      },
-      "forEach": {
-        "r": "undefined"
-      }
-    }
   },
-  "Headers": {
-    "methods": {
-      "append": {
-        "r": "undefined"
+  Navigator: {
+    props: {
+      webdriver: {
+        t: "boolean",
       },
-      "delete": {
-        "r": "undefined"
+      hardwareConcurrency: {
+        t: "number",
       },
-      "get": {
-        "r": "string",
-        "n": true
+      cookieEnabled: {
+        t: "boolean",
       },
-      "getSetCookie": {
-        "r": "object"
+      appCodeName: {
+        t: "string",
       },
-      "has": {
-        "r": "boolean"
+      appName: {
+        t: "string",
       },
-      "set": {
-        "r": "undefined"
+      appVersion: {
+        t: "string",
       },
-      "forEach": {
-        "r": "undefined"
-      }
-    }
-  },
-  "Request": {
-    "props": {
-      "body": {
-        "t": "object",
-        "n": true
+      platform: {
+        t: "string",
       },
-      "bodyUsed": {
-        "t": "boolean"
+      product: {
+        t: "string",
       },
-      "cache": {
-        "t": "string"
+      productSub: {
+        t: "string",
       },
-      "credentials": {
-        "t": "string"
+      userAgent: {
+        t: "string",
       },
-      "destination": {
-        "t": "string"
+      vendor: {
+        t: "string",
       },
-      "headers": {
-        "t": "object",
-        "s": "Headers"
+      vendorSub: {
+        t: "string",
       },
-      "integrity": {
-        "t": "string"
+      language: {
+        t: "string",
       },
-      "keepalive": {
-        "t": "boolean"
+      languages: {
+        t: "object",
       },
-      "method": {
-        "t": "string"
+      locks: {
+        t: "object",
       },
-      "mode": {
-        "t": "string"
+      onLine: {
+        t: "boolean",
       },
-      "redirect": {
-        "t": "string"
+      mimeTypes: {
+        t: "object",
       },
-      "referrer": {
-        "t": "string"
+      pdfViewerEnabled: {
+        t: "boolean",
       },
-      "referrerPolicy": {
-        "t": "string"
+      plugins: {
+        t: "object",
       },
-      "signal": {
-        "t": "object",
-        "s": "AbortSignal"
+      storage: {
+        t: "object",
       },
-      "url": {
-        "t": "string"
-      }
+      clipboard: {
+        t: "object",
+      },
+      credentials: {
+        t: "object",
+      },
+      doNotTrack: {
+        t: "string",
+        n: true,
+      },
+      geolocation: {
+        t: "object",
+      },
+      maxTouchPoints: {
+        t: "number",
+      },
+      mediaCapabilities: {
+        t: "object",
+      },
+      mediaDevices: {
+        t: "object",
+      },
+      mediaSession: {
+        t: "object",
+      },
+      permissions: {
+        t: "object",
+      },
+      serviceWorker: {
+        t: "object",
+      },
+      userActivation: {
+        t: "object",
+      },
+      wakeLock: {
+        t: "object",
+      },
     },
-    "methods": {
-      "arrayBuffer": {
-        "r": "object"
+    methods: {
+      clearAppBadge: {
+        r: "object",
       },
-      "blob": {
-        "r": "object"
+      setAppBadge: {
+        r: "object",
       },
-      "bytes": {
-        "r": "object"
+      registerProtocolHandler: {
+        r: "undefined",
       },
-      "formData": {
-        "r": "object"
+      javaEnabled: {
+        r: "boolean",
       },
-      "json": {
-        "r": "object"
+      canShare: {
+        r: "boolean",
       },
-      "text": {
-        "r": "object"
+      getGamepads: {
+        r: "object",
       },
-      "clone": {
-        "r": "object",
-        "s": "Request"
-      }
-    }
-  },
-  "Response": {
-    "props": {
-      "body": {
-        "t": "object",
-        "n": true
+      requestMIDIAccess: {
+        r: "object",
       },
-      "bodyUsed": {
-        "t": "boolean"
+      requestMediaKeySystemAccess: {
+        r: "object",
       },
-      "headers": {
-        "t": "object",
-        "s": "Headers"
+      sendBeacon: {
+        r: "boolean",
       },
-      "ok": {
-        "t": "boolean"
+      share: {
+        r: "object",
       },
-      "redirected": {
-        "t": "boolean"
+      vibrate: {
+        r: "boolean",
       },
-      "status": {
-        "t": "number"
-      },
-      "statusText": {
-        "t": "string"
-      },
-      "type": {
-        "t": "string"
-      },
-      "url": {
-        "t": "string"
-      }
     },
-    "methods": {
-      "arrayBuffer": {
-        "r": "object"
-      },
-      "blob": {
-        "r": "object"
-      },
-      "bytes": {
-        "r": "object"
-      },
-      "formData": {
-        "r": "object"
-      },
-      "json": {
-        "r": "object"
-      },
-      "text": {
-        "r": "object"
-      },
-      "clone": {
-        "r": "object",
-        "s": "Response"
-      }
-    }
   },
-  "AbortController": {
-    "props": {
-      "signal": {
-        "t": "object",
-        "s": "AbortSignal"
-      }
+  Location: {
+    props: {
+      ancestorOrigins: {
+        t: "object",
+      },
+      hash: {
+        t: "string",
+      },
+      host: {
+        t: "string",
+      },
+      hostname: {
+        t: "string",
+      },
+      href: {
+        t: "string",
+      },
+      origin: {
+        t: "string",
+      },
+      pathname: {
+        t: "string",
+      },
+      port: {
+        t: "string",
+      },
+      protocol: {
+        t: "string",
+      },
+      search: {
+        t: "string",
+      },
     },
-    "methods": {
-      "abort": {
-        "r": "undefined"
-      }
-    }
-  },
-  "AbortSignal": {
-    "props": {
-      "aborted": {
-        "t": "boolean"
+    methods: {
+      toString: {
+        r: "string",
       },
-      "reason": {
-        "t": "top"
-      }
+      assign: {
+        r: "undefined",
+      },
+      reload: {
+        r: "undefined",
+      },
+      replace: {
+        r: "undefined",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "throwIfAborted": {
-        "r": "undefined"
-      }
-    }
   },
-  "Blob": {
-    "props": {
-      "size": {
-        "t": "number"
+  History: {
+    props: {
+      length: {
+        t: "number",
       },
-      "type": {
-        "t": "string"
-      }
+      scrollRestoration: {
+        t: "string",
+      },
+      state: {
+        t: "top",
+      },
     },
-    "methods": {
-      "arrayBuffer": {
-        "r": "object"
+    methods: {
+      back: {
+        r: "undefined",
       },
-      "bytes": {
-        "r": "object"
+      forward: {
+        r: "undefined",
       },
-      "slice": {
-        "r": "object",
-        "s": "Blob"
+      go: {
+        r: "undefined",
       },
-      "stream": {
-        "r": "object"
+      pushState: {
+        r: "undefined",
       },
-      "text": {
-        "r": "object"
-      }
-    }
-  },
-  "File": {
-    "props": {
-      "size": {
-        "t": "number"
+      replaceState: {
+        r: "undefined",
       },
-      "type": {
-        "t": "string"
-      },
-      "lastModified": {
-        "t": "number"
-      },
-      "name": {
-        "t": "string"
-      },
-      "webkitRelativePath": {
-        "t": "string"
-      }
     },
-    "methods": {
-      "arrayBuffer": {
-        "r": "object"
-      },
-      "bytes": {
-        "r": "object"
-      },
-      "slice": {
-        "r": "object",
-        "s": "Blob"
-      },
-      "stream": {
-        "r": "object"
-      },
-      "text": {
-        "r": "object"
-      }
-    }
   },
-  "FileReader": {
-    "props": {
-      "error": {
-        "t": "object",
-        "n": true
+  Storage: {
+    props: {
+      length: {
+        t: "number",
       },
-      "readyState": {
-        "t": "top"
-      },
-      "result": {
-        "t": "top"
-      }
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+    methods: {
+      clear: {
+        r: "undefined",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      getItem: {
+        r: "string",
+        n: true,
       },
-      "removeEventListener": {
-        "r": "undefined"
+      key: {
+        r: "string",
+        n: true,
       },
-      "abort": {
-        "r": "undefined"
+      removeItem: {
+        r: "undefined",
       },
-      "readAsArrayBuffer": {
-        "r": "undefined"
+      setItem: {
+        r: "undefined",
       },
-      "readAsBinaryString": {
-        "r": "undefined"
-      },
-      "readAsDataURL": {
-        "r": "undefined"
-      },
-      "readAsText": {
-        "r": "undefined"
-      }
-    }
-  },
-  "FormData": {
-    "methods": {
-      "append": {
-        "r": "undefined"
-      },
-      "delete": {
-        "r": "undefined"
-      },
-      "get": {
-        "r": "top",
-        "n": true
-      },
-      "getAll": {
-        "r": "object"
-      },
-      "has": {
-        "r": "boolean"
-      },
-      "set": {
-        "r": "undefined"
-      },
-      "forEach": {
-        "r": "undefined"
-      }
-    }
-  },
-  "XMLHttpRequest": {
-    "props": {
-      "readyState": {
-        "t": "number"
-      },
-      "response": {
-        "t": "top"
-      },
-      "responseText": {
-        "t": "string"
-      },
-      "responseType": {
-        "t": "string"
-      },
-      "responseURL": {
-        "t": "string"
-      },
-      "responseXML": {
-        "t": "object",
-        "s": "Document",
-        "n": true
-      },
-      "status": {
-        "t": "number"
-      },
-      "statusText": {
-        "t": "string"
-      },
-      "timeout": {
-        "t": "number"
-      },
-      "upload": {
-        "t": "object"
-      },
-      "withCredentials": {
-        "t": "boolean"
-      }
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "abort": {
-        "r": "undefined"
-      },
-      "getAllResponseHeaders": {
-        "r": "string"
-      },
-      "getResponseHeader": {
-        "r": "string",
-        "n": true
-      },
-      "open": {
-        "r": "undefined"
-      },
-      "overrideMimeType": {
-        "r": "undefined"
-      },
-      "send": {
-        "r": "undefined"
-      },
-      "setRequestHeader": {
-        "r": "undefined"
-      }
-    }
-  },
-  "WebSocket": {
-    "props": {
-      "binaryType": {
-        "t": "string"
-      },
-      "bufferedAmount": {
-        "t": "number"
-      },
-      "extensions": {
-        "t": "string"
-      },
-      "protocol": {
-        "t": "string"
-      },
-      "readyState": {
-        "t": "number"
-      },
-      "url": {
-        "t": "string"
-      }
+    index: {
+      t: "top",
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
-      },
-      "dispatchEvent": {
-        "r": "boolean"
-      },
-      "removeEventListener": {
-        "r": "undefined"
-      },
-      "close": {
-        "r": "undefined"
-      },
-      "send": {
-        "r": "undefined"
-      }
-    }
   },
-  "Worker": {
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+  Screen: {
+    props: {
+      availHeight: {
+        t: "number",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      availWidth: {
+        t: "number",
       },
-      "removeEventListener": {
-        "r": "undefined"
+      colorDepth: {
+        t: "number",
       },
-      "postMessage": {
-        "r": "undefined"
+      height: {
+        t: "number",
       },
-      "terminate": {
-        "r": "undefined"
-      }
-    }
-  },
-  "Crypto": {
-    "props": {
-      "subtle": {
-        "t": "object"
-      }
+      orientation: {
+        t: "object",
+      },
+      pixelDepth: {
+        t: "number",
+      },
+      width: {
+        t: "number",
+      },
     },
-    "methods": {
-      "getRandomValues": {
-        "r": "object",
-        "n": true
-      },
-      "randomUUID": {
-        "r": "string"
-      }
-    }
   },
-  "TextEncoder": {
-    "props": {
-      "encoding": {
-        "t": "string"
-      }
-    },
-    "methods": {
-      "encode": {
-        "r": "object"
+  Performance: {
+    props: {
+      eventCounts: {
+        t: "object",
       },
-      "encodeInto": {
-        "r": "object"
-      }
-    }
+      navigation: {
+        t: "object",
+      },
+      timeOrigin: {
+        t: "number",
+      },
+      timing: {
+        t: "object",
+        s: "PerformanceTiming",
+      },
+    },
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      clearMarks: {
+        r: "undefined",
+      },
+      clearMeasures: {
+        r: "undefined",
+      },
+      clearResourceTimings: {
+        r: "undefined",
+      },
+      getEntries: {
+        r: "object",
+      },
+      getEntriesByName: {
+        r: "object",
+      },
+      getEntriesByType: {
+        r: "object",
+      },
+      mark: {
+        r: "object",
+      },
+      measure: {
+        r: "object",
+      },
+      now: {
+        r: "number",
+      },
+      setResourceTimingBufferSize: {
+        r: "undefined",
+      },
+      toJSON: {
+        r: "top",
+      },
+    },
   },
-  "TextDecoder": {
-    "props": {
-      "encoding": {
-        "t": "string"
+  PerformanceTiming: {
+    props: {
+      connectEnd: {
+        t: "number",
       },
-      "fatal": {
-        "t": "boolean"
+      connectStart: {
+        t: "number",
       },
-      "ignoreBOM": {
-        "t": "boolean"
-      }
+      domComplete: {
+        t: "number",
+      },
+      domContentLoadedEventEnd: {
+        t: "number",
+      },
+      domContentLoadedEventStart: {
+        t: "number",
+      },
+      domInteractive: {
+        t: "number",
+      },
+      domLoading: {
+        t: "number",
+      },
+      domainLookupEnd: {
+        t: "number",
+      },
+      domainLookupStart: {
+        t: "number",
+      },
+      fetchStart: {
+        t: "number",
+      },
+      loadEventEnd: {
+        t: "number",
+      },
+      loadEventStart: {
+        t: "number",
+      },
+      navigationStart: {
+        t: "number",
+      },
+      redirectEnd: {
+        t: "number",
+      },
+      redirectStart: {
+        t: "number",
+      },
+      requestStart: {
+        t: "number",
+      },
+      responseEnd: {
+        t: "number",
+      },
+      responseStart: {
+        t: "number",
+      },
+      secureConnectionStart: {
+        t: "number",
+      },
+      unloadEventEnd: {
+        t: "number",
+      },
+      unloadEventStart: {
+        t: "number",
+      },
     },
-    "methods": {
-      "decode": {
-        "r": "string"
-      }
-    }
+    methods: {
+      toJSON: {
+        r: "top",
+      },
+    },
   },
-  "MediaQueryList": {
-    "props": {
-      "matches": {
-        "t": "boolean"
+  Event: {
+    props: {
+      bubbles: {
+        t: "boolean",
       },
-      "media": {
-        "t": "string"
-      }
+      cancelBubble: {
+        t: "boolean",
+      },
+      cancelable: {
+        t: "boolean",
+      },
+      composed: {
+        t: "boolean",
+      },
+      currentTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      defaultPrevented: {
+        t: "boolean",
+      },
+      eventPhase: {
+        t: "number",
+      },
+      isTrusted: {
+        t: "boolean",
+      },
+      returnValue: {
+        t: "boolean",
+      },
+      srcElement: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      target: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      timeStamp: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
     },
-    "methods": {
-      "addEventListener": {
-        "r": "undefined"
+    methods: {
+      composedPath: {
+        r: "object",
       },
-      "dispatchEvent": {
-        "r": "boolean"
+      initEvent: {
+        r: "undefined",
       },
-      "removeEventListener": {
-        "r": "undefined"
+      preventDefault: {
+        r: "undefined",
       },
-      "addListener": {
-        "r": "undefined"
+      stopImmediatePropagation: {
+        r: "undefined",
       },
-      "removeListener": {
-        "r": "undefined"
-      }
-    }
+      stopPropagation: {
+        r: "undefined",
+      },
+    },
   },
-  "Selection": {
-    "props": {
-      "anchorNode": {
-        "t": "object",
-        "s": "Node",
-        "n": true
+  UIEvent: {
+    props: {
+      bubbles: {
+        t: "boolean",
       },
-      "anchorOffset": {
-        "t": "number"
+      cancelBubble: {
+        t: "boolean",
       },
-      "direction": {
-        "t": "string"
+      cancelable: {
+        t: "boolean",
       },
-      "focusNode": {
-        "t": "object",
-        "s": "Node",
-        "n": true
+      composed: {
+        t: "boolean",
       },
-      "focusOffset": {
-        "t": "number"
+      currentTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
       },
-      "isCollapsed": {
-        "t": "boolean"
+      defaultPrevented: {
+        t: "boolean",
       },
-      "rangeCount": {
-        "t": "number"
+      eventPhase: {
+        t: "number",
       },
-      "type": {
-        "t": "string"
-      }
+      isTrusted: {
+        t: "boolean",
+      },
+      returnValue: {
+        t: "boolean",
+      },
+      srcElement: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      target: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      timeStamp: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+      detail: {
+        t: "number",
+      },
+      view: {
+        t: "object",
+        s: "Window",
+        n: true,
+      },
+      which: {
+        t: "number",
+      },
     },
-    "methods": {
-      "addRange": {
-        "r": "undefined"
+    methods: {
+      composedPath: {
+        r: "object",
       },
-      "collapse": {
-        "r": "undefined"
+      initEvent: {
+        r: "undefined",
       },
-      "collapseToEnd": {
-        "r": "undefined"
+      preventDefault: {
+        r: "undefined",
       },
-      "collapseToStart": {
-        "r": "undefined"
+      stopImmediatePropagation: {
+        r: "undefined",
       },
-      "containsNode": {
-        "r": "boolean"
+      stopPropagation: {
+        r: "undefined",
       },
-      "deleteFromDocument": {
-        "r": "undefined"
+      initUIEvent: {
+        r: "undefined",
       },
-      "empty": {
-        "r": "undefined"
-      },
-      "extend": {
-        "r": "undefined"
-      },
-      "getRangeAt": {
-        "r": "object",
-        "s": "Range"
-      },
-      "modify": {
-        "r": "undefined"
-      },
-      "removeAllRanges": {
-        "r": "undefined"
-      },
-      "removeRange": {
-        "r": "undefined"
-      },
-      "selectAllChildren": {
-        "r": "undefined"
-      },
-      "setBaseAndExtent": {
-        "r": "undefined"
-      },
-      "setPosition": {
-        "r": "undefined"
-      },
-      "toString": {
-        "r": "string"
-      }
-    }
+    },
   },
-  "Range": {
-    "props": {
-      "collapsed": {
-        "t": "boolean"
+  MouseEvent: {
+    props: {
+      bubbles: {
+        t: "boolean",
       },
-      "endContainer": {
-        "t": "object",
-        "s": "Node"
+      cancelBubble: {
+        t: "boolean",
       },
-      "endOffset": {
-        "t": "number"
+      cancelable: {
+        t: "boolean",
       },
-      "startContainer": {
-        "t": "object",
-        "s": "Node"
+      composed: {
+        t: "boolean",
       },
-      "startOffset": {
-        "t": "number"
+      currentTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
       },
-      "commonAncestorContainer": {
-        "t": "object",
-        "s": "Node"
-      }
+      defaultPrevented: {
+        t: "boolean",
+      },
+      eventPhase: {
+        t: "number",
+      },
+      isTrusted: {
+        t: "boolean",
+      },
+      returnValue: {
+        t: "boolean",
+      },
+      srcElement: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      target: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      timeStamp: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+      detail: {
+        t: "number",
+      },
+      view: {
+        t: "object",
+        s: "Window",
+        n: true,
+      },
+      which: {
+        t: "number",
+      },
+      altKey: {
+        t: "boolean",
+      },
+      button: {
+        t: "number",
+      },
+      buttons: {
+        t: "number",
+      },
+      clientX: {
+        t: "number",
+      },
+      clientY: {
+        t: "number",
+      },
+      ctrlKey: {
+        t: "boolean",
+      },
+      layerX: {
+        t: "number",
+      },
+      layerY: {
+        t: "number",
+      },
+      metaKey: {
+        t: "boolean",
+      },
+      movementX: {
+        t: "number",
+      },
+      movementY: {
+        t: "number",
+      },
+      offsetX: {
+        t: "number",
+      },
+      offsetY: {
+        t: "number",
+      },
+      pageX: {
+        t: "number",
+      },
+      pageY: {
+        t: "number",
+      },
+      relatedTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      screenX: {
+        t: "number",
+      },
+      screenY: {
+        t: "number",
+      },
+      shiftKey: {
+        t: "boolean",
+      },
+      x: {
+        t: "number",
+      },
+      y: {
+        t: "number",
+      },
     },
-    "methods": {
-      "cloneContents": {
-        "r": "object",
-        "s": "DocumentFragment"
+    methods: {
+      composedPath: {
+        r: "object",
       },
-      "cloneRange": {
-        "r": "object",
-        "s": "Range"
+      initEvent: {
+        r: "undefined",
       },
-      "collapse": {
-        "r": "undefined"
+      preventDefault: {
+        r: "undefined",
       },
-      "compareBoundaryPoints": {
-        "r": "number"
+      stopImmediatePropagation: {
+        r: "undefined",
       },
-      "comparePoint": {
-        "r": "number"
+      stopPropagation: {
+        r: "undefined",
       },
-      "createContextualFragment": {
-        "r": "object",
-        "s": "DocumentFragment"
+      initUIEvent: {
+        r: "undefined",
       },
-      "deleteContents": {
-        "r": "undefined"
+      getModifierState: {
+        r: "boolean",
       },
-      "detach": {
-        "r": "undefined"
+      initMouseEvent: {
+        r: "undefined",
       },
-      "extractContents": {
-        "r": "object",
-        "s": "DocumentFragment"
+    },
+  },
+  KeyboardEvent: {
+    props: {
+      bubbles: {
+        t: "boolean",
       },
-      "getBoundingClientRect": {
-        "r": "object"
+      cancelBubble: {
+        t: "boolean",
       },
-      "getClientRects": {
-        "r": "object"
+      cancelable: {
+        t: "boolean",
       },
-      "insertNode": {
-        "r": "undefined"
+      composed: {
+        t: "boolean",
       },
-      "intersectsNode": {
-        "r": "boolean"
+      currentTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
       },
-      "isPointInRange": {
-        "r": "boolean"
+      defaultPrevented: {
+        t: "boolean",
       },
-      "selectNode": {
-        "r": "undefined"
+      eventPhase: {
+        t: "number",
       },
-      "selectNodeContents": {
-        "r": "undefined"
+      isTrusted: {
+        t: "boolean",
       },
-      "setEnd": {
-        "r": "undefined"
+      returnValue: {
+        t: "boolean",
       },
-      "setEndAfter": {
-        "r": "undefined"
+      srcElement: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
       },
-      "setEndBefore": {
-        "r": "undefined"
+      target: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
       },
-      "setStart": {
-        "r": "undefined"
+      timeStamp: {
+        t: "number",
       },
-      "setStartAfter": {
-        "r": "undefined"
+      type: {
+        t: "string",
       },
-      "setStartBefore": {
-        "r": "undefined"
+      detail: {
+        t: "number",
       },
-      "surroundContents": {
-        "r": "undefined"
+      view: {
+        t: "object",
+        s: "Window",
+        n: true,
       },
-      "toString": {
-        "r": "string"
-      }
-    }
+      which: {
+        t: "number",
+      },
+      altKey: {
+        t: "boolean",
+      },
+      charCode: {
+        t: "number",
+      },
+      code: {
+        t: "string",
+      },
+      ctrlKey: {
+        t: "boolean",
+      },
+      isComposing: {
+        t: "boolean",
+      },
+      key: {
+        t: "string",
+      },
+      keyCode: {
+        t: "number",
+      },
+      location: {
+        t: "number",
+      },
+      metaKey: {
+        t: "boolean",
+      },
+      repeat: {
+        t: "boolean",
+      },
+      shiftKey: {
+        t: "boolean",
+      },
+    },
+    methods: {
+      composedPath: {
+        r: "object",
+      },
+      initEvent: {
+        r: "undefined",
+      },
+      preventDefault: {
+        r: "undefined",
+      },
+      stopImmediatePropagation: {
+        r: "undefined",
+      },
+      stopPropagation: {
+        r: "undefined",
+      },
+      initUIEvent: {
+        r: "undefined",
+      },
+      getModifierState: {
+        r: "boolean",
+      },
+      initKeyboardEvent: {
+        r: "undefined",
+      },
+    },
+  },
+  FocusEvent: {
+    props: {
+      bubbles: {
+        t: "boolean",
+      },
+      cancelBubble: {
+        t: "boolean",
+      },
+      cancelable: {
+        t: "boolean",
+      },
+      composed: {
+        t: "boolean",
+      },
+      currentTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      defaultPrevented: {
+        t: "boolean",
+      },
+      eventPhase: {
+        t: "number",
+      },
+      isTrusted: {
+        t: "boolean",
+      },
+      returnValue: {
+        t: "boolean",
+      },
+      srcElement: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      target: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      timeStamp: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+      detail: {
+        t: "number",
+      },
+      view: {
+        t: "object",
+        s: "Window",
+        n: true,
+      },
+      which: {
+        t: "number",
+      },
+      relatedTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+    },
+    methods: {
+      composedPath: {
+        r: "object",
+      },
+      initEvent: {
+        r: "undefined",
+      },
+      preventDefault: {
+        r: "undefined",
+      },
+      stopImmediatePropagation: {
+        r: "undefined",
+      },
+      stopPropagation: {
+        r: "undefined",
+      },
+      initUIEvent: {
+        r: "undefined",
+      },
+    },
+  },
+  InputEvent: {
+    props: {
+      bubbles: {
+        t: "boolean",
+      },
+      cancelBubble: {
+        t: "boolean",
+      },
+      cancelable: {
+        t: "boolean",
+      },
+      composed: {
+        t: "boolean",
+      },
+      currentTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      defaultPrevented: {
+        t: "boolean",
+      },
+      eventPhase: {
+        t: "number",
+      },
+      isTrusted: {
+        t: "boolean",
+      },
+      returnValue: {
+        t: "boolean",
+      },
+      srcElement: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      target: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      timeStamp: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+      detail: {
+        t: "number",
+      },
+      view: {
+        t: "object",
+        s: "Window",
+        n: true,
+      },
+      which: {
+        t: "number",
+      },
+      data: {
+        t: "string",
+        n: true,
+      },
+      dataTransfer: {
+        t: "object",
+        n: true,
+      },
+      inputType: {
+        t: "string",
+      },
+      isComposing: {
+        t: "boolean",
+      },
+    },
+    methods: {
+      composedPath: {
+        r: "object",
+      },
+      initEvent: {
+        r: "undefined",
+      },
+      preventDefault: {
+        r: "undefined",
+      },
+      stopImmediatePropagation: {
+        r: "undefined",
+      },
+      stopPropagation: {
+        r: "undefined",
+      },
+      initUIEvent: {
+        r: "undefined",
+      },
+      getTargetRanges: {
+        r: "object",
+      },
+    },
+  },
+  CustomEvent: {
+    props: {
+      bubbles: {
+        t: "boolean",
+      },
+      cancelBubble: {
+        t: "boolean",
+      },
+      cancelable: {
+        t: "boolean",
+      },
+      composed: {
+        t: "boolean",
+      },
+      currentTarget: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      defaultPrevented: {
+        t: "boolean",
+      },
+      eventPhase: {
+        t: "number",
+      },
+      isTrusted: {
+        t: "boolean",
+      },
+      returnValue: {
+        t: "boolean",
+      },
+      srcElement: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      target: {
+        t: "object",
+        s: "EventTarget",
+        n: true,
+      },
+      timeStamp: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+      detail: {
+        t: "top",
+      },
+    },
+    methods: {
+      composedPath: {
+        r: "object",
+      },
+      initEvent: {
+        r: "undefined",
+      },
+      preventDefault: {
+        r: "undefined",
+      },
+      stopImmediatePropagation: {
+        r: "undefined",
+      },
+      stopPropagation: {
+        r: "undefined",
+      },
+      initCustomEvent: {
+        r: "undefined",
+      },
+    },
+  },
+  EventTarget: {
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+    },
+  },
+  MessageChannel: {
+    props: {
+      port1: {
+        t: "object",
+        s: "MessagePort",
+      },
+      port2: {
+        t: "object",
+        s: "MessagePort",
+      },
+    },
+  },
+  MessagePort: {
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      close: {
+        r: "undefined",
+      },
+      postMessage: {
+        r: "undefined",
+      },
+      start: {
+        r: "undefined",
+      },
+    },
+  },
+  MutationObserver: {
+    methods: {
+      disconnect: {
+        r: "undefined",
+      },
+      observe: {
+        r: "undefined",
+      },
+      takeRecords: {
+        r: "object",
+      },
+    },
+  },
+  IntersectionObserver: {
+    props: {
+      root: {
+        t: "object",
+        n: true,
+      },
+      rootMargin: {
+        t: "string",
+      },
+      thresholds: {
+        t: "object",
+      },
+    },
+    methods: {
+      disconnect: {
+        r: "undefined",
+      },
+      observe: {
+        r: "undefined",
+      },
+      takeRecords: {
+        r: "object",
+      },
+      unobserve: {
+        r: "undefined",
+      },
+    },
+  },
+  ResizeObserver: {
+    methods: {
+      disconnect: {
+        r: "undefined",
+      },
+      observe: {
+        r: "undefined",
+      },
+      unobserve: {
+        r: "undefined",
+      },
+    },
+  },
+  URL: {
+    props: {
+      hash: {
+        t: "string",
+      },
+      host: {
+        t: "string",
+      },
+      hostname: {
+        t: "string",
+      },
+      href: {
+        t: "string",
+      },
+      origin: {
+        t: "string",
+      },
+      password: {
+        t: "string",
+      },
+      pathname: {
+        t: "string",
+      },
+      port: {
+        t: "string",
+      },
+      protocol: {
+        t: "string",
+      },
+      search: {
+        t: "string",
+      },
+      searchParams: {
+        t: "object",
+        s: "URLSearchParams",
+      },
+      username: {
+        t: "string",
+      },
+    },
+    methods: {
+      toString: {
+        r: "string",
+      },
+      toJSON: {
+        r: "string",
+      },
+    },
+  },
+  URLSearchParams: {
+    props: {
+      size: {
+        t: "number",
+      },
+    },
+    methods: {
+      append: {
+        r: "undefined",
+      },
+      delete: {
+        r: "undefined",
+      },
+      get: {
+        r: "string",
+        n: true,
+      },
+      getAll: {
+        r: "object",
+      },
+      has: {
+        r: "boolean",
+      },
+      set: {
+        r: "undefined",
+      },
+      sort: {
+        r: "undefined",
+      },
+      toString: {
+        r: "string",
+      },
+      forEach: {
+        r: "undefined",
+      },
+    },
+  },
+  Headers: {
+    methods: {
+      append: {
+        r: "undefined",
+      },
+      delete: {
+        r: "undefined",
+      },
+      get: {
+        r: "string",
+        n: true,
+      },
+      getSetCookie: {
+        r: "object",
+      },
+      has: {
+        r: "boolean",
+      },
+      set: {
+        r: "undefined",
+      },
+      forEach: {
+        r: "undefined",
+      },
+    },
+  },
+  Request: {
+    props: {
+      body: {
+        t: "object",
+        n: true,
+      },
+      bodyUsed: {
+        t: "boolean",
+      },
+      cache: {
+        t: "string",
+      },
+      credentials: {
+        t: "string",
+      },
+      destination: {
+        t: "string",
+      },
+      headers: {
+        t: "object",
+        s: "Headers",
+      },
+      integrity: {
+        t: "string",
+      },
+      keepalive: {
+        t: "boolean",
+      },
+      method: {
+        t: "string",
+      },
+      mode: {
+        t: "string",
+      },
+      redirect: {
+        t: "string",
+      },
+      referrer: {
+        t: "string",
+      },
+      referrerPolicy: {
+        t: "string",
+      },
+      signal: {
+        t: "object",
+        s: "AbortSignal",
+      },
+      url: {
+        t: "string",
+      },
+    },
+    methods: {
+      arrayBuffer: {
+        r: "object",
+      },
+      blob: {
+        r: "object",
+      },
+      bytes: {
+        r: "object",
+      },
+      formData: {
+        r: "object",
+      },
+      json: {
+        r: "object",
+      },
+      text: {
+        r: "object",
+      },
+      clone: {
+        r: "object",
+        s: "Request",
+      },
+    },
+  },
+  Response: {
+    props: {
+      body: {
+        t: "object",
+        n: true,
+      },
+      bodyUsed: {
+        t: "boolean",
+      },
+      headers: {
+        t: "object",
+        s: "Headers",
+      },
+      ok: {
+        t: "boolean",
+      },
+      redirected: {
+        t: "boolean",
+      },
+      status: {
+        t: "number",
+      },
+      statusText: {
+        t: "string",
+      },
+      type: {
+        t: "string",
+      },
+      url: {
+        t: "string",
+      },
+    },
+    methods: {
+      arrayBuffer: {
+        r: "object",
+      },
+      blob: {
+        r: "object",
+      },
+      bytes: {
+        r: "object",
+      },
+      formData: {
+        r: "object",
+      },
+      json: {
+        r: "object",
+      },
+      text: {
+        r: "object",
+      },
+      clone: {
+        r: "object",
+        s: "Response",
+      },
+    },
+  },
+  AbortController: {
+    props: {
+      signal: {
+        t: "object",
+        s: "AbortSignal",
+      },
+    },
+    methods: {
+      abort: {
+        r: "undefined",
+      },
+    },
+  },
+  AbortSignal: {
+    props: {
+      aborted: {
+        t: "boolean",
+      },
+      reason: {
+        t: "top",
+      },
+    },
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      throwIfAborted: {
+        r: "undefined",
+      },
+    },
+  },
+  Blob: {
+    props: {
+      size: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+    },
+    methods: {
+      arrayBuffer: {
+        r: "object",
+      },
+      bytes: {
+        r: "object",
+      },
+      slice: {
+        r: "object",
+        s: "Blob",
+      },
+      stream: {
+        r: "object",
+      },
+      text: {
+        r: "object",
+      },
+    },
+  },
+  File: {
+    props: {
+      size: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+      lastModified: {
+        t: "number",
+      },
+      name: {
+        t: "string",
+      },
+      webkitRelativePath: {
+        t: "string",
+      },
+    },
+    methods: {
+      arrayBuffer: {
+        r: "object",
+      },
+      bytes: {
+        r: "object",
+      },
+      slice: {
+        r: "object",
+        s: "Blob",
+      },
+      stream: {
+        r: "object",
+      },
+      text: {
+        r: "object",
+      },
+    },
+  },
+  FileReader: {
+    props: {
+      error: {
+        t: "object",
+        n: true,
+      },
+      readyState: {
+        t: "top",
+      },
+      result: {
+        t: "top",
+      },
+    },
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      abort: {
+        r: "undefined",
+      },
+      readAsArrayBuffer: {
+        r: "undefined",
+      },
+      readAsBinaryString: {
+        r: "undefined",
+      },
+      readAsDataURL: {
+        r: "undefined",
+      },
+      readAsText: {
+        r: "undefined",
+      },
+    },
+  },
+  FormData: {
+    methods: {
+      append: {
+        r: "undefined",
+      },
+      delete: {
+        r: "undefined",
+      },
+      get: {
+        r: "top",
+        n: true,
+      },
+      getAll: {
+        r: "object",
+      },
+      has: {
+        r: "boolean",
+      },
+      set: {
+        r: "undefined",
+      },
+      forEach: {
+        r: "undefined",
+      },
+    },
+  },
+  XMLHttpRequest: {
+    props: {
+      readyState: {
+        t: "number",
+      },
+      response: {
+        t: "top",
+      },
+      responseText: {
+        t: "string",
+      },
+      responseType: {
+        t: "string",
+      },
+      responseURL: {
+        t: "string",
+      },
+      responseXML: {
+        t: "object",
+        s: "Document",
+        n: true,
+      },
+      status: {
+        t: "number",
+      },
+      statusText: {
+        t: "string",
+      },
+      timeout: {
+        t: "number",
+      },
+      upload: {
+        t: "object",
+      },
+      withCredentials: {
+        t: "boolean",
+      },
+    },
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      abort: {
+        r: "undefined",
+      },
+      getAllResponseHeaders: {
+        r: "string",
+      },
+      getResponseHeader: {
+        r: "string",
+        n: true,
+      },
+      open: {
+        r: "undefined",
+      },
+      overrideMimeType: {
+        r: "undefined",
+      },
+      send: {
+        r: "undefined",
+      },
+      setRequestHeader: {
+        r: "undefined",
+      },
+    },
+  },
+  WebSocket: {
+    props: {
+      binaryType: {
+        t: "string",
+      },
+      bufferedAmount: {
+        t: "number",
+      },
+      extensions: {
+        t: "string",
+      },
+      protocol: {
+        t: "string",
+      },
+      readyState: {
+        t: "number",
+      },
+      url: {
+        t: "string",
+      },
+    },
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      close: {
+        r: "undefined",
+      },
+      send: {
+        r: "undefined",
+      },
+    },
+  },
+  Worker: {
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      postMessage: {
+        r: "undefined",
+      },
+      terminate: {
+        r: "undefined",
+      },
+    },
+  },
+  Crypto: {
+    props: {
+      subtle: {
+        t: "object",
+      },
+    },
+    methods: {
+      getRandomValues: {
+        r: "object",
+        n: true,
+      },
+      randomUUID: {
+        r: "string",
+      },
+    },
+  },
+  TextEncoder: {
+    props: {
+      encoding: {
+        t: "string",
+      },
+    },
+    methods: {
+      encode: {
+        r: "object",
+      },
+      encodeInto: {
+        r: "object",
+      },
+    },
+  },
+  TextDecoder: {
+    props: {
+      encoding: {
+        t: "string",
+      },
+      fatal: {
+        t: "boolean",
+      },
+      ignoreBOM: {
+        t: "boolean",
+      },
+    },
+    methods: {
+      decode: {
+        r: "string",
+      },
+    },
+  },
+  MediaQueryList: {
+    props: {
+      matches: {
+        t: "boolean",
+      },
+      media: {
+        t: "string",
+      },
+    },
+    methods: {
+      addEventListener: {
+        r: "undefined",
+      },
+      dispatchEvent: {
+        r: "boolean",
+      },
+      removeEventListener: {
+        r: "undefined",
+      },
+      addListener: {
+        r: "undefined",
+      },
+      removeListener: {
+        r: "undefined",
+      },
+    },
+  },
+  Selection: {
+    props: {
+      anchorNode: {
+        t: "object",
+        s: "Node",
+        n: true,
+      },
+      anchorOffset: {
+        t: "number",
+      },
+      direction: {
+        t: "string",
+      },
+      focusNode: {
+        t: "object",
+        s: "Node",
+        n: true,
+      },
+      focusOffset: {
+        t: "number",
+      },
+      isCollapsed: {
+        t: "boolean",
+      },
+      rangeCount: {
+        t: "number",
+      },
+      type: {
+        t: "string",
+      },
+    },
+    methods: {
+      addRange: {
+        r: "undefined",
+      },
+      collapse: {
+        r: "undefined",
+      },
+      collapseToEnd: {
+        r: "undefined",
+      },
+      collapseToStart: {
+        r: "undefined",
+      },
+      containsNode: {
+        r: "boolean",
+      },
+      deleteFromDocument: {
+        r: "undefined",
+      },
+      empty: {
+        r: "undefined",
+      },
+      extend: {
+        r: "undefined",
+      },
+      getRangeAt: {
+        r: "object",
+        s: "Range",
+      },
+      modify: {
+        r: "undefined",
+      },
+      removeAllRanges: {
+        r: "undefined",
+      },
+      removeRange: {
+        r: "undefined",
+      },
+      selectAllChildren: {
+        r: "undefined",
+      },
+      setBaseAndExtent: {
+        r: "undefined",
+      },
+      setPosition: {
+        r: "undefined",
+      },
+      toString: {
+        r: "string",
+      },
+    },
+  },
+  Range: {
+    props: {
+      collapsed: {
+        t: "boolean",
+      },
+      endContainer: {
+        t: "object",
+        s: "Node",
+      },
+      endOffset: {
+        t: "number",
+      },
+      startContainer: {
+        t: "object",
+        s: "Node",
+      },
+      startOffset: {
+        t: "number",
+      },
+      commonAncestorContainer: {
+        t: "object",
+        s: "Node",
+      },
+    },
+    methods: {
+      cloneContents: {
+        r: "object",
+        s: "DocumentFragment",
+      },
+      cloneRange: {
+        r: "object",
+        s: "Range",
+      },
+      collapse: {
+        r: "undefined",
+      },
+      compareBoundaryPoints: {
+        r: "number",
+      },
+      comparePoint: {
+        r: "number",
+      },
+      createContextualFragment: {
+        r: "object",
+        s: "DocumentFragment",
+      },
+      deleteContents: {
+        r: "undefined",
+      },
+      detach: {
+        r: "undefined",
+      },
+      extractContents: {
+        r: "object",
+        s: "DocumentFragment",
+      },
+      getBoundingClientRect: {
+        r: "object",
+      },
+      getClientRects: {
+        r: "object",
+      },
+      insertNode: {
+        r: "undefined",
+      },
+      intersectsNode: {
+        r: "boolean",
+      },
+      isPointInRange: {
+        r: "boolean",
+      },
+      selectNode: {
+        r: "undefined",
+      },
+      selectNodeContents: {
+        r: "undefined",
+      },
+      setEnd: {
+        r: "undefined",
+      },
+      setEndAfter: {
+        r: "undefined",
+      },
+      setEndBefore: {
+        r: "undefined",
+      },
+      setStart: {
+        r: "undefined",
+      },
+      setStartAfter: {
+        r: "undefined",
+      },
+      setStartBefore: {
+        r: "undefined",
+      },
+      surroundContents: {
+        r: "undefined",
+      },
+      toString: {
+        r: "string",
+      },
+    },
   },
   "Intl.Collator": {
-    "methods": {
-      "compare": {
-        "r": "number"
+    methods: {
+      compare: {
+        r: "number",
       },
-      "resolvedOptions": {
-        "r": "top"
-      }
-    }
+      resolvedOptions: {
+        r: "top",
+      },
+    },
   },
   "Intl.NumberFormat": {
-    "methods": {
-      "format": {
-        "r": "string"
+    methods: {
+      format: {
+        r: "string",
       },
-      "resolvedOptions": {
-        "r": "top"
+      resolvedOptions: {
+        r: "top",
       },
-      "formatToParts": {
-        "r": "object"
+      formatToParts: {
+        r: "object",
       },
-      "formatRange": {
-        "r": "string"
+      formatRange: {
+        r: "string",
       },
-      "formatRangeToParts": {
-        "r": "object"
-      }
-    }
+      formatRangeToParts: {
+        r: "object",
+      },
+    },
   },
   "Intl.DateTimeFormat": {
-    "methods": {
-      "format": {
-        "r": "string"
+    methods: {
+      format: {
+        r: "string",
       },
-      "resolvedOptions": {
-        "r": "top"
+      resolvedOptions: {
+        r: "top",
       },
-      "formatToParts": {
-        "r": "object"
+      formatToParts: {
+        r: "object",
       },
-      "formatRange": {
-        "r": "string"
+      formatRange: {
+        r: "string",
       },
-      "formatRangeToParts": {
-        "r": "object"
-      }
-    }
+      formatRangeToParts: {
+        r: "object",
+      },
+    },
   },
   "Intl.PluralRules": {
-    "methods": {
-      "resolvedOptions": {
-        "r": "top"
+    methods: {
+      resolvedOptions: {
+        r: "top",
       },
-      "select": {
-        "r": "top"
-      }
-    }
+      select: {
+        r: "top",
+      },
+    },
   },
   "Intl.RelativeTimeFormat": {
-    "methods": {
-      "format": {
-        "r": "string"
+    methods: {
+      format: {
+        r: "string",
       },
-      "formatToParts": {
-        "r": "object"
+      formatToParts: {
+        r: "object",
       },
-      "resolvedOptions": {
-        "r": "top"
-      }
-    }
+      resolvedOptions: {
+        r: "top",
+      },
+    },
   },
   "Intl.ListFormat": {
-    "methods": {
-      "format": {
-        "r": "string"
+    methods: {
+      format: {
+        r: "string",
       },
-      "formatToParts": {
-        "r": "object"
+      formatToParts: {
+        r: "object",
       },
-      "resolvedOptions": {
-        "r": "top"
-      }
-    }
+      resolvedOptions: {
+        r: "top",
+      },
+    },
   },
   "Intl.DisplayNames": {
-    "methods": {
-      "of": {
-        "r": "string",
-        "o": true
+    methods: {
+      of: {
+        r: "string",
+        o: true,
       },
-      "resolvedOptions": {
-        "r": "top"
-      }
-    }
+      resolvedOptions: {
+        r: "top",
+      },
+    },
   },
   "Intl.Segmenter": {
-    "methods": {
-      "segment": {
-        "r": "top"
+    methods: {
+      segment: {
+        r: "top",
       },
-      "resolvedOptions": {
-        "r": "top"
-      }
-    }
+      resolvedOptions: {
+        r: "top",
+      },
+    },
   },
   "Intl.Locale": {
-    "props": {
-      "baseName": {
-        "t": "string"
+    props: {
+      baseName: {
+        t: "string",
       },
-      "calendar": {
-        "t": "string",
-        "o": true
+      calendar: {
+        t: "string",
+        o: true,
       },
-      "caseFirst": {
-        "t": "top",
-        "o": true
+      caseFirst: {
+        t: "top",
+        o: true,
       },
-      "collation": {
-        "t": "string",
-        "o": true
+      collation: {
+        t: "string",
+        o: true,
       },
-      "hourCycle": {
-        "t": "top",
-        "o": true
+      hourCycle: {
+        t: "top",
+        o: true,
       },
-      "language": {
-        "t": "string"
+      language: {
+        t: "string",
       },
-      "numberingSystem": {
-        "t": "string",
-        "o": true
+      numberingSystem: {
+        t: "string",
+        o: true,
       },
-      "numeric": {
-        "t": "boolean",
-        "o": true
+      numeric: {
+        t: "boolean",
+        o: true,
       },
-      "region": {
-        "t": "string",
-        "o": true
+      region: {
+        t: "string",
+        o: true,
       },
-      "script": {
-        "t": "string",
-        "o": true
-      }
+      script: {
+        t: "string",
+        o: true,
+      },
     },
-    "methods": {
-      "maximize": {
-        "r": "top"
+    methods: {
+      maximize: {
+        r: "top",
       },
-      "minimize": {
-        "r": "top"
+      minimize: {
+        r: "top",
       },
-      "toString": {
-        "r": "top"
-      }
-    }
+      toString: {
+        r: "top",
+      },
+    },
   },
   "NodeJS.Process": {
-    "props": {
-      "stdout": {
-        "t": "top"
+    props: {
+      stdout: {
+        t: "top",
       },
-      "stderr": {
-        "t": "top"
+      stderr: {
+        t: "top",
       },
-      "stdin": {
-        "t": "top"
+      stdin: {
+        t: "top",
       },
-      "argv": {
-        "t": "object"
+      argv: {
+        t: "object",
       },
-      "argv0": {
-        "t": "string"
+      argv0: {
+        t: "string",
       },
-      "execArgv": {
-        "t": "object"
+      execArgv: {
+        t: "object",
       },
-      "execPath": {
-        "t": "string"
+      execPath: {
+        t: "string",
       },
-      "debugPort": {
-        "t": "number"
+      debugPort: {
+        t: "number",
       },
-      "env": {
-        "t": "object",
-        "s": "NodeJS.ProcessEnv"
+      env: {
+        t: "object",
+        s: "NodeJS.ProcessEnv",
       },
-      "exitCode": {
-        "t": "top"
+      exitCode: {
+        t: "top",
       },
-      "finalization": {
-        "t": "object"
+      finalization: {
+        t: "object",
       },
-      "sourceMapsEnabled": {
-        "t": "boolean"
+      sourceMapsEnabled: {
+        t: "boolean",
       },
-      "version": {
-        "t": "string"
+      version: {
+        t: "string",
       },
-      "versions": {
-        "t": "top"
+      versions: {
+        t: "top",
       },
-      "config": {
-        "t": "top"
+      config: {
+        t: "top",
       },
-      "pid": {
-        "t": "number"
+      pid: {
+        t: "number",
       },
-      "ppid": {
-        "t": "number"
+      ppid: {
+        t: "number",
       },
-      "title": {
-        "t": "string"
+      title: {
+        t: "string",
       },
-      "arch": {
-        "t": "top"
+      arch: {
+        t: "top",
       },
-      "platform": {
-        "t": "top"
+      platform: {
+        t: "top",
       },
-      "mainModule": {
-        "t": "top",
-        "o": true
+      mainModule: {
+        t: "top",
+        o: true,
       },
-      "memoryUsage": {
-        "t": "top"
+      memoryUsage: {
+        t: "top",
       },
-      "noDeprecation": {
-        "t": "boolean",
-        "o": true
+      noDeprecation: {
+        t: "boolean",
+        o: true,
       },
-      "permission": {
-        "t": "top"
+      permission: {
+        t: "top",
       },
-      "release": {
-        "t": "top"
+      release: {
+        t: "top",
       },
-      "features": {
-        "t": "top"
+      features: {
+        t: "top",
       },
-      "traceProcessWarnings": {
-        "t": "boolean"
+      traceProcessWarnings: {
+        t: "boolean",
       },
-      "hrtime": {
-        "t": "top"
+      hrtime: {
+        t: "top",
       },
-      "channel": {
-        "t": "top",
-        "o": true
+      channel: {
+        t: "top",
+        o: true,
       },
-      "connected": {
-        "t": "boolean"
+      connected: {
+        t: "boolean",
       },
-      "allowedNodeEnvironmentFlags": {
-        "t": "top"
+      allowedNodeEnvironmentFlags: {
+        t: "top",
       },
-      "report": {
-        "t": "top"
+      report: {
+        t: "top",
       },
-      "throwDeprecation": {
-        "t": "boolean"
+      throwDeprecation: {
+        t: "boolean",
       },
-      "traceDeprecation": {
-        "t": "boolean"
-      }
+      traceDeprecation: {
+        t: "boolean",
+      },
     },
-    "methods": {
-      "abort": {
-        "r": "top"
+    methods: {
+      abort: {
+        r: "top",
       },
-      "addUncaughtExceptionCaptureCallback": {
-        "r": "undefined"
+      addUncaughtExceptionCaptureCallback: {
+        r: "undefined",
       },
-      "chdir": {
-        "r": "undefined"
+      chdir: {
+        r: "undefined",
       },
-      "cwd": {
-        "r": "string"
+      cwd: {
+        r: "string",
       },
-      "dlopen": {
-        "r": "undefined"
+      dlopen: {
+        r: "undefined",
       },
-      "emitWarning": {
-        "r": "undefined"
+      emitWarning: {
+        r: "undefined",
       },
-      "exit": {
-        "r": "top"
+      exit: {
+        r: "top",
       },
-      "getActiveResourcesInfo": {
-        "r": "object"
+      getActiveResourcesInfo: {
+        r: "object",
       },
-      "getBuiltinModule": {
-        "r": "object",
-        "o": true
+      getBuiltinModule: {
+        r: "object",
+        o: true,
       },
-      "getgid": {
-        "r": "number"
+      getgid: {
+        r: "number",
       },
-      "setgid": {
-        "r": "undefined"
+      setgid: {
+        r: "undefined",
       },
-      "getuid": {
-        "r": "number"
+      getuid: {
+        r: "number",
       },
-      "setuid": {
-        "r": "undefined"
+      setuid: {
+        r: "undefined",
       },
-      "geteuid": {
-        "r": "number"
+      geteuid: {
+        r: "number",
       },
-      "seteuid": {
-        "r": "undefined"
+      seteuid: {
+        r: "undefined",
       },
-      "getegid": {
-        "r": "number"
+      getegid: {
+        r: "number",
       },
-      "setegid": {
-        "r": "undefined"
+      setegid: {
+        r: "undefined",
       },
-      "getgroups": {
-        "r": "object"
+      getgroups: {
+        r: "object",
       },
-      "setgroups": {
-        "r": "undefined"
+      setgroups: {
+        r: "undefined",
       },
-      "setUncaughtExceptionCaptureCallback": {
-        "r": "undefined"
+      setUncaughtExceptionCaptureCallback: {
+        r: "undefined",
       },
-      "hasUncaughtExceptionCaptureCallback": {
-        "r": "boolean"
+      hasUncaughtExceptionCaptureCallback: {
+        r: "boolean",
       },
-      "setSourceMapsEnabled": {
-        "r": "undefined"
+      setSourceMapsEnabled: {
+        r: "undefined",
       },
-      "kill": {
-        "r": "boolean"
+      kill: {
+        r: "boolean",
       },
-      "loadEnvFile": {
-        "r": "undefined"
+      loadEnvFile: {
+        r: "undefined",
       },
-      "threadCpuUsage": {
-        "r": "top"
+      threadCpuUsage: {
+        r: "top",
       },
-      "constrainedMemory": {
-        "r": "number"
+      constrainedMemory: {
+        r: "number",
       },
-      "availableMemory": {
-        "r": "number"
+      availableMemory: {
+        r: "number",
       },
-      "cpuUsage": {
-        "r": "top"
+      cpuUsage: {
+        r: "top",
       },
-      "nextTick": {
-        "r": "undefined"
+      nextTick: {
+        r: "undefined",
       },
-      "umask": {
-        "r": "number"
+      umask: {
+        r: "number",
       },
-      "uptime": {
-        "r": "number"
+      uptime: {
+        r: "number",
       },
-      "send": {
-        "r": "boolean"
+      send: {
+        r: "boolean",
       },
-      "disconnect": {
-        "r": "undefined"
+      disconnect: {
+        r: "undefined",
       },
-      "resourceUsage": {
-        "r": "top"
+      resourceUsage: {
+        r: "top",
       },
-      "ref": {
-        "r": "undefined"
+      ref: {
+        r: "undefined",
       },
-      "unref": {
-        "r": "undefined"
+      unref: {
+        r: "undefined",
       },
-      "execve": {
-        "r": "top"
+      execve: {
+        r: "top",
       },
-      "addListener": {
-        "r": "object"
+      addListener: {
+        r: "object",
       },
-      "emit": {
-        "r": "boolean"
+      emit: {
+        r: "boolean",
       },
-      "listenerCount": {
-        "r": "number"
+      listenerCount: {
+        r: "number",
       },
-      "listeners": {
-        "r": "object"
+      listeners: {
+        r: "object",
       },
-      "off": {
-        "r": "object"
+      off: {
+        r: "object",
       },
-      "on": {
-        "r": "object"
+      on: {
+        r: "object",
       },
-      "prependListener": {
-        "r": "object"
+      prependListener: {
+        r: "object",
       },
-      "prependOnceListener": {
-        "r": "object"
+      prependOnceListener: {
+        r: "object",
       },
-      "rawListeners": {
-        "r": "object"
+      rawListeners: {
+        r: "object",
       },
-      "removeAllListeners": {
-        "r": "object"
+      removeAllListeners: {
+        r: "object",
       },
-      "removeListener": {
-        "r": "object"
-      }
-    }
+      removeListener: {
+        r: "object",
+      },
+    },
   },
   "NodeJS.ProcessEnv": {
-    "index": {
-      "t": "string",
-      "o": true
-    }
-  },
-  "NodeModule": {
-    "props": {
-      "children": {
-        "t": "object"
-      },
-      "exports": {
-        "t": "top"
-      },
-      "filename": {
-        "t": "string"
-      },
-      "id": {
-        "t": "string"
-      },
-      "isPreloading": {
-        "t": "boolean"
-      },
-      "loaded": {
-        "t": "boolean"
-      },
-      "parent": {
-        "t": "top",
-        "n": true,
-        "o": true
-      },
-      "path": {
-        "t": "string"
-      },
-      "paths": {
-        "t": "object"
-      }
+    index: {
+      t: "string",
+      o: true,
     },
-    "methods": {
-      "require": {
-        "r": "top"
-      }
-    }
   },
-  "NodeRequire": {
-    "props": {
-      "cache": {
-        "t": "object"
+  NodeModule: {
+    props: {
+      children: {
+        t: "object",
       },
-      "extensions": {
-        "t": "top"
+      exports: {
+        t: "top",
       },
-      "main": {
-        "t": "top",
-        "o": true
+      filename: {
+        t: "string",
       },
-      "resolve": {
-        "t": "object"
-      }
+      id: {
+        t: "string",
+      },
+      isPreloading: {
+        t: "boolean",
+      },
+      loaded: {
+        t: "boolean",
+      },
+      parent: {
+        t: "top",
+        n: true,
+        o: true,
+      },
+      path: {
+        t: "string",
+      },
+      paths: {
+        t: "object",
+      },
     },
-    "call": {
-      "r": "top"
-    }
+    methods: {
+      require: {
+        r: "top",
+      },
+    },
+  },
+  NodeRequire: {
+    props: {
+      cache: {
+        t: "object",
+      },
+      extensions: {
+        t: "top",
+      },
+      main: {
+        t: "top",
+        o: true,
+      },
+      resolve: {
+        t: "object",
+      },
+    },
+    call: {
+      r: "top",
+    },
+  },
+  Buffer: {
+    methods: {
+      write: {
+        r: "number",
+      },
+      toString: {
+        r: "string",
+      },
+      toJSON: {
+        r: "object",
+      },
+      equals: {
+        r: "boolean",
+      },
+      compare: {
+        r: "top",
+      },
+      copy: {
+        r: "number",
+      },
+      writeBigInt64BE: {
+        r: "number",
+      },
+      writeBigInt64LE: {
+        r: "number",
+      },
+      writeBigUInt64BE: {
+        r: "number",
+      },
+      writeBigUint64BE: {
+        r: "number",
+      },
+      writeBigUInt64LE: {
+        r: "number",
+      },
+      writeBigUint64LE: {
+        r: "number",
+      },
+      writeUIntLE: {
+        r: "number",
+      },
+      writeUintLE: {
+        r: "number",
+      },
+      writeUIntBE: {
+        r: "number",
+      },
+      writeUintBE: {
+        r: "number",
+      },
+      writeIntLE: {
+        r: "number",
+      },
+      writeIntBE: {
+        r: "number",
+      },
+      readBigUInt64BE: {
+        r: "top",
+      },
+      readBigUint64BE: {
+        r: "top",
+      },
+      readBigUInt64LE: {
+        r: "top",
+      },
+      readBigUint64LE: {
+        r: "top",
+      },
+      readBigInt64BE: {
+        r: "top",
+      },
+      readBigInt64LE: {
+        r: "top",
+      },
+      readUIntLE: {
+        r: "number",
+      },
+      readUintLE: {
+        r: "number",
+      },
+      readUIntBE: {
+        r: "number",
+      },
+      readUintBE: {
+        r: "number",
+      },
+      readIntLE: {
+        r: "number",
+      },
+      readIntBE: {
+        r: "number",
+      },
+      readUInt8: {
+        r: "number",
+      },
+      readUint8: {
+        r: "number",
+      },
+      readUInt16LE: {
+        r: "number",
+      },
+      readUint16LE: {
+        r: "number",
+      },
+      readUInt16BE: {
+        r: "number",
+      },
+      readUint16BE: {
+        r: "number",
+      },
+      readUInt32LE: {
+        r: "number",
+      },
+      readUint32LE: {
+        r: "number",
+      },
+      readUInt32BE: {
+        r: "number",
+      },
+      readUint32BE: {
+        r: "number",
+      },
+      readInt8: {
+        r: "number",
+      },
+      readInt16LE: {
+        r: "number",
+      },
+      readInt16BE: {
+        r: "number",
+      },
+      readInt32LE: {
+        r: "number",
+      },
+      readInt32BE: {
+        r: "number",
+      },
+      readFloatLE: {
+        r: "number",
+      },
+      readFloatBE: {
+        r: "number",
+      },
+      readDoubleLE: {
+        r: "number",
+      },
+      readDoubleBE: {
+        r: "number",
+      },
+      reverse: {
+        r: "object",
+      },
+      swap16: {
+        r: "object",
+      },
+      swap32: {
+        r: "object",
+      },
+      swap64: {
+        r: "object",
+      },
+      writeUInt8: {
+        r: "number",
+      },
+      writeUint8: {
+        r: "number",
+      },
+      writeUInt16LE: {
+        r: "number",
+      },
+      writeUint16LE: {
+        r: "number",
+      },
+      writeUInt16BE: {
+        r: "number",
+      },
+      writeUint16BE: {
+        r: "number",
+      },
+      writeUInt32LE: {
+        r: "number",
+      },
+      writeUint32LE: {
+        r: "number",
+      },
+      writeUInt32BE: {
+        r: "number",
+      },
+      writeUint32BE: {
+        r: "number",
+      },
+      writeInt8: {
+        r: "number",
+      },
+      writeInt16LE: {
+        r: "number",
+      },
+      writeInt16BE: {
+        r: "number",
+      },
+      writeInt32LE: {
+        r: "number",
+      },
+      writeInt32BE: {
+        r: "number",
+      },
+      writeFloatLE: {
+        r: "number",
+      },
+      writeFloatBE: {
+        r: "number",
+      },
+      writeDoubleLE: {
+        r: "number",
+      },
+      writeDoubleBE: {
+        r: "number",
+      },
+      fill: {
+        r: "object",
+      },
+      indexOf: {
+        r: "number",
+      },
+      lastIndexOf: {
+        r: "number",
+      },
+      includes: {
+        r: "boolean",
+      },
+    },
+  },
+  BufferConstructor: {
+    props: {
+      poolSize: {
+        t: "number",
+      },
+    },
+    methods: {
+      isBuffer: {
+        r: "top",
+      },
+      isEncoding: {
+        r: "top",
+      },
+      byteLength: {
+        r: "number",
+      },
+      compare: {
+        r: "top",
+      },
+    },
   },
   "node:path": {
-    "props": {
-      "sep": {
-        "t": "string"
+    props: {
+      sep: {
+        t: "string",
       },
-      "delimiter": {
-        "t": "string"
-      }
+      delimiter: {
+        t: "string",
+      },
     },
-    "methods": {
-      "normalize": {
-        "r": "string"
+    methods: {
+      normalize: {
+        r: "string",
       },
-      "join": {
-        "r": "string"
+      join: {
+        r: "string",
       },
-      "resolve": {
-        "r": "string"
+      resolve: {
+        r: "string",
       },
-      "matchesGlob": {
-        "r": "boolean"
+      matchesGlob: {
+        r: "boolean",
       },
-      "isAbsolute": {
-        "r": "boolean"
+      isAbsolute: {
+        r: "boolean",
       },
-      "relative": {
-        "r": "string"
+      relative: {
+        r: "string",
       },
-      "dirname": {
-        "r": "string"
+      dirname: {
+        r: "string",
       },
-      "basename": {
-        "r": "string"
+      basename: {
+        r: "string",
       },
-      "extname": {
-        "r": "string"
+      extname: {
+        r: "string",
       },
-      "parse": {
-        "r": "top"
+      parse: {
+        r: "top",
       },
-      "format": {
-        "r": "string"
+      format: {
+        r: "string",
       },
-      "toNamespacedPath": {
-        "r": "string"
-      }
-    }
+      toNamespacedPath: {
+        r: "string",
+      },
+    },
   },
   "node:os": {
-    "props": {
-      "devNull": {
-        "t": "string"
+    props: {
+      devNull: {
+        t: "string",
       },
-      "EOL": {
-        "t": "string"
-      }
+      EOL: {
+        t: "string",
+      },
     },
-    "methods": {
-      "hostname": {
-        "r": "string"
+    methods: {
+      hostname: {
+        r: "string",
       },
-      "loadavg": {
-        "r": "object"
+      loadavg: {
+        r: "object",
       },
-      "uptime": {
-        "r": "number"
+      uptime: {
+        r: "number",
       },
-      "freemem": {
-        "r": "number"
+      freemem: {
+        r: "number",
       },
-      "totalmem": {
-        "r": "number"
+      totalmem: {
+        r: "number",
       },
-      "cpus": {
-        "r": "object"
+      cpus: {
+        r: "object",
       },
-      "availableParallelism": {
-        "r": "number"
+      availableParallelism: {
+        r: "number",
       },
-      "type": {
-        "r": "string"
+      type: {
+        r: "string",
       },
-      "release": {
-        "r": "string"
+      release: {
+        r: "string",
       },
-      "networkInterfaces": {
-        "r": "object"
+      networkInterfaces: {
+        r: "object",
       },
-      "homedir": {
-        "r": "string"
+      homedir: {
+        r: "string",
       },
-      "userInfo": {
-        "r": "top"
+      userInfo: {
+        r: "top",
       },
-      "arch": {
-        "r": "string"
+      arch: {
+        r: "string",
       },
-      "version": {
-        "r": "string"
+      version: {
+        r: "string",
       },
-      "platform": {
-        "r": "string"
+      platform: {
+        r: "string",
       },
-      "machine": {
-        "r": "string"
+      machine: {
+        r: "string",
       },
-      "tmpdir": {
-        "r": "string"
+      tmpdir: {
+        r: "string",
       },
-      "endianness": {
-        "r": "string"
+      endianness: {
+        r: "string",
       },
-      "getPriority": {
-        "r": "number"
+      getPriority: {
+        r: "number",
       },
-      "setPriority": {
-        "r": "undefined"
-      }
-    }
+      setPriority: {
+        r: "undefined",
+      },
+    },
   },
   "node:url": {
-    "props": {
-      "URL": {
-        "t": "object"
+    props: {
+      URL: {
+        t: "object",
       },
-      "URLPattern": {
-        "t": "object"
+      URLPattern: {
+        t: "object",
       },
-      "URLSearchParams": {
-        "t": "object"
-      }
+      URLSearchParams: {
+        t: "object",
+      },
     },
-    "methods": {
-      "parse": {
-        "r": "top"
+    methods: {
+      parse: {
+        r: "top",
       },
-      "format": {
-        "r": "string"
+      format: {
+        r: "string",
       },
-      "resolve": {
-        "r": "string"
+      resolve: {
+        r: "string",
       },
-      "domainToASCII": {
-        "r": "string"
+      domainToASCII: {
+        r: "string",
       },
-      "domainToUnicode": {
-        "r": "string"
+      domainToUnicode: {
+        r: "string",
       },
-      "fileURLToPath": {
-        "r": "string"
+      fileURLToPath: {
+        r: "string",
       },
-      "fileURLToPathBuffer": {
-        "r": "top"
+      fileURLToPathBuffer: {
+        r: "top",
       },
-      "pathToFileURL": {
-        "r": "object",
-        "s": "URL"
+      pathToFileURL: {
+        r: "object",
+        s: "URL",
       },
-      "urlToHttpOptions": {
-        "r": "top"
-      }
-    }
+      urlToHttpOptions: {
+        r: "top",
+      },
+    },
   },
   "node:util": {
-    "props": {
-      "custom": {
-        "t": "top"
+    props: {
+      custom: {
+        t: "top",
       },
-      "colors": {
-        "t": "top"
+      colors: {
+        t: "top",
       },
-      "styles": {
-        "t": "top"
+      styles: {
+        t: "top",
       },
-      "defaultOptions": {
-        "t": "top"
+      defaultOptions: {
+        t: "top",
       },
-      "replDefaults": {
-        "t": "top"
+      replDefaults: {
+        t: "top",
       },
-      "TextDecoder": {
-        "t": "object"
+      TextDecoder: {
+        t: "object",
       },
-      "TextEncoder": {
-        "t": "object"
-      }
+      TextEncoder: {
+        t: "object",
+      },
     },
-    "methods": {
-      "diff": {
-        "r": "object"
+    methods: {
+      diff: {
+        r: "object",
       },
-      "format": {
-        "r": "string"
+      format: {
+        r: "string",
       },
-      "formatWithOptions": {
-        "r": "string"
+      formatWithOptions: {
+        r: "string",
       },
-      "getCallSites": {
-        "r": "object"
+      getCallSites: {
+        r: "object",
       },
-      "getSystemErrorName": {
-        "r": "string"
+      getSystemErrorName: {
+        r: "string",
       },
-      "setTraceSigInt": {
-        "r": "undefined"
+      setTraceSigInt: {
+        r: "undefined",
       },
-      "getSystemErrorMap": {
-        "r": "top"
+      getSystemErrorMap: {
+        r: "top",
       },
-      "getSystemErrorMessage": {
-        "r": "string"
+      getSystemErrorMessage: {
+        r: "string",
       },
-      "toUSVString": {
-        "r": "string"
+      toUSVString: {
+        r: "string",
       },
-      "transferableAbortController": {
-        "r": "object",
-        "s": "AbortController"
+      transferableAbortController: {
+        r: "object",
+        s: "AbortController",
       },
-      "transferableAbortSignal": {
-        "r": "object",
-        "s": "AbortSignal"
+      transferableAbortSignal: {
+        r: "object",
+        s: "AbortSignal",
       },
-      "aborted": {
-        "r": "object"
+      aborted: {
+        r: "object",
       },
-      "inspect": {
-        "r": "string"
+      inspect: {
+        r: "string",
       },
-      "isArray": {
-        "r": "top"
+      isArray: {
+        r: "top",
       },
-      "inherits": {
-        "r": "undefined"
+      inherits: {
+        r: "undefined",
       },
-      "convertProcessSignalToExitCode": {
-        "r": "number"
+      convertProcessSignalToExitCode: {
+        r: "number",
       },
-      "debuglog": {
-        "r": "top"
+      debuglog: {
+        r: "top",
       },
-      "deprecate": {
-        "r": "top"
+      deprecate: {
+        r: "top",
       },
-      "isDeepStrictEqual": {
-        "r": "boolean"
+      isDeepStrictEqual: {
+        r: "boolean",
       },
-      "stripVTControlCharacters": {
-        "r": "string"
+      stripVTControlCharacters: {
+        r: "string",
       },
-      "callbackify": {
-        "r": "function"
+      callbackify: {
+        r: "function",
       },
-      "promisify": {
-        "r": "top"
+      promisify: {
+        r: "top",
       },
-      "parseEnv": {
-        "r": "object"
+      parseEnv: {
+        r: "object",
       },
-      "styleText": {
-        "r": "string"
+      styleText: {
+        r: "string",
       },
-      "parseArgs": {
-        "r": "top"
-      }
-    }
+      parseArgs: {
+        r: "top",
+      },
+    },
   },
-  "Intl": {
-    "props": {
-      "Collator": {
-        "t": "constructor",
-        "s": "Intl.Collator"
+  Intl: {
+    props: {
+      Collator: {
+        t: "constructor",
+        s: "Intl.Collator",
       },
-      "NumberFormat": {
-        "t": "constructor",
-        "s": "Intl.NumberFormat"
+      NumberFormat: {
+        t: "constructor",
+        s: "Intl.NumberFormat",
       },
-      "DateTimeFormat": {
-        "t": "constructor",
-        "s": "Intl.DateTimeFormat"
+      DateTimeFormat: {
+        t: "constructor",
+        s: "Intl.DateTimeFormat",
       },
-      "PluralRules": {
-        "t": "constructor",
-        "s": "Intl.PluralRules"
+      PluralRules: {
+        t: "constructor",
+        s: "Intl.PluralRules",
       },
-      "RelativeTimeFormat": {
-        "t": "constructor",
-        "s": "Intl.RelativeTimeFormat"
+      RelativeTimeFormat: {
+        t: "constructor",
+        s: "Intl.RelativeTimeFormat",
       },
-      "ListFormat": {
-        "t": "constructor",
-        "s": "Intl.ListFormat"
+      ListFormat: {
+        t: "constructor",
+        s: "Intl.ListFormat",
       },
-      "DisplayNames": {
-        "t": "constructor",
-        "s": "Intl.DisplayNames"
+      DisplayNames: {
+        t: "constructor",
+        s: "Intl.DisplayNames",
       },
-      "Segmenter": {
-        "t": "constructor",
-        "s": "Intl.Segmenter"
+      Segmenter: {
+        t: "constructor",
+        s: "Intl.Segmenter",
       },
-      "Locale": {
-        "t": "constructor",
-        "s": "Intl.Locale"
-      }
+      Locale: {
+        t: "constructor",
+        s: "Intl.Locale",
+      },
     },
-    "methods": {
-      "getCanonicalLocales": {
-        "r": "object"
+    methods: {
+      getCanonicalLocales: {
+        r: "object",
       },
-      "supportedValuesOf": {
-        "r": "object"
-      }
-    }
-  }
+      supportedValuesOf: {
+        r: "object",
+      },
+    },
+  },
 };
 
 export const GeneratedDOMGlobals: { +[string]: ModelGlobalSpec } = {
-  "window": {
-    "k": "var",
-    "t": "object",
-    "s": "Window"
-  },
-  "self": {
-    "k": "var",
-    "t": "object",
-    "s": "Window"
-  },
-  "top": {
-    "k": "var",
-    "t": "object",
-    "s": "Window"
-  },
-  "parent": {
-    "k": "var",
-    "t": "object",
-    "s": "Window"
-  },
-  "frames": {
-    "k": "var",
-    "t": "object",
-    "s": "Window"
-  },
-  "document": {
-    "k": "var",
-    "t": "object",
-    "s": "Document"
-  },
-  "navigator": {
-    "k": "var",
-    "t": "object",
-    "s": "Navigator"
-  },
-  "location": {
-    "k": "var",
-    "t": "object",
-    "s": "Location"
-  },
-  "history": {
-    "k": "var",
-    "t": "object",
-    "s": "History"
-  },
-  "localStorage": {
-    "k": "var",
-    "t": "object",
-    "s": "Storage"
-  },
-  "sessionStorage": {
-    "k": "var",
-    "t": "object",
-    "s": "Storage"
-  },
-  "screen": {
-    "k": "var",
-    "t": "object",
-    "s": "Screen"
-  },
-  "performance": {
-    "k": "var",
-    "t": "object",
-    "s": "Performance"
-  },
-  "crypto": {
-    "k": "var",
-    "t": "object",
-    "s": "Crypto"
-  },
-  "customElements": {
-    "k": "var",
-    "t": "object"
-  },
-  "visualViewport": {
-    "k": "var",
-    "t": "object",
-    "n": true
-  },
-  "devicePixelRatio": {
-    "k": "var",
-    "t": "number"
-  },
-  "innerWidth": {
-    "k": "var",
-    "t": "number"
-  },
-  "innerHeight": {
-    "k": "var",
-    "t": "number"
-  },
-  "outerWidth": {
-    "k": "var",
-    "t": "number"
-  },
-  "outerHeight": {
-    "k": "var",
-    "t": "number"
-  },
-  "scrollX": {
-    "k": "var",
-    "t": "number"
-  },
-  "scrollY": {
-    "k": "var",
-    "t": "number"
-  },
-  "pageXOffset": {
-    "k": "var",
-    "t": "number"
-  },
-  "pageYOffset": {
-    "k": "var",
-    "t": "number"
-  },
-  "origin": {
-    "k": "var",
-    "t": "string"
-  },
-  "isSecureContext": {
-    "k": "var",
-    "t": "boolean"
-  },
-  "name": {
-    "k": "var",
-    "t": "undefined"
-  },
-  "closed": {
-    "k": "var",
-    "t": "boolean"
-  },
-  "fetch": {
-    "k": "fn",
-    "r": "object"
-  },
-  "requestAnimationFrame": {
-    "k": "asyncFn",
-    "r": "number"
-  },
-  "cancelAnimationFrame": {
-    "k": "asyncFn",
-    "r": "undefined"
-  },
-  "requestIdleCallback": {
-    "k": "asyncFn",
-    "r": "number"
-  },
-  "cancelIdleCallback": {
-    "k": "asyncFn",
-    "r": "undefined"
-  },
-  "queueMicrotask": {
-    "k": "asyncFn",
-    "r": "undefined"
-  },
-  "atob": {
-    "k": "fn",
-    "r": "string"
-  },
-  "btoa": {
-    "k": "fn",
-    "r": "string"
-  },
-  "structuredClone": {
-    "k": "fn",
-    "r": "top"
-  },
-  "getComputedStyle": {
-    "k": "fn",
-    "r": "object",
-    "s": "CSSStyleDeclaration"
-  },
-  "matchMedia": {
-    "k": "fn",
-    "r": "object",
-    "s": "MediaQueryList"
-  },
-  "addEventListener": {
-    "k": "fn",
-    "r": "undefined"
-  },
-  "removeEventListener": {
-    "k": "fn",
-    "r": "undefined"
-  },
-  "dispatchEvent": {
-    "k": "fn",
-    "r": "boolean"
-  },
-  "postMessage": {
-    "k": "fn",
-    "r": "undefined"
-  },
-  "alert": {
-    "k": "fn",
-    "r": "undefined"
-  },
-  "confirm": {
-    "k": "fn",
-    "r": "boolean"
-  },
-  "prompt": {
-    "k": "fn",
-    "r": "string",
-    "n": true
-  },
-  "open": {
-    "k": "fn",
-    "r": "object",
-    "s": "Window",
-    "n": true
+  window: {
+    k: "var",
+    t: "object",
+    s: "Window",
+  },
+  self: {
+    k: "var",
+    t: "object",
+    s: "Window",
+  },
+  top: {
+    k: "var",
+    t: "object",
+    s: "Window",
+  },
+  parent: {
+    k: "var",
+    t: "object",
+    s: "Window",
+  },
+  frames: {
+    k: "var",
+    t: "object",
+    s: "Window",
+  },
+  document: {
+    k: "var",
+    t: "object",
+    s: "Document",
+  },
+  navigator: {
+    k: "var",
+    t: "object",
+    s: "Navigator",
+  },
+  location: {
+    k: "var",
+    t: "object",
+    s: "Location",
+  },
+  history: {
+    k: "var",
+    t: "object",
+    s: "History",
+  },
+  localStorage: {
+    k: "var",
+    t: "object",
+    s: "Storage",
+  },
+  sessionStorage: {
+    k: "var",
+    t: "object",
+    s: "Storage",
+  },
+  screen: {
+    k: "var",
+    t: "object",
+    s: "Screen",
+  },
+  performance: {
+    k: "var",
+    t: "object",
+    s: "Performance",
+  },
+  crypto: {
+    k: "var",
+    t: "object",
+    s: "Crypto",
+  },
+  customElements: {
+    k: "var",
+    t: "object",
+  },
+  visualViewport: {
+    k: "var",
+    t: "object",
+    n: true,
+  },
+  devicePixelRatio: {
+    k: "var",
+    t: "number",
+  },
+  innerWidth: {
+    k: "var",
+    t: "number",
+  },
+  innerHeight: {
+    k: "var",
+    t: "number",
+  },
+  outerWidth: {
+    k: "var",
+    t: "number",
+  },
+  outerHeight: {
+    k: "var",
+    t: "number",
+  },
+  scrollX: {
+    k: "var",
+    t: "number",
+  },
+  scrollY: {
+    k: "var",
+    t: "number",
+  },
+  pageXOffset: {
+    k: "var",
+    t: "number",
+  },
+  pageYOffset: {
+    k: "var",
+    t: "number",
+  },
+  origin: {
+    k: "var",
+    t: "string",
+  },
+  isSecureContext: {
+    k: "var",
+    t: "boolean",
+  },
+  name: {
+    k: "var",
+    t: "undefined",
+  },
+  closed: {
+    k: "var",
+    t: "boolean",
+  },
+  fetch: {
+    k: "fn",
+    r: "object",
+  },
+  requestAnimationFrame: {
+    k: "asyncFn",
+    r: "number",
+  },
+  cancelAnimationFrame: {
+    k: "asyncFn",
+    r: "undefined",
+  },
+  requestIdleCallback: {
+    k: "asyncFn",
+    r: "number",
+  },
+  cancelIdleCallback: {
+    k: "asyncFn",
+    r: "undefined",
+  },
+  queueMicrotask: {
+    k: "asyncFn",
+    r: "undefined",
+  },
+  atob: {
+    k: "fn",
+    r: "string",
+  },
+  btoa: {
+    k: "fn",
+    r: "string",
+  },
+  structuredClone: {
+    k: "fn",
+    r: "top",
+  },
+  getComputedStyle: {
+    k: "fn",
+    r: "object",
+    s: "CSSStyleDeclaration",
+  },
+  matchMedia: {
+    k: "fn",
+    r: "object",
+    s: "MediaQueryList",
+  },
+  addEventListener: {
+    k: "fn",
+    r: "undefined",
+  },
+  removeEventListener: {
+    k: "fn",
+    r: "undefined",
+  },
+  dispatchEvent: {
+    k: "fn",
+    r: "boolean",
+  },
+  postMessage: {
+    k: "fn",
+    r: "undefined",
+  },
+  alert: {
+    k: "fn",
+    r: "undefined",
+  },
+  confirm: {
+    k: "fn",
+    r: "boolean",
+  },
+  prompt: {
+    k: "fn",
+    r: "string",
+    n: true,
+  },
+  open: {
+    k: "fn",
+    r: "object",
+    s: "Window",
+    n: true,
   },
-  "close": {
-    "k": "fn",
-    "r": "undefined"
+  close: {
+    k: "fn",
+    r: "undefined",
   },
-  "focus": {
-    "k": "fn",
-    "r": "undefined"
+  focus: {
+    k: "fn",
+    r: "undefined",
   },
-  "blur": {
-    "k": "fn",
-    "r": "undefined"
+  blur: {
+    k: "fn",
+    r: "undefined",
   },
-  "scroll": {
-    "k": "fn",
-    "r": "undefined"
+  scroll: {
+    k: "fn",
+    r: "undefined",
   },
-  "scrollTo": {
-    "k": "fn",
-    "r": "undefined"
+  scrollTo: {
+    k: "fn",
+    r: "undefined",
   },
-  "scrollBy": {
-    "k": "fn",
-    "r": "undefined"
+  scrollBy: {
+    k: "fn",
+    r: "undefined",
   },
-  "HTMLElement": {
-    "k": "ctor",
-    "s": "HTMLElement"
+  HTMLElement: {
+    k: "ctor",
+    s: "HTMLElement",
   },
-  "Element": {
-    "k": "ctor",
-    "s": "Element"
+  Element: {
+    k: "ctor",
+    s: "Element",
   },
-  "Node": {
-    "k": "ctor",
-    "s": "Node"
+  Node: {
+    k: "ctor",
+    s: "Node",
   },
-  "Document": {
-    "k": "ctor",
-    "s": "Document"
+  Document: {
+    k: "ctor",
+    s: "Document",
   },
-  "DocumentFragment": {
-    "k": "ctor",
-    "s": "DocumentFragment"
+  DocumentFragment: {
+    k: "ctor",
+    s: "DocumentFragment",
   },
-  "Text": {
-    "k": "ctor",
-    "s": "Text"
+  Text: {
+    k: "ctor",
+    s: "Text",
   },
-  "Comment": {
-    "k": "ctor",
-    "s": "Comment"
+  Comment: {
+    k: "ctor",
+    s: "Comment",
   },
-  "Event": {
-    "k": "ctor",
-    "s": "Event"
+  Event: {
+    k: "ctor",
+    s: "Event",
   },
-  "CustomEvent": {
-    "k": "ctor",
-    "s": "CustomEvent"
+  CustomEvent: {
+    k: "ctor",
+    s: "CustomEvent",
   },
-  "UIEvent": {
-    "k": "ctor",
-    "s": "UIEvent"
+  UIEvent: {
+    k: "ctor",
+    s: "UIEvent",
   },
-  "MouseEvent": {
-    "k": "ctor",
-    "s": "MouseEvent"
+  MouseEvent: {
+    k: "ctor",
+    s: "MouseEvent",
   },
-  "KeyboardEvent": {
-    "k": "ctor",
-    "s": "KeyboardEvent"
+  KeyboardEvent: {
+    k: "ctor",
+    s: "KeyboardEvent",
   },
-  "FocusEvent": {
-    "k": "ctor",
-    "s": "FocusEvent"
+  FocusEvent: {
+    k: "ctor",
+    s: "FocusEvent",
   },
-  "InputEvent": {
-    "k": "ctor",
-    "s": "InputEvent"
+  InputEvent: {
+    k: "ctor",
+    s: "InputEvent",
   },
-  "AnimationEvent": {
-    "k": "ctor"
+  AnimationEvent: {
+    k: "ctor",
   },
-  "TransitionEvent": {
-    "k": "ctor"
+  TransitionEvent: {
+    k: "ctor",
   },
-  "CompositionEvent": {
-    "k": "ctor"
+  CompositionEvent: {
+    k: "ctor",
   },
-  "TouchEvent": {
-    "k": "ctor"
+  TouchEvent: {
+    k: "ctor",
   },
-  "PointerEvent": {
-    "k": "ctor"
+  PointerEvent: {
+    k: "ctor",
   },
-  "WheelEvent": {
-    "k": "ctor"
+  WheelEvent: {
+    k: "ctor",
   },
-  "ClipboardEvent": {
-    "k": "ctor"
+  ClipboardEvent: {
+    k: "ctor",
   },
-  "MessageChannel": {
-    "k": "ctor",
-    "s": "MessageChannel"
+  MessageChannel: {
+    k: "ctor",
+    s: "MessageChannel",
   },
-  "MessagePort": {
-    "k": "ctor",
-    "s": "MessagePort"
+  MessagePort: {
+    k: "ctor",
+    s: "MessagePort",
   },
-  "MutationObserver": {
-    "k": "ctor",
-    "s": "MutationObserver"
+  MutationObserver: {
+    k: "ctor",
+    s: "MutationObserver",
   },
-  "IntersectionObserver": {
-    "k": "ctor",
-    "s": "IntersectionObserver"
+  IntersectionObserver: {
+    k: "ctor",
+    s: "IntersectionObserver",
   },
-  "ResizeObserver": {
-    "k": "ctor",
-    "s": "ResizeObserver"
+  ResizeObserver: {
+    k: "ctor",
+    s: "ResizeObserver",
   },
-  "PerformanceObserver": {
-    "k": "ctor"
+  PerformanceObserver: {
+    k: "ctor",
   },
-  "URL": {
-    "k": "ctor",
-    "s": "URL"
+  URL: {
+    k: "ctor",
+    s: "URL",
   },
-  "URLSearchParams": {
-    "k": "ctor",
-    "s": "URLSearchParams"
+  URLSearchParams: {
+    k: "ctor",
+    s: "URLSearchParams",
   },
-  "Headers": {
-    "k": "ctor",
-    "s": "Headers"
+  Headers: {
+    k: "ctor",
+    s: "Headers",
   },
-  "Request": {
-    "k": "ctor",
-    "s": "Request"
+  Request: {
+    k: "ctor",
+    s: "Request",
   },
-  "Response": {
-    "k": "ctor",
-    "s": "Response"
+  Response: {
+    k: "ctor",
+    s: "Response",
   },
-  "AbortController": {
-    "k": "ctor",
-    "s": "AbortController"
+  AbortController: {
+    k: "ctor",
+    s: "AbortController",
   },
-  "AbortSignal": {
-    "k": "ctor",
-    "s": "AbortSignal"
+  AbortSignal: {
+    k: "ctor",
+    s: "AbortSignal",
   },
-  "Blob": {
-    "k": "ctor",
-    "s": "Blob"
+  Blob: {
+    k: "ctor",
+    s: "Blob",
   },
-  "File": {
-    "k": "ctor",
-    "s": "File"
+  File: {
+    k: "ctor",
+    s: "File",
   },
-  "FileReader": {
-    "k": "ctor",
-    "s": "FileReader"
+  FileReader: {
+    k: "ctor",
+    s: "FileReader",
   },
-  "FormData": {
-    "k": "ctor",
-    "s": "FormData"
+  FormData: {
+    k: "ctor",
+    s: "FormData",
   },
-  "XMLHttpRequest": {
-    "k": "ctor",
-    "s": "XMLHttpRequest"
+  XMLHttpRequest: {
+    k: "ctor",
+    s: "XMLHttpRequest",
   },
-  "WebSocket": {
-    "k": "ctor",
-    "s": "WebSocket"
+  WebSocket: {
+    k: "ctor",
+    s: "WebSocket",
   },
-  "Worker": {
-    "k": "ctor",
-    "s": "Worker"
+  Worker: {
+    k: "ctor",
+    s: "Worker",
   },
-  "TextEncoder": {
-    "k": "ctor",
-    "s": "TextEncoder"
+  TextEncoder: {
+    k: "ctor",
+    s: "TextEncoder",
   },
-  "TextDecoder": {
-    "k": "ctor",
-    "s": "TextDecoder"
+  TextDecoder: {
+    k: "ctor",
+    s: "TextDecoder",
   },
-  "Image": {
-    "k": "ctor"
+  Image: {
+    k: "ctor",
   },
-  "Audio": {
-    "k": "ctor"
+  Audio: {
+    k: "ctor",
   },
-  "Option": {
-    "k": "ctor"
+  Option: {
+    k: "ctor",
   },
-  "DOMParser": {
-    "k": "ctor"
+  DOMParser: {
+    k: "ctor",
   },
-  "XMLSerializer": {
-    "k": "ctor"
-  }
+  XMLSerializer: {
+    k: "ctor",
+  },
 };
 
 export const GeneratedNodeGlobals: { +[string]: ModelGlobalSpec } = {
-  "process": {
-    "k": "var",
-    "t": "object",
-    "s": "NodeJS.Process"
+  process: {
+    k: "var",
+    t: "object",
+    s: "NodeJS.Process",
   },
-  "module": {
-    "k": "var",
-    "t": "object",
-    "s": "NodeModule"
+  module: {
+    k: "var",
+    t: "object",
+    s: "NodeModule",
   },
-  "exports": {
-    "k": "var",
-    "t": "object"
+  exports: {
+    k: "var",
+    t: "object",
   },
-  "require": {
-    "k": "fn",
-    "r": "top",
-    "s": "NodeRequire"
+  require: {
+    k: "fn",
+    r: "top",
+    s: "NodeRequire",
   },
-  "__dirname": {
-    "k": "var",
-    "t": "string"
+  __dirname: {
+    k: "var",
+    t: "string",
   },
-  "__filename": {
-    "k": "var",
-    "t": "string"
+  __filename: {
+    k: "var",
+    t: "string",
   },
-  "Buffer": {
-    "k": "ctor",
-    "s": "Buffer"
+  Buffer: {
+    k: "ctor",
+    s: "Buffer",
   },
-  "setImmediate": {
-    "k": "asyncFn",
-    "r": "object"
+  setImmediate: {
+    k: "asyncFn",
+    r: "object",
   },
-  "clearImmediate": {
-    "k": "asyncFn",
-    "r": "undefined"
+  clearImmediate: {
+    k: "asyncFn",
+    r: "undefined",
   },
-  "queueMicrotask": {
-    "k": "asyncFn",
-    "r": "undefined"
-  }
+  queueMicrotask: {
+    k: "asyncFn",
+    r: "undefined",
+  },
 };
 
 export const GeneratedUMDGlobals: { +[string]: ModelGlobalSpec } = {
-  "Intl": {
-    "k": "var",
-    "t": "object",
-    "s": "Intl"
+  Intl: {
+    k: "var",
+    t: "object",
+    s: "Intl",
   },
-  "define": {
-    "k": "fn",
-    "r": "top"
+  define: {
+    k: "fn",
+    r: "top",
   },
-  "globalThis": {
-    "k": "var",
-    "t": "object",
-    "s": "Window"
-  }
+  globalThis: {
+    k: "var",
+    t: "object",
+    s: "Window",
+  },
 };
 
 export const GeneratedNodeModules: { +[string]: string } = {
-  "path": "node:path",
+  path: "node:path",
   "node:path": "node:path",
-  "os": "node:os",
+  os: "node:os",
   "node:os": "node:os",
-  "url": "node:url",
+  url: "node:url",
   "node:url": "node:url",
-  "util": "node:util",
-  "node:util": "node:util"
+  util: "node:util",
+  "node:util": "node:util",
 };

@@ -10,7 +10,6 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { FatalError } from "../../errors.js";
 import { AbstractValue, StringValue, ObjectValue, NumberValue } from "../../values/index.js";
 import { Placeholders } from "../../utils/PreludeGenerator.js";
 import { lookupTimezoneOffsetAssumption } from "../env/assumptions.js";
@@ -54,22 +53,16 @@ export default function(realm: Realm, obj: ObjectValue): void {
           let localTime = t - assumedOffset * msPerMinute;
           return new NumberValue(realm, computeFromLocalTime(t, localTime));
         }
-        return AbstractValue.createTemporalFromTemplate(
-          realm,
-          `(new global.Date(A)).${name}()`,
-          NumberValue,
-          [tv],
-          { isPure: true, skipInvariant: true }
-        );
+        return AbstractValue.createTemporalFromTemplate(realm, `(new global.Date(A)).${name}()`, NumberValue, [tv], {
+          isPure: true,
+          skipInvariant: true,
+        });
       }
       if (realm.useAbstractInterpretation && tv instanceof AbstractValue && !tv.mightNotBeNumber()) {
-        return AbstractValue.createTemporalFromTemplate(
-          realm,
-          `(new global.Date(A)).${name}()`,
-          NumberValue,
-          [tv],
-          { isPure: true, skipInvariant: true }
-        );
+        return AbstractValue.createTemporalFromTemplate(realm, `(new global.Date(A)).${name}()`, NumberValue, [tv], {
+          isPure: true,
+          skipInvariant: true,
+        });
       }
       let t = tv.throwIfNotConcreteNumber().value;
       if (isNaN(t)) return realm.intrinsics.NaN;
@@ -569,7 +562,14 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }
       let t = tv.throwIfNotConcreteNumber().value;
       let serializedArgs = passedArgs.map(a => a.serialize());
-      return new StringValue(realm, (new Date(t): any)[name](...serializedArgs));
+      let d = new Date(t);
+      let formatted =
+        name === "toLocaleDateString"
+          ? d.toLocaleDateString(...serializedArgs)
+          : name === "toLocaleTimeString"
+          ? d.toLocaleTimeString(...serializedArgs)
+          : d.toLocaleString(...serializedArgs);
+      return new StringValue(realm, formatted);
     });
   }
 
@@ -581,16 +581,14 @@ export default function(realm: Realm, obj: ObjectValue): void {
       }
       if (realm.useAbstractInterpretation && !realm.closedWorld) {
         if (tv instanceof AbstractValue && tv.mightNotBeNumber()) tv.throwIfNotConcreteNumber();
-        return AbstractValue.createTemporalFromTemplate(
-          realm,
-          `(new global.Date(A)).${name}()`,
-          StringValue,
-          [tv],
-          { isPure: true, skipInvariant: true }
-        );
+        return AbstractValue.createTemporalFromTemplate(realm, `(new global.Date(A)).${name}()`, StringValue, [tv], {
+          isPure: true,
+          skipInvariant: true,
+        });
       }
       let t = tv.throwIfNotConcreteNumber().value;
-      return new StringValue(realm, (new Date(t): any)[name]());
+      let d = new Date(t);
+      return new StringValue(realm, name === "toDateString" ? d.toDateString() : d.toTimeString());
     });
   }
 
@@ -600,7 +598,12 @@ export default function(realm: Realm, obj: ObjectValue): void {
   // ECMA262 20.3.4.36
   obj.defineNativeMethod("toISOString", 0, context => {
     let tv = thisTimeValue(realm, context);
-    if (realm.useAbstractInterpretation && realm.isInPureScope() && tv instanceof AbstractValue && !tv.mightNotBeNumber()) {
+    if (
+      realm.useAbstractInterpretation &&
+      realm.isInPureScope() &&
+      tv instanceof AbstractValue &&
+      !tv.mightNotBeNumber()
+    ) {
       return AbstractValue.createTemporalFromTemplate(realm, "(new global.Date(A)).toISOString()", StringValue, [tv], {
         skipInvariant: true,
       });

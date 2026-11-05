@@ -10,19 +10,68 @@
 /* @flow strict-local */
 
 import type { Realm } from "../../realm.js";
-import { NativeFunctionValue, UndefinedValue, StringValue, NullValue } from "../../values/index.js";
+import {
+  AbstractObjectValue,
+  AbstractValue,
+  FunctionValue,
+  NativeFunctionValue,
+  UndefinedValue,
+  StringValue,
+  NullValue,
+} from "../../values/index.js";
 import { IsArray } from "../../methods/is.js";
 import { Get } from "../../methods/get.js";
 import { To } from "../../singletons.js";
+import { isEnvironmentDerived } from "../env/models.js";
+import invariant from "../../invariant.js";
 
 export default function(realm: Realm): NativeFunctionValue {
   // ECMA262 22.1.3.30
-  return new NativeFunctionValue(
+  let toStringFn = new NativeFunctionValue(
     realm,
     "Object.prototype.toString",
     "toString",
     0,
     context => {
+      if (context instanceof AbstractValue) {
+        context = realm.simplifyAndRefineAbstractValue(context);
+      }
+      if (context instanceof AbstractValue && context.kind === "conditional" && isEnvironmentDerived(context)) {
+        let [cond, leftVal, rightVal] = context.args;
+        invariant(cond instanceof AbstractValue);
+        return realm.evaluateWithAbstractConditional(
+          cond,
+          () => realm.evaluateForEffects(() => toStringFn.$Call(leftVal, []), undefined, "ObjProtoToStringCond/1"),
+          () => realm.evaluateForEffects(() => toStringFn.$Call(rightVal, []), undefined, "ObjProtoToStringCond/2")
+        );
+      }
+      if (context instanceof AbstractValue && context.kind === "||" && isEnvironmentDerived(context)) {
+        let [leftVal, rightVal] = context.args;
+        invariant(leftVal instanceof AbstractValue);
+        return realm.evaluateWithAbstractConditional(
+          leftVal,
+          () => realm.evaluateForEffects(() => toStringFn.$Call(leftVal, []), undefined, "ObjProtoToStringOr/1"),
+          () => realm.evaluateForEffects(() => toStringFn.$Call(rightVal, []), undefined, "ObjProtoToStringOr/2")
+        );
+      }
+      if (
+        context instanceof AbstractObjectValue &&
+        context.isEnvironmentValue === true &&
+        context.getType() === FunctionValue &&
+        !context.mightBeNull() &&
+        !context.mightBeUndefined()
+      ) {
+        return new StringValue(realm, "[object Function]");
+      }
+      if (context instanceof AbstractValue && isEnvironmentDerived(context) && realm.generator !== undefined) {
+        return AbstractValue.createTemporalFromTemplate(
+          realm,
+          "global.Object.prototype.toString.call(A)",
+          StringValue,
+          [context],
+          { isPure: true, skipInvariant: true }
+        );
+      }
       // 1. If the this value is undefined, return "[object Undefined]".
       if (context instanceof UndefinedValue) return new StringValue(realm, "[object Undefined]");
 
@@ -78,4 +127,5 @@ export default function(realm: Realm): NativeFunctionValue {
     },
     false
   );
+  return toStringFn;
 }

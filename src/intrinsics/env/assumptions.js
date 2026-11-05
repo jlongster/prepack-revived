@@ -13,7 +13,14 @@ import type { Realm } from "../../realm.js";
 import type { SourceFile } from "../../types.js";
 import { BooleanValue, NumberValue, StringValue, Value } from "../../values/index.js";
 import * as t from "@babel/types";
-import type { BabelNodeExpression, BabelNodeFile, BabelNodeStatement } from "@babel/types";
+import type {
+  BabelNodeExpression,
+  BabelNodeFile,
+  BabelNodeIdentifier,
+  BabelNodeMemberExpression,
+  BabelNodeStatement,
+  BabelNodeUnaryExpression,
+} from "@babel/types";
 import { parse as babelParse } from "@babel/parser";
 import traverseFast from "../../utils/traverse-fast.js";
 import invariant from "../../invariant.js";
@@ -87,7 +94,10 @@ function rawToRealmValue(realm: Realm, raw: mixed): void | Value {
   return undefined;
 }
 
-function buildSafePathGuard(parts: Array<string>, leafCheck: BabelNodeExpression => BabelNodeExpression): BabelNodeExpression {
+function buildSafePathGuard(
+  parts: Array<string>,
+  leafCheck: BabelNodeExpression => BabelNodeExpression
+): BabelNodeExpression {
   invariant(parts.length >= 1);
   let root = parts[0];
   let checks: Array<BabelNodeExpression> = [
@@ -212,7 +222,11 @@ export function lookupValueAssumption(realm: Realm, envPath: string): void | Val
       recordGuard(
         realm,
         typeofKey,
-        t.binaryExpression("===", t.unaryExpression("typeof", t.identifier(envPath), true), t.stringLiteral("undefined"))
+        t.binaryExpression(
+          "===",
+          t.unaryExpression("typeof", t.identifier(envPath), true),
+          t.stringLiteral("undefined")
+        )
       );
       return realm.intrinsics.undefined;
     }
@@ -231,7 +245,10 @@ export function lookupTimezoneOffsetAssumption(realm: Realm, sampleTimestamp?: n
     const offNode = offset < 0 ? t.unaryExpression("-", t.numericLiteral(-offset)) : t.numericLiteral(offset);
     return t.binaryExpression(
       "===",
-      t.callExpression(t.memberExpression(t.newExpression(t.identifier("Date"), [tsNode]), t.identifier("getTimezoneOffset")), []),
+      t.callExpression(
+        t.memberExpression(t.newExpression(t.identifier("Date"), [tsNode]), t.identifier("getTimezoneOffset")),
+        []
+      ),
       offNode
     );
   };
@@ -308,11 +325,7 @@ export function wrapProgramWithAssumptionGuards(
     }
     let syncStmts = topVarNames.map(n =>
       t.expressionStatement(
-        t.assignmentExpression(
-          "=",
-          t.memberExpression(t.thisExpression(), t.identifier(n)),
-          t.identifier(n)
-        )
+        t.assignmentExpression("=", t.memberExpression(t.thisExpression(), t.identifier(n)), t.identifier(n))
       )
     );
     let fn = t.functionExpression(
@@ -332,7 +345,11 @@ export function wrapProgramWithAssumptionGuards(
         stmt.declarations.every(d => d.id.type === "Identifier" && hoistedLetNames.has(d.id.name))
       ) {
         let exprs = stmt.declarations.map(d =>
-          t.assignmentExpression("=", t.identifier(((d.id: any): BabelNodeIdentifier).name), d.init || t.unaryExpression("void", t.numericLiteral(0)))
+          t.assignmentExpression(
+            "=",
+            t.identifier(((d.id: any): BabelNodeIdentifier).name),
+            d.init || t.unaryExpression("void", t.numericLiteral(0))
+          )
         );
         return t.expressionStatement(exprs.length === 1 ? exprs[0] : t.sequenceExpression(exprs));
       }
@@ -357,34 +374,56 @@ export function profileEnvironment(
   let usesDate = false;
 
   traverseFast(ast, node => {
-    if (node.type === "UnaryExpression" && node.operator === "typeof" && node.argument.type === "Identifier") {
-      typeofIds.add(node.argument.name);
-    } else if (
-      node.type === "MemberExpression" &&
-      !node.computed &&
-      node.object.type === "MemberExpression" &&
-      !node.object.computed &&
-      node.object.object.type === "Identifier" &&
-      node.object.object.name === "process" &&
-      node.object.property.type === "Identifier" &&
-      node.object.property.name === "env" &&
-      node.property.type === "Identifier"
-    ) {
-      processEnvKeys.add(node.property.name);
-    } else if (node.type === "Identifier" && node.name === "Date") {
+    if (node.type === "UnaryExpression") {
+      let unary = ((node: any): BabelNodeUnaryExpression);
+      if (unary.operator === "typeof" && unary.argument.type === "Identifier") {
+        typeofIds.add(((unary.argument: any): BabelNodeIdentifier).name);
+      }
+    } else if (node.type === "MemberExpression") {
+      let mem = ((node: any): BabelNodeMemberExpression);
+      if (!mem.computed && mem.object.type === "MemberExpression" && mem.property.type === "Identifier") {
+        let inner = ((mem.object: any): BabelNodeMemberExpression);
+        if (
+          !inner.computed &&
+          inner.object.type === "Identifier" &&
+          ((inner.object: any): BabelNodeIdentifier).name === "process" &&
+          inner.property.type === "Identifier" &&
+          ((inner.property: any): BabelNodeIdentifier).name === "env"
+        ) {
+          processEnvKeys.add(((mem.property: any): BabelNodeIdentifier).name);
+        }
+      }
+    } else if (node.type === "Identifier" && ((node: any): BabelNodeIdentifier).name === "Date") {
       usesDate = true;
     }
     return false;
   });
 
-  let probeNames = new Set(["window", "document", "self", "global", "process", "module", "exports", "require", "define", "Intl"]);
+  let probeNames = new Set([
+    "window",
+    "document",
+    "self",
+    "global",
+    "process",
+    "module",
+    "exports",
+    "require",
+    "define",
+    "Intl",
+  ]);
   let assumptions: { [string]: mixed } = {};
   for (let name of typeofIds) {
     if (!probeNames.has(name)) continue;
     if (target === "node") {
       if (name === "window" || name === "document" || name === "self" || name === "define") {
         assumptions[`typeof ${name}`] = "undefined";
-      } else if (name === "global" || name === "process" || name === "module" || name === "exports" || name === "Intl") {
+      } else if (
+        name === "global" ||
+        name === "process" ||
+        name === "module" ||
+        name === "exports" ||
+        name === "Intl"
+      ) {
         assumptions[`typeof ${name}`] = "object";
       } else if (name === "require") {
         assumptions[`typeof ${name}`] = "function";
@@ -392,7 +431,13 @@ export function profileEnvironment(
     } else {
       if (name === "window" || name === "document" || name === "self" || name === "Intl") {
         assumptions[`typeof ${name}`] = "object";
-      } else if (name === "process" || name === "module" || name === "exports" || name === "require" || name === "define") {
+      } else if (
+        name === "process" ||
+        name === "module" ||
+        name === "exports" ||
+        name === "require" ||
+        name === "define"
+      ) {
         assumptions[`typeof ${name}`] = "undefined";
       }
     }

@@ -386,12 +386,13 @@ function run(
           break;
         case "profileEnv":
           arg = args.shift();
-          if (arg !== "node" && arg !== "browser") {
+          if (arg === "node" || arg === "browser") {
+            profileEnv = arg;
+            reproArguments.push("--profileEnv", profileEnv);
+          } else {
             console.error(`Unsupported profileEnv target: ${arg}`);
             process.exit(1);
           }
-          profileEnv = arg;
-          reproArguments.push("--profileEnv", profileEnv);
           break;
         case "help":
           const options = [

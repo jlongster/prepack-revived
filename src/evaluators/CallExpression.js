@@ -22,10 +22,12 @@ import {
   FunctionValue,
   IntegralValue,
   NativeFunctionValue,
+  NullValue,
   NumberValue,
   ObjectValue,
   StringValue,
   SymbolValue,
+  UndefinedValue,
   Value,
 } from "../values/index.js";
 import { Reference } from "../environment.js";
@@ -95,7 +97,7 @@ function evaluateReference(
     ref.base instanceof AbstractValue &&
     // TODO: what about ref.base conditionals that mightBeObjects?
     ref.base.mightNotBeObject() &&
-    realm.isInPureScope()
+    (realm.isInPureScope() || (ref.base.kind === "conditional" && isEnvironmentDerived(ref.base)))
   ) {
     let base = ref.base;
     if (base.kind === "conditional") {
@@ -166,6 +168,12 @@ function evaluateConditionalReferenceBase(
             );
             return evaluateReference(consequentRef, ast, strictCode, env, realm);
           }
+          if (
+            !realm.isInPureScope() &&
+            (consequentVal instanceof UndefinedValue || consequentVal instanceof NullValue)
+          ) {
+            throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
+          }
           return consequentVal;
         },
         null,
@@ -183,6 +191,9 @@ function evaluateConditionalReferenceBase(
               ref.thisValue
             );
             return evaluateReference(alternateRef, ast, strictCode, env, realm);
+          }
+          if (!realm.isInPureScope() && (alternateVal instanceof UndefinedValue || alternateVal instanceof NullValue)) {
+            throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "null or undefined");
           }
           return alternateVal;
         },
@@ -254,7 +265,8 @@ function generateRuntimeCall(
     }
   }
   if (isEnvCall) {
-    return createEnvironmentCallResult(realm, func, thisArg, propName, args, evalArgs);
+    let envThisArg = thisArg instanceof Value ? thisArg : undefined;
+    return createEnvironmentCallResult(realm, func, envThisArg, propName, args, evalArgs);
   }
   let resultType = (func instanceof AbstractObjectValue ? func.functionResultType : undefined) || Value;
   return AbstractValue.createTemporalFromBuildFunction(

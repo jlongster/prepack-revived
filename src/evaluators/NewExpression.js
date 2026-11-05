@@ -140,7 +140,8 @@ function createConstruct(
     invariant(result instanceof ObjectValue || result instanceof AbstractObjectValue);
     return result;
   }
-  if (constructor instanceof AbstractValue && constructor.isEnvironmentValue) {
+  if (constructor instanceof AbstractValue && constructor.isEnvironmentValue === true) {
+    let envConstructor: AbstractValue = constructor;
     let baseObj: void | Value;
     let propName: void | string;
     if (ref instanceof Reference && ref.base instanceof Value && typeof ref.referencedName === "string") {
@@ -152,13 +153,15 @@ function createConstruct(
     }
     if (realm.isInPureScope()) {
       for (let arg of argsList) Leak.value(realm, arg);
-      return realm.evaluateWithPossibleThrowCompletion(
-        () => constructEnvironmentObject(realm, constructor, argsList, baseObj, propName),
+      let constructed = realm.evaluateWithPossibleThrowCompletion(
+        () => constructEnvironmentObject(realm, envConstructor, argsList, baseObj, propName),
         TypesDomain.topVal,
         ValuesDomain.topVal
       );
+      invariant(constructed instanceof ObjectValue || constructed instanceof AbstractObjectValue);
+      return constructed;
     }
-    return constructEnvironmentObject(realm, constructor, argsList, baseObj, propName);
+    return constructEnvironmentObject(realm, envConstructor, argsList, baseObj, propName);
   }
   // 7. If IsConstructor(constructor) is false, throw a TypeError exception.
   if (IsConstructor(realm, constructor) === false) {

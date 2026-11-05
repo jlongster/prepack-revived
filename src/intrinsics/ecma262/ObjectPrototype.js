@@ -10,6 +10,7 @@
 /* @flow */
 
 import type { Realm } from "../../realm.js";
+import type { CallableObjectValue } from "../../types.js";
 import {
   AbstractValue,
   NativeFunctionValue,
@@ -171,8 +172,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
     if (!IsCallable(realm, getter)) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "getter must be a function");
     }
+    let callableGetter = ((getter: any): CallableObjectValue | AbstractValue);
     let desc = new PropertyDescriptor({
-      get: getter,
+      get: callableGetter,
       enumerable: true,
       configurable: true,
     });
@@ -187,8 +189,9 @@ export default function(realm: Realm, obj: ObjectValue): void {
     if (!IsCallable(realm, setter)) {
       throw realm.createErrorThrowCompletion(realm.intrinsics.TypeError, "setter must be a function");
     }
+    let callableSetter = ((setter: any): CallableObjectValue | AbstractValue);
     let desc = new PropertyDescriptor({
-      set: setter,
+      set: callableSetter,
       enumerable: true,
       configurable: true,
     });

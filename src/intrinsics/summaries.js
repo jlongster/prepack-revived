@@ -1396,7 +1396,7 @@ function stringSplit(realm: Realm, context: Value, args: Array<Value>): void | V
   let splitResult = residualize(realm, templateSource, ArrayValue, inputs, classifications, false);
   if (splitResult instanceof AbstractObjectValue) {
     splitResult.envElementType = StringValue;
-    if (context instanceof AbstractValue && context.isEnvironmentValue) {
+    if (context instanceof AbstractValue && context.isEnvironmentValue === true) {
       splitResult.isEnvironmentValue = true;
     }
   }

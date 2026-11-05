@@ -12,7 +12,16 @@
 import type { Realm } from "../../realm.js";
 import { AbstractValue, NativeFunctionValue, NumberValue, StringValue, ObjectValue } from "../../values/index.js";
 import { Create, To } from "../../singletons.js";
-import { MakeTime, MakeDate, MakeDay, TimeClip, UTC, ToDateString, thisTimeValue, msPerMinute } from "../../methods/date.js";
+import {
+  MakeTime,
+  MakeDate,
+  MakeDay,
+  TimeClip,
+  UTC,
+  ToDateString,
+  thisTimeValue,
+  msPerMinute,
+} from "../../methods/date.js";
 import { FatalError } from "../../errors.js";
 import { Placeholders } from "../../utils/PreludeGenerator.js";
 import { lookupTimezoneOffsetAssumption } from "../env/assumptions.js";
@@ -130,9 +139,7 @@ export default function(realm: Realm): NativeFunctionValue {
             let localTZA = -assumedOffset * msPerMinute;
             O.$DateValue = TimeClip(realm, finalDate - localTZA);
           } else {
-            let numericVals = [y, m, dt, h, min, s, milli]
-              .slice(0, maxArgs)
-              .map(n => new NumberValue(realm, n));
+            let numericVals = [y, m, dt, h, min, s, milli].slice(0, maxArgs).map(n => new NumberValue(realm, n));
             let params = Placeholders.slice(0, maxArgs).join(", ");
             O.$DateValue = AbstractValue.createTemporalFromTemplate(
               realm,
@@ -163,7 +170,12 @@ export default function(realm: Realm): NativeFunctionValue {
     } else if (argCount === 1) {
       // ECMA262 20.3.2.2
       let [value_] = args;
-      if (NewTarget && realm.useAbstractInterpretation && value_ instanceof AbstractValue && !value_.mightNotBeNumber()) {
+      if (
+        NewTarget &&
+        realm.useAbstractInterpretation &&
+        value_ instanceof AbstractValue &&
+        !value_.mightNotBeNumber()
+      ) {
         let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", { $DateValue: undefined });
         if (
           value_.operationDescriptor &&
@@ -212,14 +224,13 @@ export default function(realm: Realm): NativeFunctionValue {
               lookupTimezoneOffsetAssumption(realm) === undefined &&
               !hasExplicitTimezoneInDateString(v.value)
             ) {
-              let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", { $DateValue: undefined });
-              O.$DateValue = AbstractValue.createTemporalFromTemplate(
-                realm,
-                "+new global.Date(A)",
-                NumberValue,
-                [v],
-                { isPure: true, skipInvariant: true }
-              );
+              let O = Create.OrdinaryCreateFromConstructor(realm, NewTarget, "DatePrototype", {
+                $DateValue: undefined,
+              });
+              O.$DateValue = AbstractValue.createTemporalFromTemplate(realm, "+new global.Date(A)", NumberValue, [v], {
+                isPure: true,
+                skipInvariant: true,
+              });
               return O;
             }
             // 1. Let tv be the result of parsing v as a date, in exactly the same manner as for the parse

@@ -96,12 +96,10 @@ export default function(realm: Realm, obj: ObjectValue): void {
       let argParams = Placeholders.slice(1, 1 + passed.length).join(", ");
       // The locale is environment-dependent and may also be time-dependent
       // so do this at runtime and at this point in time
-      return AbstractValue.createTemporalFromTemplate(
-        realm,
-        `(A).toLocaleString(${argParams})`,
-        StringValue,
-        [x, ...passed]
-      );
+      return AbstractValue.createTemporalFromTemplate(realm, `(A).toLocaleString(${argParams})`, StringValue, [
+        x,
+        ...passed,
+      ]);
     } else {
       return new StringValue(realm, x.value.toLocaleString());
     }
